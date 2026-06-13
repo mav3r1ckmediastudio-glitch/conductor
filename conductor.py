@@ -11,6 +11,7 @@ from qgis.PyQt.QtWidgets import QAction, QMessageBox
 from qgis.core import QgsProject
 
 from .conductor_dockwidget import ConductorDockWidget
+from .conductor_utils import plugin_version
 
 
 class Conductor:
@@ -147,7 +148,7 @@ class Conductor:
             self.iface.mainWindow(),
             "About Conductor",
             (
-                "<b>Conductor v0.1.0</b><br>"
+                f"<b>Conductor v{plugin_version()}</b><br>"
                 "FTTP Network Design Plugin for QGIS<br><br>"
                 "Full-lifecycle fibre network design, build tracking, "
                 "and inventory management — stored in a portable GeoPackage.<br><br>"

@@ -7,7 +7,7 @@ Import from here rather than duplicating across tool files.
 
 import math
 from qgis.core import (
-    QgsProject, NULL, QgsRectangle, QgsFeatureRequest,
+    QgsProject, NULL, Qgis, QgsMessageLog, QgsRectangle, QgsFeatureRequest,
     QgsCoordinateReferenceSystem, QgsCoordinateTransform,
     QgsDistanceArea, QgsGeometry,
 )
@@ -246,3 +246,51 @@ def compass_quadrant(from_pt, to_pt):
         return "S"
     else:
         return "W"
+
+
+# ── Logging ────────────────────────────────────────────────────────
+
+def log(message, level="warning"):
+    """Write a message to the QGIS 'Conductor' log panel. Use inside except
+    blocks so failures are recorded instead of silently swallowed.
+    level: "info" | "warning" | "critical"."""
+    lvl = {"info": Qgis.Info, "warning": Qgis.Warning,
+           "critical": Qgis.Critical}.get(level, Qgis.Warning)
+    try:
+        QgsMessageLog.logMessage(str(message), "Conductor", lvl)
+    except Exception:
+        pass
+
+
+def plugin_version():
+    """Return the plugin version string from metadata.txt (single source)."""
+    import os, configparser
+    try:
+        cfg = configparser.ConfigParser()
+        cfg.read(os.path.join(os.path.dirname(__file__), "metadata.txt"), encoding="utf-8")
+        return cfg.get("general", "version", fallback="1.0.0")
+    except Exception:
+        return "1.0.0"
+
+
+def safe_write_text(path, text, what="file"):
+    """Write text to `path` (utf-8). If the file is locked (open in another
+    program, or held by OneDrive sync) the write is redirected to a
+    timestamped sibling so the export is never lost. Returns the path actually
+    written. Other errors are logged and re-raised."""
+    import os, datetime
+    try:
+        with open(path, "w", encoding="utf-8", newline="") as f:
+            f.write(text)
+        return path
+    except PermissionError:
+        base, ext = os.path.splitext(path)
+        alt = f"{base}_{datetime.datetime.now():%Y%m%d_%H%M%S}{ext}"
+        log(f"{what}: '{os.path.basename(path)}' is locked; saved instead as "
+            f"'{os.path.basename(alt)}'", "warning")
+        with open(alt, "w", encoding="utf-8", newline="") as f:
+            f.write(text)
+        return alt
+    except Exception as e:
+        log(f"{what}: failed to write '{path}': {e}", "critical")
+        raise

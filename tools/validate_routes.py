@@ -515,12 +515,21 @@ class ValidateRoutesDialog(QDialog):
             return
         if not path.endswith(".csv"):
             path += ".csv"
-        with open(path, "w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            writer.writerow(["UPRN", "Address", "Status", "Reason", "Path"])
-            for r in self.results:
-                writer.writerow([r["uprn"], r["address"], r["status"], r["reason"], " \u2192 ".join(r["path"])])
-        QMessageBox.information(self, "Export complete", f"Results saved to:\n{path}")
+        import io
+        from ..conductor_utils import safe_write_text, log
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(["UPRN", "Address", "Status", "Reason", "Path"])
+        for r in self.results:
+            writer.writerow([r["uprn"], r["address"], r["status"], r["reason"], " \u2192 ".join(r["path"])])
+        try:
+            actual = safe_write_text(path, buf.getvalue(), what="Validation CSV")
+        except Exception as e:
+            QMessageBox.critical(self, "Export failed",
+                                 f"Could not save results \u2014 the file may be open "
+                                 f"in another program.\n\n{e}")
+            return
+        QMessageBox.information(self, "Export complete", f"Results saved to:\n{actual}")
 
 
 def open_validate_routes_dialog(iface, parent=None, project=None):

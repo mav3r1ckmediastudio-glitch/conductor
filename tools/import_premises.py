@@ -87,7 +87,9 @@ def _count_csv_rows(filepath):
     try:
         with open(filepath, newline='', encoding='utf-8-sig') as f:
             return sum(1 for _ in f) - 1  # minus header
-    except:
+    except Exception as e:
+        from ..conductor_utils import log
+        log(f"_count_csv_rows failed for {filepath}: {e}")
         return 0
 
 

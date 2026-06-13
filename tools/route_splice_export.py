@@ -26,6 +26,7 @@ from qgis.core import (
 from qgis.gui import QgsMapTool
 
 from ..conductor_utils import get_layer, val, NAVY, TEAL, ORANGE, LIGHT, WHITE, MID
+from ..conductor_utils import safe_write_text
 
 from .splice_plan import (
     get_assignments_for_joint, get_joint_info,
@@ -480,9 +481,7 @@ def _generate_route_html(joints_in_order, route_label, output_path, project=None
     H.append('</div></body></html>')
 
     html = '\n'.join(H)
-    with open(output_path, 'w', encoding='utf-8') as fh:
-        fh.write(html)
-    return output_path
+    return safe_write_text(output_path, html, what="Route splice plan")
 
 
 # ── Map tool ──────────────────────────────────────────────────────────────────
@@ -691,7 +690,7 @@ class RouteSplicePanel(QDialog):
         fname = f"route_splice_{safe}.html"
         out   = os.path.join(self._out_dir, fname)
         try:
-            _generate_route_html(self._joints, self._label, out,
+            out = _generate_route_html(self._joints, self._label, out,
                                  project=self._project, cable_path=self._path)
             reply = QMessageBox.question(
                 self, "Export complete",

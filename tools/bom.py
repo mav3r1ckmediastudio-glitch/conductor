@@ -666,7 +666,36 @@ class BomDialog(QDialog):
                     ws.write(r, 4, total if total != "" else "", ns)
                     ws.write(r, 5, notes, ls)
 
-        wb.save(path)
+        from ..conductor_utils import log
+        try:
+            wb.save(path)
+        except PermissionError:
+            # File is locked — almost always open in Excel, or held by OneDrive.
+            import os, datetime
+            log(f"BoM export: permission denied writing {path} (file locked?)", "warning")
+            base, ext = os.path.splitext(path)
+            alt = f"{base}_{datetime.datetime.now():%Y%m%d_%H%M%S}{ext}"
+            try:
+                wb.save(alt)
+            except Exception as e:
+                log(f"BoM export: fallback save also failed: {e}", "critical")
+                QMessageBox.critical(
+                    self, "Export failed",
+                    "Could not save the BoM.\n\n"
+                    f"'{os.path.basename(path)}' appears to be open in another "
+                    "program (e.g. Excel) or locked by OneDrive sync.\n\n"
+                    "Close the file, or choose a different location, and try again.")
+                return
+            QMessageBox.information(
+                self, "Export complete (renamed)",
+                f"'{os.path.basename(path)}' was locked (open in Excel?), so the "
+                f"BoM was saved as:\n{alt}")
+            return
+        except Exception as e:
+            log(f"BoM export failed: {e}", "critical")
+            QMessageBox.critical(self, "Export failed",
+                                 f"Could not save the BoM:\n{e}")
+            return
         QMessageBox.information(self, "Export complete",
                                 f"BoM exported to:\n{path}")
 

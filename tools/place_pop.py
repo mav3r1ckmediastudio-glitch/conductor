@@ -414,7 +414,7 @@ class CabinetDialog(QDialog):
 
         def si(spin, field):
             try: spin.setValue(int(fv(field, 0)))
-            except: pass
+            except (ValueError, TypeError): pass
 
         si(self.dux_inst,    "dux_shelves")
         si(self.calix_inst,  "calix_shelves")

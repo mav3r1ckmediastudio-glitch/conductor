@@ -9,6 +9,7 @@ from qgis.PyQt.QtWidgets import (
 from qgis.PyQt.QtCore import Qt
 from qgis.core import QgsProject, NULL
 from ..conductor_utils import get_layer, fld, val, LayerEditContext
+from ..conductor_utils import safe_write_text
 
 NAVY   = '#1A3A5C'
 TEAL   = '#1D7A6E'
@@ -329,9 +330,7 @@ def generate_sld(output_path, project=None):
     H.append('</div>')
     H.append('</div></body></html>')
 
-    with open(output_path, 'w', encoding='utf-8') as f:
-        f.write('\n'.join(H))
-    return output_path
+    return safe_write_text(output_path, '\n'.join(H), what="Single line diagram")
 
 
 class SLDDialog(QDialog):
@@ -398,7 +397,7 @@ class SLDDialog(QDialog):
             return
         out_path = os.path.join(self._out_dir, 'SLD.html')
         try:
-            generate_sld(out_path, project=self._project)
+            out_path = generate_sld(out_path, project=self._project)
             reply = QMessageBox.question(
                 self, 'Done',
                 'SLD saved to:\n' + out_path + '\n\nOpen in browser?',

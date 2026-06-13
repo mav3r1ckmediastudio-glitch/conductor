@@ -10,6 +10,7 @@ from qgis.PyQt.QtWidgets import (
 from qgis.PyQt.QtCore import Qt
 from qgis.core import QgsProject, NULL
 from ..conductor_utils import get_layer, fld, val, LayerEditContext
+from ..conductor_utils import safe_write_text
 
 IEC_COLOURS = ['Blue','Orange','Green','Brown','Slate','White','Red','Black','Yellow','Violet','Rose','Aqua']
 IEC_HEX     = ['#3B82F6','#F97316','#22C55E','#92400E','#94A3B8','#FFFFFF','#EF4444','#1C1C1C','#EAB308','#8B5CF6','#F9A8D4','#06B6D4']
@@ -424,9 +425,7 @@ def generate_html(joint_id, output_path, project=None):
     H.append('</div></body></html>')
 
     html = '\n'.join(H)
-    with open(output_path, 'w', encoding='utf-8') as f:
-        f.write(html)
-    return output_path
+    return safe_write_text(output_path, html, what="Splice plan")
 
 class SplicePlanDialog(QDialog):
     def __init__(self, iface, parent=None, project=None):
@@ -512,7 +511,7 @@ class SplicePlanDialog(QDialog):
             return
         out_path = os.path.join(self._out_dir, joint_id + '.html')
         try:
-            generate_html(joint_id, out_path, project=self._project)
+            out_path = generate_html(joint_id, out_path, project=self._project)
             reply = QMessageBox.question(
                 self, 'Done',
                 'Splice plan saved to:\n' + out_path + '\n\nOpen in browser?',
