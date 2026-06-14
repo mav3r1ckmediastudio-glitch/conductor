@@ -13,8 +13,9 @@ from qgis.PyQt.QtCore import Qt, QThread, pyqtSignal
 from qgis.PyQt.QtGui import QColor, QFont, QBrush
 from qgis.core import (
     QgsProject, QgsFeatureRequest, QgsGeometry, QgsPointXY,
-    QgsRectangle, QgsMapLayer, NULL
+    QgsRectangle, QgsMapLayer, QgsWkbTypes, NULL
 )
+from qgis.gui import QgsRubberBand
 import traceback
 from ..conductor_utils import get_layer, fld, val, LayerEditContext
 
@@ -40,7 +41,64 @@ STATUS_BG = {
     STATUS_ERROR:    QColor("#fdecea"),
 }
 
+# Display order when the table is sorted by Status — ROUTED first (all good),
+# then PARTIAL (in the build plan but broken — needs attention), then
+# UNSERVED (not connected yet — expected for most of an in-progress build),
+# then ERROR.
+STATUS_SORT_RANK = {
+    STATUS_OK:       0,
+    STATUS_PARTIAL:  1,
+    STATUS_UNSERVED: 2,
+    STATUS_ERROR:    3,
+}
+
+
+class _StatusTableItem(QTableWidgetItem):
+    """QTableWidgetItem that sorts by STATUS_SORT_RANK instead of alphabetically."""
+
+    def __lt__(self, other):
+        try:
+            return (STATUS_SORT_RANK.get(self.text(), 99)
+                    < STATUS_SORT_RANK.get(other.text(), 99))
+        except Exception:
+            return super().__lt__(other)
+
 MAX_HOPS = 50
+
+# Asset ID substring -> (layer name, ID field). Used to resolve a break-point
+# asset ID (from a PARTIAL trace path) back to a feature so we can zoom/highlight it.
+BREAK_ASSET_LAYERS = [
+    ("-JNT-",  "joints",     "joint_id"),
+    ("-CBL-",  "cables",     "cable_id"),
+    ("-DDCT-", "drop_ducts", "ddct_id"),
+    ("-BDL-",  "bundles",    "bundle_id"),
+    ("-DUCT-", "ducts",      "duct_id"),
+    ("-CMBR-", "chambers",   "chamber_id"),
+]
+
+
+def find_break_asset(path, project=None):
+    """
+    Given a PARTIAL trace path (list of asset IDs, last = break point),
+    walk it from the end backwards and return the first asset that resolves
+    to a real feature: (asset_id, layer_display_name, geometry).
+    Returns None if nothing in the path can be resolved.
+    """
+    for asset_id in reversed(path or []):
+        asset_id = str(asset_id)
+        for substr, layer_name, id_field in BREAK_ASSET_LAYERS:
+            if substr not in asset_id:
+                continue
+            layer = get_layer(layer_name, project)
+            if layer is None:
+                continue
+            for feat in layer.getFeatures():
+                if str(feat[id_field]) == asset_id:
+                    geom = feat.geometry()
+                    if geom and not geom.isEmpty():
+                        return (asset_id, layer.name(), geom)
+            break  # matched a prefix but no feature found — don't try other prefixes for this id
+    return None
 
 
 # ── Layer helpers ─────────────────────────────────────────────────────────────
@@ -112,12 +170,19 @@ def trace_premises(uprn, area_id,
             first_joint = None
 
     if not first_joint:
-        return (STATUS_PARTIAL, path,
+        if entry_asset is None:
+            # No bundle or drop duct at all — this premises simply hasn't
+            # been connected to the network yet. This is a build-plan state,
+            # not a broken route, so it's UNSERVED rather than PARTIAL.
+            return (STATUS_UNSERVED, path,
+                    "No bundle or drop duct connects this premises to the network yet. "
+                    "Digitise a Drop Duct or Bundle from this premises to a joint.")
+        return (STATUS_PARTIAL, path + [entry_asset],
                 f"{(entry_type or 'asset').replace('_',' ').title()} {entry_asset} has no from_joint value.")
 
     joints = joint_idx.get(first_joint, [])
     if not joints:
-        return (STATUS_PARTIAL, path,
+        return (STATUS_PARTIAL, path + [entry_asset],
                 f"from_joint '{first_joint}' not found in joints layer. "
                 f"Joint may have been deleted or ID mismatch.")
 
@@ -271,7 +336,51 @@ class ValidateRoutesDialog(QDialog):
         self.project = project
         self.results = []
         self._worker = None
+        self._bands  = []   # active QgsRubberBand highlights for the "break" asset
         self._setup_ui()
+
+    # ── Highlight management ──────────────────────────────────────────────────
+
+    def _clear_bands(self):
+        canvas = self.iface.mapCanvas()
+        for band in self._bands:
+            try:
+                band.reset()
+                canvas.scene().removeItem(band)
+            except Exception:
+                pass
+        self._bands = []
+
+    def _to_canvas_crs(self, geom):
+        """Reproject a geometry from EPSG:27700 (Conductor layer CRS) to the
+        canvas/project CRS, if they differ. Returns a transformed copy."""
+        canvas = self.iface.mapCanvas()
+        canvas_crs = canvas.mapSettings().destinationCrs()
+        from qgis.core import QgsCoordinateReferenceSystem, QgsCoordinateTransform
+        src = QgsCoordinateReferenceSystem("EPSG:27700")
+        geom = QgsGeometry(geom)
+        if src != canvas_crs:
+            xform = QgsCoordinateTransform(src, canvas_crs, QgsProject.instance())
+            geom.transform(xform)
+        return geom
+
+    def _highlight_geometry(self, geom):
+        """geom must already be in canvas CRS (see _to_canvas_crs)."""
+        canvas = self.iface.mapCanvas()
+        canvas_crs = canvas.mapSettings().destinationCrs()
+
+        if geom.type() == QgsWkbTypes.PointGeometry:
+            band = QgsRubberBand(canvas, QgsWkbTypes.PointGeometry)
+            band.setColor(QColor("#e63946"))
+            band.setIconSize(16)
+            band.setIcon(QgsRubberBand.ICON_CIRCLE)
+        else:
+            band = QgsRubberBand(canvas, QgsWkbTypes.LineGeometry)
+            band.setColor(QColor("#e63946"))
+            band.setWidth(4)
+        band.setZValue(1000)
+        band.setToGeometry(geom, canvas_crs)
+        self._bands.append(band)
 
     def _setup_ui(self):
         self.setWindowTitle("Conductor — Validate Fibre Routes")
@@ -407,6 +516,7 @@ class ValidateRoutesDialog(QDialog):
         self._table.setRowCount(0)
         self.results = []
         self._detail.clear()
+        self._clear_bands()
         self._btn_run.setEnabled(False)
         self._btn_zoom.setEnabled(False)
         self._btn_export.setEnabled(False)
@@ -436,7 +546,7 @@ class ValidateRoutesDialog(QDialog):
         status = r["status"]
         colour = STATUS_COLOURS[status]
         bg     = STATUS_BG[status]
-        status_item  = QTableWidgetItem(status)
+        status_item  = _StatusTableItem(status)
         status_item.setForeground(QBrush(colour))
         status_item.setFont(QFont("", -1, QFont.Bold))
         uprn_item    = QTableWidgetItem(r["uprn"])
@@ -480,9 +590,13 @@ class ValidateRoutesDialog(QDialog):
             f"Address: {r['address']}",
             f"Status:  {r['status']}",
             f"Reason:  {r['reason']}",
-            "",
-            "Path:",
         ]
+        if r["status"] == STATUS_PARTIAL:
+            found = find_break_asset(r["path"], self.project)
+            if found:
+                asset_id, layer_name, _geom = found
+                lines.append(f"Issue at: {asset_id}  ({layer_name}) \u2014 Zoom to Selected will jump here.")
+        lines += ["", "Path:"]
         if r["path"]:
             for i, node in enumerate(r["path"]):
                 prefix = "  \u2514\u2500 " if i == len(r["path"]) - 1 else "  \u251c\u2500 "
@@ -498,14 +612,41 @@ class ValidateRoutesDialog(QDialog):
         idx = rows[0].data(Qt.UserRole)
         if idx is None or idx >= len(self.results):
             return
-        geom = self.results[idx]["geom"]
+        r = self.results[idx]
+        self._clear_bands()
+        canvas = self.iface.mapCanvas()
+
+        # For PARTIAL results, try to zoom to the actual break-point asset
+        # (e.g. the joint with no onward cable, or the bundle/drop duct with
+        # a bad from_joint) rather than just the premises location.
+        if r["status"] == STATUS_PARTIAL:
+            found = find_break_asset(r["path"], self.project)
+            if found:
+                asset_id, layer_name, geom = found
+                geom = self._to_canvas_crs(geom)
+                extent = geom.boundingBox()
+                extent.scale(3.0)  # pad so the asset isn't a single pixel
+                if extent.width() < 20 or extent.height() < 20:
+                    extent = QgsRectangle(
+                        extent.center().x() - 25, extent.center().y() - 25,
+                        extent.center().x() + 25, extent.center().y() + 25,
+                    )
+                canvas.setExtent(extent)
+                self._highlight_geometry(geom)
+                canvas.refresh()
+                return
+
+        geom = r["geom"]
         if geom and not geom.isEmpty():
             pt = geom.asPoint()
             buf = 50
             extent = QgsRectangle(pt.x() - buf, pt.y() - buf, pt.x() + buf, pt.y() + buf)
-            canvas = self.iface.mapCanvas()
             canvas.setExtent(extent)
             canvas.refresh()
+
+    def closeEvent(self, event):
+        self._clear_bands()
+        super().closeEvent(event)
 
     def _export_csv(self):
         from qgis.PyQt.QtWidgets import QFileDialog, QMessageBox
