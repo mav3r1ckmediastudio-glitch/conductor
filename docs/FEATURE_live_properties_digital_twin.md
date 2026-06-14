@@ -106,8 +106,9 @@ on the map, then stamp it with live status/ONT/router/dates and re-colour it.
 Press **Refresh** (or schedule nightly) and the map re-syncs from the live
 network — that's what makes it a living digital twin rather than a static design.
 
-Loop: authenticate (OAuth) → request ONT/subscriber data → match by UPRN/ONT ID →
-write to `live_properties` → re-style → repeat on demand/schedule.
+Loop: authenticate (Basic Auth, on-prem) → request ONT/subscriber/service data →
+match by ONT ID/serial (or UPRN if stored in SMx) → write to `live_properties` →
+re-style → repeat on demand/schedule.
 
 ## SMx API — findings (June 2026)
 
@@ -122,12 +123,42 @@ so no third-party API is needed. Two surfaces:
   Cloud developer portal (per-org app registration + tokens); public Postman
   collection available.
 
-Auth on both: **OAuth 2.0**. "Free": the Northbound API is *included* with SMx
-(it's the integration interface), not a separate purchase.
+**Auth (corrected from the 158-page SMx APIDoc):** the on-prem **Northbound API
+uses HTTP Basic Auth** (username + password) over HTTPS on port 18443 — *not*
+OAuth. OAuth 2.0 applies only to the **Calix Cloud** API. Basic Auth is much
+simpler to implement in the plugin.
+
+"Free": the Northbound API is *included* with SMx (it's the integration
+interface), not a separate purchase.
+
+### Key endpoints / fields (from the APIDoc)
+- **`GET /rest/v1/ems/service?device-name=…&ont-id=…`** — the core call. Returns
+  per connection: `device-name`, `ont-id`, `ont-port-id`, `service-name`,
+  **`admin-status`** (e.g. `active` = provisioned/live), **`subscriber-id`**
+  (e.g. `CUST1234`). Can query all services on an ONT, a port, or by template.
+- ONT config/status: `…/config/device/{device-name}/ont…`, `…/ontport…`
+- Operational/up state: `GET /performance/device/{device-name}/ont/{ont-id}/port/…`
+- Subscriber/account: `…/ems/subscriber…`
+- Network is **device-scoped** → to sweep everything, loop OLTs → ONTs → services.
+
+### The join key (the important design decision)
+SMx has **no concept of UPRN** (0 mentions in 158 pages). It identifies by
+**OLT `device-name` + `ont-id`**, and links service → **`subscriber-id`**. To tie
+SMx's live data to the map you need a shared key — two realistic options:
+
+1. **Join on ONT ID / ONT serial number** — captured at install and stamped on
+   the premises (`ont_id` field). Robust; needs install-time capture.
+2. **Store UPRN in SMx** — the API exposes `custom` / `external` / `reference`
+   fields on subscribers. If provisioning writes the UPRN (or `property_id`) into
+   one of those, you get a direct UPRN→SMx join with no install capture.
+
+`live` status = service `admin-status = active` (+ ONT performance/oper-up for
+actually-online). **Decide the join key before building the connector** — it also
+dictates what must be captured at install or set during provisioning.
 
 **To confirm with Calix account team / partner portal:** that your contract +
-SMx version has the Northbound API enabled, developer-portal access to register
-an OAuth app, and any per-endpoint licensing.
+SMx version has the Northbound API enabled, and (for the Cloud API only)
+developer-portal access for OAuth; plus any per-endpoint licensing.
 
 Reference links:
 - Getting Started with the SMx API Interface (R22.x): https://www.calix.com/content/dam/calix/mycalix-misc/lib/iae/sm/22x/smx-api/99808.htm
@@ -137,9 +168,12 @@ Reference links:
 - Map SMx/CMS-Managed ONTs to Subscribers: https://www.calix.com/content/dam/calix/mycalix-misc/lib/cloud/help/coc/113403.htm
 
 ## Open questions
-1. **SMx API enablement** — confirm Northbound API is licensed/enabled on your
-   SMx, and obtain Calix Cloud developer-portal access for OAuth app registration.
-   (Spreadsheet import remains the MVP until then.)
+1. **Join key (decide first)** — ONT ID/serial captured at install, or UPRN stored
+   in an SMx subscriber custom/external field at provisioning? This dictates
+   install/provisioning process, not just code.
+2. **SMx API enablement** — confirm the Northbound API is enabled on your SMx and
+   get an API service-account (Basic Auth) credential. (Spreadsheet import remains
+   the MVP until then.)
 2. **`property_id` scheme** — format/source of the internal ID number, and is it
    1:1 with UPRN?
 3. **Status definitions** — exact rules for BUILT vs RFS vs LIVE (which records
