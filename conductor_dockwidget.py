@@ -5,7 +5,7 @@ Main UI surface. Manages project state and enables/disables tool buttons.
 """
 
 import os
-from qgis.PyQt.QtCore import Qt, pyqtSignal
+from qgis.PyQt.QtCore import Qt, pyqtSignal, QSize
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import (
     QDockWidget, QWidget, QVBoxLayout, QHBoxLayout,
@@ -14,7 +14,6 @@ from qgis.PyQt.QtWidgets import (
 )
 from qgis.core import QgsProject, QgsSnappingConfig, QgsTolerance
 from .conductor_utils import NAVY, TEAL, ORANGE, LIGHT, WHITE, MID, SKY, PURPLE
-from .conductor_utils import plugin_version, log
 
 SKY    = "#00AAFF"   # PIA aerial colour
 PURPLE = "#7B2D8B"   # PIA underground colour
@@ -141,73 +140,73 @@ class ConductorDockWidget(QDockWidget):
 
         # PROJECT
         cl.addWidget(self._section_label("PROJECT"))
-        cl.addWidget(self._primary_button("＋  New Project", self._on_new_project))
-        cl.addWidget(self._secondary_button("Open Project", self._on_open_project))
+        cl.addWidget(self._primary_button("＋  New Project", self._on_new_project, icon="new_project.svg"))
+        cl.addWidget(self._secondary_button("Open Project", self._on_open_project, icon="open_project.svg"))
         cl.addWidget(self._divider())
 
         # DESIGN
         cl.addWidget(self._section_label("DESIGN"))
-        for label, slot in [
-            ("Build Areas",                    self._on_draw_build_area),
-            ("Import Premises (AddressBase)",   self._on_import_premises),
-            ("Place Cabinet / POP",             self._on_place_pop),
-            ("Edit Cabinet / POP",              self._on_edit_pop),
-            ("Digitise Duct",                   self._on_digitise_duct),
-            ("Digitise Cable",                  self._on_digitise_fibre),
-            ("Digitise Drop Duct",              self._on_digitise_drop),
-            ("Digitise Bundle",                 self._on_digitise_bundle),
-            ("Place Chamber",                   self._on_place_chamber),
-            ("Place Joint",                     self._on_place_joint),
+        for label, slot, icon in [
+            ("Build Areas",                    self._on_draw_build_area,   "build_areas.svg"),
+            ("Import Premises (AddressBase)",   self._on_import_premises,  "import_premises_addressbase.svg"),
+            ("Place Cabinet / POP",             self._on_place_pop,        "place_cabinet_pop.svg"),
+            ("Edit Cabinet / POP",              self._on_edit_pop,         "edit_cabinet_pop.svg"),
+            ("Digitise Duct",                   self._on_digitise_duct,    "digitise_duct.svg"),
+            ("Digitise Cable",                  self._on_digitise_fibre,   "digitise_cable.svg"),
+            ("Digitise Drop Duct",              self._on_digitise_drop,    "digitise_drop_duct.svg"),
+            ("Digitise Bundle",                 self._on_digitise_bundle,  "digitise_bundle.svg"),
+            ("Place Chamber",                   self._on_place_chamber,    "place_chamber.svg"),
+            ("Place Joint",                     self._on_place_joint,      "place_joint.svg"),
         ]:
-            cl.addWidget(self._tool_button(label, slot))
+            cl.addWidget(self._tool_button(label, slot, icon=icon))
         cl.addWidget(self._divider())
 
         # CROSSINGS (not PIA-specific — available in Design tab)
         cl.addWidget(self._section_label("CROSSINGS"))
-        for label, slot in [
-            ("Digitise Road Crossing",    self._on_digitise_road_crossing),
-            ("Digitise Stream Crossing",  self._on_digitise_stream_crossing),
+        for label, slot, icon in [
+            ("Digitise Road Crossing",    self._on_digitise_road_crossing,    "digitise_road_crossing.svg"),
+            ("Digitise Stream Crossing",  self._on_digitise_stream_crossing,  "digitise_stream_crossing.svg"),
         ]:
-            cl.addWidget(self._tool_button(label, slot))
+            cl.addWidget(self._tool_button(label, slot, icon=icon))
         cl.addWidget(self._divider())
 
         # FIBRE
         cl.addWidget(self._section_label("FIBRE"))
-        for label, slot in [
-            ("Assign Fibre Roles",      self._on_assign_fibres),
-            ("Fibre Trace",             self._on_fibre_trace),
-            ("Fibre Count Calculator",  self._on_fibre_count),
-            ("Route Splice Export",        self._on_route_splice_export),
+        for label, slot, icon in [
+            ("Assign Fibre Roles",      self._on_assign_fibres,        "assign_fibre_roles.svg"),
+            ("Fibre Trace",             self._on_fibre_trace,          "fibre_trace.svg"),
+            ("Fibre Count Calculator",  self._on_fibre_count,          "fibre_count_calculator.svg"),
+            ("Route Splice Export",     self._on_route_splice_export,  "route_splice_export.svg"),
         ]:
-            cl.addWidget(self._tool_button(label, slot))
+            cl.addWidget(self._tool_button(label, slot, icon=icon))
         cl.addWidget(self._divider())
 
         # BUILD
         cl.addWidget(self._section_label("BUILD"))
-        for label, slot in [
-            ("Add Build Task",       self._placeholder),
-            ("Generate Job Pack",    self._placeholder),
-            ("Splice Plan Export",   self._on_splice_plan),
-            ("Single Line Diagram",  self._on_sld),
+        for label, slot, icon in [
+            ("Add Build Task",       self._placeholder,    "add_build_task.svg"),
+            ("Generate Job Pack",    self._placeholder,    "generate_job_pack.svg"),
+            ("Splice Plan Export",   self._on_splice_plan, "splice_plan_export.svg"),
+            ("Single Line Diagram",  self._on_sld,         "single_line_diagram.svg"),
         ]:
-            cl.addWidget(self._tool_button(label, slot))
+            cl.addWidget(self._tool_button(label, slot, icon=icon))
         cl.addWidget(self._divider())
 
         # TOOLS
         cl.addWidget(self._section_label("TOOLS"))
-        for label, slot in [
-            ("Delete Asset",             self._on_delete_asset),
-            ("Move Asset",               self._on_move_asset),
-            ("Validate Fibre Routes",    self._on_validate_routes),
-            ("Bill of Materials",        self._on_bom),
-            ("BDUK Export",              self._placeholder),
-            ("Cabinet Cost Calculator",  self._placeholder),
+        for label, slot, icon in [
+            ("Delete Asset",             self._on_delete_asset,    "delete_asset.svg"),
+            ("Move Asset",               self._on_move_asset,      "move_asset.svg"),
+            ("Validate Fibre Routes",    self._on_validate_routes, "validate_fibre_routes.svg"),
+            ("Bill of Materials",        self._on_bom,             "bill_of_materials.svg"),
+            ("BDUK Export",              self._placeholder,        "bduk_export.svg"),
+            ("Cabinet Cost Calculator",  self._placeholder,        "cabinet_cost_calculator.svg"),
         ]:
-            cl.addWidget(self._tool_button(label, slot))
+            cl.addWidget(self._tool_button(label, slot, icon=icon))
 
         cl.addItem(QSpacerItem(0, 0, QSizePolicy.Minimum, QSizePolicy.Expanding))
 
-        footer = QLabel(f"Conductor v{plugin_version()}  ·  Mav3r1ck Media Studio")
+        footer = QLabel("Conductor v0.1.0  ·  Mav3r1ck Media Studio")
         footer.setStyleSheet(f"color:{MID}; font-size:10px; padding:8px 0px;")
         footer.setAlignment(Qt.AlignCenter)
         cl.addWidget(footer)
@@ -236,27 +235,27 @@ class ConductorDockWidget(QDockWidget):
 
         # CIVIL
         cl.addWidget(self._section_label("CIVIL"))
-        for label, slot in [
-            ("Place Pole",              self._on_place_pole),
-            ("Place PIA UG Chamber",    self._on_place_pia_chamber),
-            ("Digitise Aerial Span",    self._on_digitise_aerial_span),
-            ("Digitise PIA UG Duct",    self._on_digitise_pia_ug_duct),
+        for label, slot, icon in [
+            ("Place Pole",              self._on_place_pole,           "place_pole.svg"),
+            ("Place PIA UG Chamber",    self._on_place_pia_chamber,     "place_pia_ug_chamber.svg"),
+            ("Digitise Aerial Span",    self._on_digitise_aerial_span,  "digitise_aerial_span.svg"),
+            ("Digitise PIA UG Duct",    self._on_digitise_pia_ug_duct,  "digitise_pia_ug_duct.svg"),
         ]:
-            cl.addWidget(self._tool_button(label, slot))
+            cl.addWidget(self._tool_button(label, slot, icon=icon))
         cl.addWidget(self._divider())
 
         # OPTICAL
         cl.addWidget(self._section_label("OPTICAL"))
-        for label, slot in [
-            ("Place CBT",               self._on_place_cbt),
-            ("Digitise Aerial Drop",    self._on_digitise_aerial_drop),
-            ("Digitise PIA UG Drop",    self._on_digitise_pia_ug_drop),
+        for label, slot, icon in [
+            ("Place CBT",               self._on_place_cbt,            "place_cbt.svg"),
+            ("Digitise Aerial Drop",    self._on_digitise_aerial_drop, "digitise_aerial_drop.svg"),
+            ("Digitise PIA UG Drop",    self._on_digitise_pia_ug_drop, "digitise_pia_ug_drop.svg"),
         ]:
-            cl.addWidget(self._tool_button(label, slot))
+            cl.addWidget(self._tool_button(label, slot, icon=icon))
 
         cl.addItem(QSpacerItem(0, 0, QSizePolicy.Minimum, QSizePolicy.Expanding))
 
-        pia_footer = QLabel(f"PIA tools  ·  Conductor v{plugin_version()}")
+        pia_footer = QLabel("PIA tools  ·  Conductor v0.1.0")
         pia_footer.setStyleSheet(f"color:{MID}; font-size:10px; padding:8px 0px;")
         pia_footer.setAlignment(Qt.AlignCenter)
         cl.addWidget(pia_footer)
@@ -294,7 +293,16 @@ class ConductorDockWidget(QDockWidget):
         l.setStyleSheet(f"color:{TEAL}; font-size:10px; font-weight:bold; letter-spacing:1px; padding:4px 0px 2px 0px;")
         return l
 
-    def _primary_button(self, text, callback):
+    def _icon(self, name):
+        """Load a tool icon from the icons/ directory. Returns None if not found."""
+        if not name:
+            return None
+        path = os.path.join(self.plugin_dir, 'icons', name)
+        if os.path.isfile(path):
+            return QIcon(path)
+        return None
+
+    def _primary_button(self, text, callback, icon=None):
         btn = QPushButton(text)
         btn.setStyleSheet(f"""
             QPushButton {{ background:{NAVY}; color:{WHITE}; border:none; border-radius:4px;
@@ -303,10 +311,14 @@ class ConductorDockWidget(QDockWidget):
             QPushButton:pressed {{ background:{ORANGE}; }}
         """)
         btn.setCursor(Qt.PointingHandCursor)
+        ic = self._icon(icon)
+        if ic:
+            btn.setIcon(ic)
+            btn.setIconSize(QSize(28, 28))
         btn.clicked.connect(callback)
         return btn
 
-    def _secondary_button(self, text, callback):
+    def _secondary_button(self, text, callback, icon=None):
         btn = QPushButton(text)
         btn.setStyleSheet(f"""
             QPushButton {{ background:{WHITE}; color:{NAVY}; border:1px solid {MID};
@@ -315,22 +327,30 @@ class ConductorDockWidget(QDockWidget):
             QPushButton:pressed {{ background:{LIGHT}; }}
         """)
         btn.setCursor(Qt.PointingHandCursor)
+        ic = self._icon(icon)
+        if ic:
+            btn.setIcon(ic)
+            btn.setIconSize(QSize(28, 28))
         btn.clicked.connect(callback)
         return btn
 
-    def _tool_button(self, text, callback):
+    def _tool_button(self, text, callback, icon=None):
         """A button that requires an open project — starts disabled."""
         btn = QPushButton(text)
         btn.setCheckable(False)
         btn.setProperty("conductor_active", False)
         btn.setStyleSheet(f"""
             QPushButton {{ background:{WHITE}; color:{NAVY}; border:1px solid {MID};
-                           border-radius:4px; padding:6px 12px; font-size:12px; text-align:left; }}
+                           border-radius:4px; padding:4px 12px; font-size:12px; text-align:left; min-height:28px; }}
             QPushButton:hover {{ border-color:{TEAL}; color:{TEAL}; }}
             QPushButton:pressed {{ background:{LIGHT}; }}
             QPushButton:disabled {{ color:{MID}; border-color:{MID}; background:{LIGHT}; }}
             QPushButton[conductor_active=true] {{ background:{ORANGE}; color:{WHITE}; border-color:{ORANGE}; font-weight:bold; }}
         """)
+        ic = self._icon(icon)
+        if ic:
+            btn.setIcon(ic)
+            btn.setIconSize(QSize(28, 28))
         btn.setEnabled(False)
         btn.clicked.connect(callback)
         self._tool_buttons.append(btn)
@@ -413,13 +433,10 @@ class ConductorDockWidget(QDockWidget):
         self._status_label.setStyleSheet(f"color:{TEAL}; font-size:11px; font-weight:bold; padding-bottom:4px;")
         for btn in self._tool_buttons:
             btn.setEnabled(True)
-        # Connect the map-tool watcher once, not on every project open.
-        if not getattr(self, "_maptoolset_connected", False):
-            try:
-                self.iface.mapCanvas().mapToolSet.connect(self._on_map_tool_set)
-                self._maptoolset_connected = True
-            except Exception as e:
-                log(f"mapToolSet connect failed: {e}")
+        try:
+            self.iface.mapCanvas().mapToolSet.connect(self._on_map_tool_set)
+        except Exception:
+            pass
 
     def _on_map_tool_set(self, new_tool, old_tool):
         """Deactivate button highlight if the tool was cleared externally."""
@@ -645,21 +662,21 @@ class ConductorDockWidget(QDockWidget):
             QMessageBox.warning(self, "No Project", "Please open a project first.")
             return
         from .tools.sld import open_sld_dialog
-        self._sld_dlg = self._track_dialog(open_sld_dialog(self.iface, self, project=self._project))
+        self._sld_dlg = open_sld_dialog(self.iface, self, project=self._project)
 
     def _on_splice_plan(self):
         if not self._project:
             QMessageBox.warning(self, "No Project", "Please open a project first.")
             return
         from .tools.splice_plan import open_splice_plan_dialog
-        self._splice_dlg = self._track_dialog(open_splice_plan_dialog(self.iface, self, project=self._project))
+        self._splice_dlg = open_splice_plan_dialog(self.iface, self, project=self._project)
 
     def _on_assign_fibres(self):
         if not self._project:
             QMessageBox.warning(self, "No Project", "Please open a project first.")
             return
         from .tools.fibre_assign import open_fibre_assign_dialog
-        self._assign_dlg = self._track_dialog(open_fibre_assign_dialog(self.iface, self, project=self._project))
+        self._assign_dlg = open_fibre_assign_dialog(self.iface, self, project=self._project)
 
     def _on_fibre_trace(self):
         if not self._project:
@@ -676,7 +693,7 @@ class ConductorDockWidget(QDockWidget):
             QMessageBox.warning(self, "No Project", "Please open a project first.")
             return
         from .tools.fibre_count import open_fibre_count_dialog
-        self._fibre_count_dlg = self._track_dialog(open_fibre_count_dialog(self.iface, parent=self, project=self._project))
+        self._fibre_count_dlg = open_fibre_count_dialog(self.iface, parent=self, project=self._project)
 
     def _on_route_splice_export(self):
         if not self._project:
@@ -693,14 +710,14 @@ class ConductorDockWidget(QDockWidget):
             QMessageBox.warning(self, "No Project", "Please open a project first.")
             return
         from .tools.bom import open_bom_dialog
-        self._bom_dlg = self._track_dialog(open_bom_dialog(self.iface, self, project=self._project))
+        self._bom_dlg = open_bom_dialog(self.iface, self, project=self._project)
 
     def _on_validate_routes(self):
         if not self._project:
             QMessageBox.warning(self, "No Project", "Please open a project first.")
             return
         from .tools.validate_routes import open_validate_routes_dialog
-        self._validate_dlg = self._track_dialog(open_validate_routes_dialog(self.iface, self, project=self._project))
+        self._validate_dlg = open_validate_routes_dialog(self.iface, self, project=self._project)
 
     def _on_digitise_road_crossing(self):
         if not self._project:
