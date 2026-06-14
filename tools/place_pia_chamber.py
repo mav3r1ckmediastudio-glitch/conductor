@@ -18,7 +18,7 @@ from qgis.core import (
     QgsCoordinateTransform, QgsCoordinateReferenceSystem,
 )
 from qgis.gui import QgsMapToolEmitPoint
-from ..conductor_utils import get_layer, fld, val, LayerEditContext, NAVY, TEAL, ORANGE, LIGHT, WHITE, MID, BTN_PRIMARY, BTN_SECONDARY, INPUT_STYLE, LABEL_STYLE, SECTION_STYLE, MONO_STYLE
+from ..conductor_utils import get_layer, fld, val, LayerEditContext, log, NAVY, TEAL, ORANGE, LIGHT, WHITE, MID, BTN_PRIMARY, BTN_SECONDARY, INPUT_STYLE, LABEL_STYLE, SECTION_STYLE, MONO_STYLE
 
 def _next_piac_id(layer, area_id):
     existing = set()
@@ -192,10 +192,23 @@ class PlacePIAChamberMapTool(QgsMapToolEmitPoint):
         attrs = dlg.get_attributes()
         feat = QgsFeature(chamber_layer.fields())
         feat.setGeometry(QgsGeometry.fromPointXY(point))
-        for fname, val in attrs.items():
+
+        # surface_type was added to the chambers schema in v1.0.1. Projects
+        # created before that won't have the column yet — warn (once) via
+        # the Conductor log rather than silently discarding the value, so
+        # the user knows to run the schema migration.
+        field_names = [f.name() for f in chamber_layer.fields()]
+        if "surface_type" not in field_names and attrs.get("surface_type"):
+            log(
+                "chambers layer has no 'surface_type' column — value not "
+                "saved. Run the v1.0.1 schema migration to add it.",
+                "warning",
+            )
+
+        for fname, fvalue in attrs.items():
             idx = chamber_layer.fields().indexOf(fname)
-            if idx >= 0 and val is not None:
-                feat.setAttribute(idx, val)
+            if idx >= 0 and fvalue is not None:
+                feat.setAttribute(idx, fvalue)
 
         chamber_layer.startEditing()
         if chamber_layer.addFeature(feat):

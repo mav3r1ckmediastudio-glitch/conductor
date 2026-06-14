@@ -3,7 +3,16 @@
 Conductor — Digitise PIA UG Duct Tool (PIA)
 Multi-vertex line. Snaps to PIA_UG_CHAMBER and PIA_POLE in chambers layer.
 RMB finishes and saves. Tool stays active.
-Writes to ducts with duct_type = PIA_UG.
+
+Writes to the `ducts` layer using the same from_node/from_node_type/
+to_node/to_node_type convention as DigitiseDuctMapTool, so that PIA UG
+duct connectivity is recorded and downstream tools (fibre cable ->
+duct matching, route validation, BOM) can see it.
+
+duct_type is written as "PIA_SUBDUCT" — the value already used for
+Openreach subduct in the main Digitise Duct tool's duct_type enum —
+so Edit Asset's duct_type dropdown recognises it and round-trips
+correctly instead of silently resetting to "SHOTGUN".
 """
 
 import math
@@ -41,7 +50,12 @@ def _calc_length(points):
 
 
 def _snap_to_pia_node(canvas, project, pos, radius_px=14):
-    """Snap to PIA_UG_CHAMBER or PIA_POLE in chambers layer."""
+    """Snap to PIA_UG_CHAMBER or PIA_POLE in the chambers layer.
+
+    Returns (point, chamber_id, chamber_type) where chamber_type is
+    "PIA_UG_CHAMBER" or "PIA_POLE" — used as from_node_type/to_node_type
+    on the duct feature. Returns (None, None, None) if nothing in range.
+    """
     canvas_pt = canvas.getCoordinateTransform().toMapCoordinates(pos)
     src = canvas.mapSettings().destinationCrs()
     dst = QgsCoordinateReferenceSystem("EPSG:27700")
@@ -49,7 +63,7 @@ def _snap_to_pia_node(canvas, project, pos, radius_px=14):
     r   = canvas.mapUnitsPerPixel() * radius_px
     rect = QgsRectangle(pt.x()-r, pt.y()-r, pt.x()+r, pt.y()+r)
 
-    best_dist = r; best_pt = None; best_id = None
+    best_dist = r; best_pt = None; best_id = None; best_type = None
     layer = project.get_layer("chambers")
     if layer:
         for feat in layer.getFeatures(QgsFeatureRequest().setFilterRect(rect)):
@@ -59,8 +73,8 @@ def _snap_to_pia_node(canvas, project, pos, radius_px=14):
             fp = feat.geometry().asPoint()
             d  = math.hypot(fp.x()-pt.x(), fp.y()-pt.y())
             if d < best_dist:
-                best_dist = d; best_pt = fp; best_id = feat["chamber_id"]
-    return best_pt, best_id
+                best_dist = d; best_pt = fp; best_id = feat["chamber_id"]; best_type = ct
+    return best_pt, best_id, best_type
 
 
 def _to_canvas(canvas, pt):
@@ -83,18 +97,21 @@ def _info(msg):
 
 class DigitisePIAUGDuctDialog(QDialog):
 
-    def __init__(self, duct_id, from_chamber, to_chamber, length_m, area_id, pop_id, parent=None):
+    def __init__(self, duct_id, from_node, from_node_type, to_node, to_node_type,
+                 length_m, area_id, pop_id, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Digitise PIA UG Duct")
         self.setMinimumWidth(500)
         self.setMaximumHeight(520)
         self.setModal(True)
-        self._duct_id      = duct_id
-        self._from_chamber = from_chamber
-        self._to_chamber   = to_chamber
-        self._length_m     = length_m
-        self._area_id      = area_id
-        self._pop_id       = pop_id
+        self._duct_id       = duct_id
+        self._from_node     = from_node
+        self._from_node_type= from_node_type
+        self._to_node       = to_node
+        self._to_node_type  = to_node_type
+        self._length_m      = length_m
+        self._area_id       = area_id
+        self._pop_id        = pop_id
         self._build_ui()
 
     def _lbl(self, t):
@@ -116,7 +133,9 @@ class DigitisePIAUGDuctDialog(QDialog):
         hdr.setStyleSheet(f"background:{NAVY}; color:{WHITE}; font-size:13px; font-weight:bold;")
         root.addWidget(hdr)
 
-        sub = QLabel(f"  {self._from_chamber or '—'}  →  {self._to_chamber or '—'}  ·  Length: {self._length_m} m")
+        from_label = self._from_node or "—"
+        to_label   = self._to_node or "—"
+        sub = QLabel(f"  {from_label}  →  {to_label}  ·  Length: {self._length_m} m")
         sub.setFixedHeight(24)
         sub.setStyleSheet(f"background:{TEAL}; color:{WHITE}; font-size:11px; padding-left:8px;")
         root.addWidget(sub)
@@ -138,6 +157,14 @@ class DigitisePIAUGDuctDialog(QDialog):
         len_disp = QLineEdit(f"{self._length_m} m")
         len_disp.setReadOnly(True); len_disp.setStyleSheet(CALC_STYLE)
         f1.addRow(self._lbl("Length (m)"), len_disp)
+
+        from_disp = QLineEdit(f"{from_label}  ({self._from_node_type or 'UNKNOWN'})")
+        from_disp.setReadOnly(True); from_disp.setStyleSheet(MONO_STYLE)
+        f1.addRow(self._lbl("From"), from_disp)
+
+        to_disp = QLineEdit(f"{to_label}  ({self._to_node_type or 'UNKNOWN'})")
+        to_disp.setReadOnly(True); to_disp.setStyleSheet(MONO_STYLE)
+        f1.addRow(self._lbl("To"), to_disp)
 
         self.openreach_ref = QLineEdit()
         self.openreach_ref.setPlaceholderText("Openreach subduct reference (optional)")
@@ -170,16 +197,18 @@ class DigitisePIAUGDuctDialog(QDialog):
 
     def get_attributes(self):
         return {
-            "duct_id":       self._duct_id,
-            "duct_type":     "PIA_UG",
-            "from_chamber":  self._from_chamber,
-            "to_chamber":    self._to_chamber,
-            "length_m":      self._length_m,
-            "area_id":       self._area_id,
-            "pop_id":        self._pop_id,
-            "openreach_ref": self.openreach_ref.text().strip() or None,
-            "status":        self.status.currentText(),
-            "notes":         self.notes.text().strip() or None,
+            "duct_id":        self._duct_id,
+            "duct_type":      "PIA_SUBDUCT",
+            "from_node":      self._from_node,
+            "from_node_type": self._from_node_type,
+            "to_node":        self._to_node,
+            "to_node_type":   self._to_node_type,
+            "length_m":       self._length_m,
+            "area_id":        self._area_id,
+            "pop_id":         self._pop_id,
+            "openreach_ref":  self.openreach_ref.text().strip() or None,
+            "status":         self.status.currentText(),
+            "notes":          self.notes.text().strip() or None,
         }
 
 
@@ -193,6 +222,7 @@ class DigitisePIAUGDuctMapTool(QgsMapTool):
         self._project = project
         self._points     = []
         self._node_ids   = []
+        self._node_types = []
 
         self._rubber = QgsRubberBand(canvas, QgsWkbTypes.LineGeometry)
         self._rubber.setColor(QColor(123, 45, 139, 200))
@@ -205,7 +235,7 @@ class DigitisePIAUGDuctMapTool(QgsMapTool):
         self.setCursor(QCursor(Qt.CrossCursor))
 
     def canvasMoveEvent(self, event):
-        snapped_pt, _ = _snap_to_pia_node(self._canvas, self._project, event.pos())
+        snapped_pt, _, _ = _snap_to_pia_node(self._canvas, self._project, event.pos())
         self._snap_rubber.reset(QgsWkbTypes.PointGeometry)
         if snapped_pt:
             self._snap_rubber.addPoint(_to_canvas(self._canvas, snapped_pt), True)
@@ -227,15 +257,17 @@ class DigitisePIAUGDuctMapTool(QgsMapTool):
         if event.button() != Qt.LeftButton:
             return
 
-        snapped_pt, node_id = _snap_to_pia_node(self._canvas, self._project, event.pos())
+        snapped_pt, node_id, node_type = _snap_to_pia_node(self._canvas, self._project, event.pos())
         if snapped_pt:
             pt = snapped_pt
         else:
             pt = _to_27700(self._canvas, self.toMapCoordinates(event.pos()))
             node_id = None
+            node_type = None
 
         self._points.append(pt)
         self._node_ids.append(node_id)
+        self._node_types.append(node_type)
         self._rubber.addPoint(_to_canvas(self._canvas, pt), True)
 
     def _finish(self):
@@ -255,11 +287,16 @@ class DigitisePIAUGDuctMapTool(QgsMapTool):
 
         duct_id  = _next_piad_id(duct_layer, self._project.area_id)
         length_m = _calc_length(self._points)
-        from_chamber = self._node_ids[0]
-        to_chamber   = self._node_ids[-1]
+
+        from_node      = self._node_ids[0]   or "unknown"
+        from_node_type = self._node_types[0] or "UNKNOWN"
+        to_node        = self._node_ids[-1]  or "unknown"
+        to_node_type   = self._node_types[-1] or "UNKNOWN"
 
         dlg = DigitisePIAUGDuctDialog(
-            duct_id=duct_id, from_chamber=from_chamber, to_chamber=to_chamber,
+            duct_id=duct_id,
+            from_node=from_node, from_node_type=from_node_type,
+            to_node=to_node, to_node_type=to_node_type,
             length_m=length_m, area_id=self._project.area_id, pop_id=pop_id,
         )
         if dlg.exec_() != QDialog.Accepted:
@@ -268,10 +305,10 @@ class DigitisePIAUGDuctMapTool(QgsMapTool):
         attrs = dlg.get_attributes()
         feat = QgsFeature(duct_layer.fields())
         feat.setGeometry(QgsGeometry.fromPolylineXY(self._points))
-        for fname, val in attrs.items():
+        for fname, fvalue in attrs.items():
             idx = duct_layer.fields().indexOf(fname)
-            if idx >= 0 and val is not None:
-                feat.setAttribute(idx, val)
+            if idx >= 0 and fvalue is not None:
+                feat.setAttribute(idx, fvalue)
 
         duct_layer.startEditing()
         if duct_layer.addFeature(feat):
@@ -286,7 +323,7 @@ class DigitisePIAUGDuctMapTool(QgsMapTool):
         self._reset()
 
     def _reset(self):
-        self._points = []; self._node_ids = []
+        self._points = []; self._node_ids = []; self._node_types = []
         self._rubber.reset(); self._snap_rubber.reset()
 
     def deactivate(self):
@@ -302,5 +339,5 @@ class DigitisePIAUGDuctMapTool(QgsMapTool):
             self._reset(); self._canvas.unsetMapTool(self)
         elif event.key() == Qt.Key_Z and event.modifiers() == Qt.ControlModifier:
             if self._points:
-                self._points.pop(); self._node_ids.pop()
+                self._points.pop(); self._node_ids.pop(); self._node_types.pop()
                 self._rubber.removeLastPoint()

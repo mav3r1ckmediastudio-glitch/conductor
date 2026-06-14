@@ -76,7 +76,8 @@ class DigitiseDropMapTool(QgsMapTool):
         self._canvas  = canvas
         self._project = project
         self._pt1          = None   # start point (27700)
-        self._id1          = None   # joint/chamber id
+        self._id1          = None   # joint/chamber id from snap_to_node
+        self._type1        = None   # "JOINT" | "CHAMBER" | "FREE"
         self._pt2          = None   # end point (27700)
         self._id2          = None   # uprn
         self._last_click_pos = None  # guard against double-click phantom release
@@ -115,6 +116,7 @@ class DigitiseDropMapTool(QgsMapTool):
             # First click — set start
             self._pt1 = pt
             self._id1 = node_id
+            self._type1 = node_type
             self._rubber.reset(QgsWkbTypes.LineGeometry)
             self._rubber.addPoint(_to_canvas(self._canvas, pt), True)
             label = f"Joint {node_id}" if node_type == "JOINT" else \
@@ -159,22 +161,43 @@ class DigitiseDropMapTool(QgsMapTool):
         feat = QgsFeature(layer.fields())
         feat.setGeometry(QgsGeometry.fromPolylineXY([self._pt1, self._pt2]))
 
-        # Auto-detect aerial drop — start node is a CBT joint
-        drop_type = None
-        if self._id1:
+        # Resolve the start node into the correct FK for drop_ducts.
+        #
+        # _id1/_type1 come from snap_to_node and may be a JOINT id, a
+        # CHAMBER id, or "0"/FREE (no snap). drop_ducts only has
+        # from_chamber and from_pole columns — a joint_id is not a valid
+        # value for either, so a JOINT start is resolved to the chamber
+        # it sits in (normal splitter joint) or the pole it's mounted on
+        # (CBT — aerial drop).
+        from_chamber = None
+        from_pole    = None
+        drop_type    = None
+
+        if self._type1 == "CHAMBER" and self._id1 and self._id1 != "0":
+            from_chamber = self._id1
+
+        elif self._type1 == "JOINT" and self._id1 and self._id1 != "0":
             joint_layer = self._project.get_layer("joints")
             if joint_layer:
                 for jf in joint_layer.getFeatures():
                     if str(jf["joint_id"]) == str(self._id1):
                         if str(jf["joint_type"] or "") == "CBT":
+                            # CBT is mounted on a pole — record the pole,
+                            # not the joint, and flag this as an aerial drop.
+                            from_pole = jf["pole_id"]
                             drop_type = "PIA_AERIAL_DROP"
+                        else:
+                            # Normal splitter joint — record the chamber
+                            # it physically sits in.
+                            from_chamber = jf["chamber_id"]
                         break
 
         attrs = {
             "ddct_id":      drop_id,
             "uprn":         int(self._id2) if self._id2 and self._id2.isdigit() and self._id2 != "0" else None,
             "area_id":      self._project.area_id,
-            "from_chamber": self._id1,
+            "from_chamber": from_chamber,
+            "from_pole":    from_pole,
             "length_m":     length_m,
             "status":       "PROPOSED",
             "drop_type":    drop_type,
@@ -201,7 +224,7 @@ class DigitiseDropMapTool(QgsMapTool):
     # ── CLEANUP ───────────────────────────────────────────────────────────────
 
     def _reset(self):
-        self._pt1 = self._pt2 = self._id1 = self._id2 = None
+        self._pt1 = self._pt2 = self._id1 = self._id2 = self._type1 = None
         self._last_click_pos = None
         self._rubber.reset(QgsWkbTypes.LineGeometry)
 

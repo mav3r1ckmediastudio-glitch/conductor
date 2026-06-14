@@ -534,10 +534,10 @@ class PlacePOPMapTool(QgsMapToolEmitPoint):
         attrs = dlg.get_attributes()
         feat  = QgsFeature(layer.fields())
         feat.setGeometry(QgsGeometry.fromPointXY(point))
-        for fname, val in attrs.items():
+        for fname, fvalue in attrs.items():
             idx = layer.fields().indexOf(fname)
             if idx >= 0:
-                feat.setAttribute(idx, val)
+                feat.setAttribute(idx, fvalue)
 
         layer.startEditing()
         if layer.addFeature(feat):
@@ -634,10 +634,10 @@ class EditPOPMapTool(QgsMapTool):
 
         attrs = dlg.get_attributes()
         layer.startEditing()
-        for fname, val in attrs.items():
+        for fname, fvalue in attrs.items():
             idx = layer.fields().indexOf(fname)
             if idx >= 0:
-                layer.changeAttributeValue(feat.id(), idx, val)
+                layer.changeAttributeValue(feat.id(), idx, fvalue)
 
         if layer.commitChanges():
             layer.triggerRepaint()

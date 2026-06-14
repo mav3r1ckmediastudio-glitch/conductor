@@ -484,10 +484,10 @@ class DigitiseDuctMapTool(QgsMapTool):
         feat = QgsFeature(duct_layer.fields())
         feat.setGeometry(QgsGeometry.fromPolylineXY(self._points))
 
-        for fname, val in attrs.items():
+        for fname, fvalue in attrs.items():
             idx = duct_layer.fields().indexOf(fname)
-            if idx >= 0 and val is not None:
-                feat.setAttribute(idx, val)
+            if idx >= 0 and fvalue is not None:
+                feat.setAttribute(idx, fvalue)
 
         duct_layer.startEditing()
         if duct_layer.addFeature(feat):

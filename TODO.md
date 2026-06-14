@@ -74,6 +74,37 @@
 
 ---
 
+## 🛠️ MIGRATION — v1.0.1 (run once per existing GeoPackage, e.g. SCOT-222.gpkg)
+
+v1.0.1 adds one new column to the `chambers` table: `surface_type` (TEXT),
+used by "Place PIA UG Chamber". New projects get it automatically. For
+**existing** GeoPackages, run this once (e.g. via the QGIS Python console
+with the layer closed, or `ogrinfo`/`spatialite_gui`):
+
+```sql
+ALTER TABLE chambers ADD COLUMN surface_type TEXT;
+```
+
+Until this is run, "Place PIA UG Chamber" still works — it now logs a
+warning to the Conductor log panel (Plugins ▸ Conductor) instead of
+silently discarding the Surface Type value, so the gap is visible rather
+than invisible.
+
+No other v1.0.1 changes require a schema migration: the PIA UG Duct and
+drop-duct fixes only changed *which existing columns* (`from_node`/
+`to_node`/`from_node_type`/`to_node_type`/`duct_type`, `from_pole`) are
+populated — those columns already exist in the v0.4 schema.
+
+Note: any PIA UG ducts already digitised before v1.0.1 will have
+duct_type='PIA_UG' and empty from_node/to_node. Re-saving them via Edit
+Asset will currently reset duct_type to 'SHOTGUN' (the v1.0.1 fix stops
+this for *new* features, but pre-existing 'PIA_UG' rows should be bulk
+-updated, e.g. `UPDATE ducts SET duct_type='PIA_SUBDUCT' WHERE duct_type='PIA_UG';`,
+and from_node/from_node_type/to_node/to_node_type re-populated manually
+from the duct geometry endpoints if needed).
+
+---
+
 ## 💡 IDEAS / FUTURE
 - [ ] PostGIS backend option (multi-user concurrent access)
 - [ ] QField integration for field survey capture

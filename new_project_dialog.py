@@ -110,6 +110,7 @@ LAYER_SCHEMA = [
         _f("openreach_ref",       V.String,  40),
         _f("pole_type",           V.String,  20),
         _f("attachment_height_m", V.Double,   0),
+        _f("surface_type",        V.String,  20),  # PIA UG chambers: FOOTWAY/VERGE/CARRIAGEWAY/PRIVATE
     ]),
 
     ("poles", "Point", [

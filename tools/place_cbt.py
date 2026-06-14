@@ -308,10 +308,10 @@ class PlaceCBTMapTool(QgsMapToolEmitPoint):
         feat = QgsFeature(joint_layer.fields())
         feat.setGeometry(QgsGeometry.fromPointXY(pole_pt))
 
-        for fname, val in attrs.items():
+        for fname, fvalue in attrs.items():
             idx = joint_layer.fields().indexOf(fname)
-            if idx >= 0 and val is not None:
-                feat.setAttribute(idx, val)
+            if idx >= 0 and fvalue is not None:
+                feat.setAttribute(idx, fvalue)
 
         joint_layer.startEditing()
         if joint_layer.addFeature(feat):

@@ -443,10 +443,10 @@ class ImportPremisesDialog(QDialog):
                         "registered":     False,
                     }
 
-                    for fname, val in attrs.items():
+                    for fname, fvalue in attrs.items():
                         idx = premises_layer.fields().indexOf(fname)
-                        if idx >= 0 and val is not None:
-                            feat.setAttribute(idx, val)
+                        if idx >= 0 and fvalue is not None:
+                            feat.setAttribute(idx, fvalue)
 
                     if premises_layer.addFeature(feat):
                         imported += 1

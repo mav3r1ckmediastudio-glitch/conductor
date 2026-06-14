@@ -100,10 +100,10 @@ def _scrolled_form(root_layout, build_fn):
 
 def _save_attrs(layer, feat, attrs):
     layer.startEditing()
-    for fname, val in attrs.items():
+    for fname, fvalue in attrs.items():
         idx = layer.fields().indexOf(fname)
         if idx >= 0:
-            layer.changeAttributeValue(feat.id(), idx, val if val != "" else None)
+            layer.changeAttributeValue(feat.id(), idx, fvalue if fvalue != "" else None)
     if layer.commitChanges():
         layer.triggerRepaint()
         return True

@@ -185,10 +185,10 @@ class DrawBuildAreaMapTool(QgsMapTool):
         attrs["country_code"] = self._project.country_code
         attrs["build_code"]   = self._project.build_code
 
-        for fname, val in attrs.items():
+        for fname, fvalue in attrs.items():
             idx = layer.fields().indexOf(fname)
             if idx >= 0:
-                feat.setAttribute(idx, val)
+                feat.setAttribute(idx, fvalue)
 
         layer.startEditing()
         if layer.addFeature(feat):

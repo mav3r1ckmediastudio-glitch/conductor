@@ -2,7 +2,7 @@
 name=Conductor
 qgisMinimumVersion=3.22
 description=FTTP fibre network design, build, and inventory management for QGIS. Built for UK FTTP operators.
-version=1.0.0
+version=1.0.1
 author=Mav3r1ck Media Studio
 email=conductor@mav3r1ckmedia.studio
 about=Conductor is a full-lifecycle FTTP network design plugin for QGIS. It covers planning, passive infrastructure, fibre assignment, survey, wayleave, build progress, and customer connection — all stored in a portable GeoPackage. Built around UK operator conventions including the Gigaloch HLD labelling specification.
@@ -15,6 +15,16 @@ experimental=True
 deprecated=False
 hasProcessingProvider=False
 changelog=
+    1.0.1 - PIA schema-integrity fixes: PIA UG Duct now writes from_node/to_node
+            (+types) and duct_type=PIA_SUBDUCT so connectivity and edits
+            round-trip correctly; PIA UG Chamber surface_type added to
+            chambers schema; drop-duct origin FK fixed so CBT/pole starts
+            populate from_pole (not from_chamber/joint_id) and ordinary
+            joint starts resolve to their parent chamber; added static
+            schema-contract test (tests/test_schema_contract.py); dock
+            panel version footer now reads from metadata.txt; misc cleanup
+            (renamed shadowed `val` loop var, removed dead refs/duplicate
+            imports, fixed stale "fibre_cables" message).
     0.3.0 - v0.4 data model (ducts + fibre_cables as separate layers, shotgun/PIA/drop_duct_type, DUCT-NNN IDs)
     0.2.0 - New Project wizard, layer loading, symbology
     0.1.0 - Initial scaffold

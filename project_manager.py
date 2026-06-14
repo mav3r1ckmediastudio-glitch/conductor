@@ -147,11 +147,6 @@ def _apply_symbology(layer):
     layer.triggerRepaint()
 
 
-# ── LAYER DISPLAY NAMES (imported) ────────────────────────────────────────────
-from .new_project_dialog import LAYER_DISPLAY_NAMES
-
-
-
 
 # ── LABELLING ──────────────────────────────────────────────────────────────────────────────
 

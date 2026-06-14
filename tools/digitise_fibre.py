@@ -361,7 +361,7 @@ class DigitiseFibreMapTool(QgsMapTool):
 
         cable_layer = self._project.get_layer("cables")
         if not cable_layer:
-            QMessageBox.critical(None, "Conductor", "fibre_cables layer not found.")
+            QMessageBox.critical(None, "Conductor", "Cables layer not found.")
             self._reset(); return
 
         # Get cabinet for pop_id
@@ -418,10 +418,10 @@ class DigitiseFibreMapTool(QgsMapTool):
         feat = QgsFeature(cable_layer.fields())
         feat.setGeometry(geom)
 
-        for fname, val in attrs.items():
+        for fname, fvalue in attrs.items():
             idx = cable_layer.fields().indexOf(fname)
-            if idx >= 0 and val is not None:
-                feat.setAttribute(idx, val)
+            if idx >= 0 and fvalue is not None:
+                feat.setAttribute(idx, fvalue)
 
         cable_layer.startEditing()
         if cable_layer.addFeature(feat):

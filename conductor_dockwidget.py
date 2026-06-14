@@ -11,13 +11,159 @@ from qgis.PyQt.QtWidgets import (
     QDockWidget, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QFrame, QSizePolicy, QSpacerItem,
     QMessageBox, QFileDialog, QTabWidget, QScrollArea,
+    QStackedWidget, QGridLayout, QToolButton,
 )
-from qgis.core import QgsProject, QgsSnappingConfig, QgsTolerance
-from .conductor_utils import NAVY, TEAL, ORANGE, LIGHT, WHITE, MID, SKY, PURPLE
+from qgis.core import QgsProject, QgsSnappingConfig, QgsTolerance, QgsSettings
+from .conductor_utils import NAVY, TEAL, ORANGE, LIGHT, WHITE, MID, SKY, PURPLE, plugin_version
 from .help_system import HelpContentStore, wrap_with_help
 
-SKY    = "#00AAFF"   # PIA aerial colour
-PURPLE = "#7B2D8B"   # PIA underground colour
+
+class DialPadToggle:
+    """
+    Generic helper that adds a compact icon-grid ("dial pad") view alongside
+    a tab's normal vertical tool list.
+
+    The same QPushButton instances are moved between the list rows and the
+    grid cells when the view is toggled, so enabled/disabled state, click
+    handlers, and the orange "active tool" highlight all keep working
+    unchanged.
+    """
+
+    GRID_ICON_SIZE = QSize(34, 34)
+    LIST_ICON_SIZE = QSize(28, 28)
+    GRID_MIN_HEIGHT = 48
+
+    def __init__(self, dock, settings_key, columns=4):
+        self.dock = dock
+        self.settings_key = settings_key
+        self.columns = columns
+        self.sections = []       # [(header_text, [(row, btn, tool_id), ...]), ...]
+        self.stack = None
+        self.grid_page = None
+        self._grid_layout = None
+        self._positions = {}     # (row, btn, tool_id) -> (grid_row, grid_col)
+        self._is_grid = False
+        self._toggle_buttons = []
+
+    def add_section(self, header_text, items):
+        """items: list of (row_widget, button, tool_id_or_None)"""
+        self.sections.append((header_text, items))
+
+    def make_toggle_button(self):
+        btn = QToolButton()
+        btn.setCheckable(True)
+        btn.setText("\u25A6")
+        btn.setToolTip("Toggle compact grid view")
+        btn.setCursor(Qt.PointingHandCursor)
+        btn.setFixedSize(26, 22)
+        btn.setStyleSheet(f"""
+            QToolButton {{
+                background:{WHITE}; color:{MID}; border:1px solid {MID};
+                border-radius:3px; font-size:12px;
+            }}
+            QToolButton:hover {{ border-color:{TEAL}; color:{TEAL}; }}
+            QToolButton:checked {{
+                background:{TEAL}; color:{WHITE}; border-color:{TEAL};
+            }}
+        """)
+        btn.clicked.connect(self.toggle)
+        self._toggle_buttons.append(btn)
+        return btn
+
+    def build(self, list_page):
+        """Build the grid page and wrap list_page + grid_page in a QStackedWidget."""
+        self.grid_page = self._build_grid_page()
+
+        self.stack = QStackedWidget()
+        self.stack.addWidget(list_page)       # index 0 - existing vertical list
+        self.stack.addWidget(self.grid_page)  # index 1 - compact grid
+
+        saved = QgsSettings().value(f"Conductor/dialpad_view_{self.settings_key}", "list")
+        if saved == "grid":
+            self.set_grid(True, persist=False)
+
+        return self.stack
+
+    def _build_grid_page(self):
+        page = QWidget()
+        page.setStyleSheet(f"background-color: {LIGHT};")
+        grid = QGridLayout(page)
+        grid.setContentsMargins(12, 12, 12, 16)
+        grid.setSpacing(6)
+        self._grid_layout = grid
+
+        # Top row: label + toggle button (mirrors the list view's status row)
+        top_row = QWidget()
+        tr = QHBoxLayout(top_row)
+        tr.setContentsMargins(0, 0, 0, 4)
+        tr.setSpacing(6)
+        lbl = QLabel("Compact view")
+        lbl.setStyleSheet(f"color:{MID}; font-size:11px;")
+        tr.addWidget(lbl, 1)
+        tr.addWidget(self.make_toggle_button())
+        grid.addWidget(top_row, 0, 0, 1, self.columns)
+
+        row = 1
+        for header_text, items in self.sections:
+            if header_text:
+                lbl = self.dock._section_label(header_text)
+                grid.addWidget(lbl, row, 0, 1, self.columns)
+                row += 1
+            for idx, item in enumerate(items):
+                r = row + idx // self.columns
+                c = idx % self.columns
+                self._positions[item] = (r, c)
+            if items:
+                row += (len(items) + self.columns - 1) // self.columns
+
+        grid.setRowStretch(row, 1)
+        for col in range(self.columns):
+            grid.setColumnStretch(col, 1)
+        return page
+
+    def set_grid(self, grid_on, persist=True):
+        if grid_on == self._is_grid:
+            if self.stack:
+                self.stack.setCurrentIndex(1 if grid_on else 0)
+            return
+
+        if grid_on:
+            for (row_widget, btn, tool_id), (r, c) in self._positions.items():
+                row_widget.layout().removeWidget(btn)
+                if btn.property("_dialpad_orig_text") is None:
+                    btn.setProperty("_dialpad_orig_text", btn.text())
+                btn.setText("")
+                btn.setIconSize(self.GRID_ICON_SIZE)
+                btn.setMinimumHeight(self.GRID_MIN_HEIGHT)
+                title = None
+                if tool_id:
+                    title = self.dock.help_store.get(tool_id).get("title")
+                btn.setToolTip(title or (btn.property("_dialpad_orig_text") or ""))
+                self._grid_layout.addWidget(btn, r, c)
+        else:
+            for (row_widget, btn, tool_id), (r, c) in self._positions.items():
+                self._grid_layout.removeWidget(btn)
+                orig = btn.property("_dialpad_orig_text")
+                if orig is not None:
+                    btn.setText(orig)
+                btn.setIconSize(self.LIST_ICON_SIZE)
+                btn.setMinimumHeight(0)
+                btn.setToolTip("")
+                row_widget.layout().insertWidget(0, btn, 1)
+
+        self._is_grid = grid_on
+        if self.stack:
+            self.stack.setCurrentIndex(1 if grid_on else 0)
+        for tb in self._toggle_buttons:
+            tb.setChecked(grid_on)
+        if persist:
+            QgsSettings().setValue(
+                f"Conductor/dialpad_view_{self.settings_key}",
+                "grid" if grid_on else "list"
+            )
+
+    def toggle(self):
+        self.set_grid(not self._is_grid)
 
 
 class ConductorDockWidget(QDockWidget):
@@ -135,19 +281,35 @@ class ConductorDockWidget(QDockWidget):
         cl.setContentsMargins(12, 16, 12, 16)
         cl.setSpacing(8)
 
-        # Project status label
+        toggle = DialPadToggle(self, "design", columns=4)
+        self._design_toggle = toggle
+
+        # Project status label + grid-view toggle
+        status_row = QWidget()
+        sr = QHBoxLayout(status_row)
+        sr.setContentsMargins(0, 0, 0, 0)
+        sr.setSpacing(6)
         self._status_label = QLabel("No project open")
         self._status_label.setStyleSheet(f"color:{MID}; font-size:11px; padding-bottom:4px;")
-        cl.addWidget(self._status_label)
+        sr.addWidget(self._status_label, 1)
+        sr.addWidget(toggle.make_toggle_button())
+        cl.addWidget(status_row)
 
         # PROJECT
         cl.addWidget(self._section_label("PROJECT"))
-        cl.addWidget(self._primary_button("＋  New Project", self._on_new_project, icon="new_project.svg"))
-        cl.addWidget(self._secondary_button("Open Project", self._on_open_project, icon="open_project.svg"))
+        project_items = []
+        row = self._primary_button("\uFF0B  New Project", self._on_new_project, icon="new_project.svg")
+        cl.addWidget(row)
+        project_items.append(self._dialpad_item(row, "new_project.svg"))
+        row = self._secondary_button("Open Project", self._on_open_project, icon="open_project.svg")
+        cl.addWidget(row)
+        project_items.append(self._dialpad_item(row, "open_project.svg"))
         cl.addWidget(self._divider())
+        toggle.add_section("PROJECT", project_items)
 
         # DESIGN
         cl.addWidget(self._section_label("DESIGN"))
+        design_items = []
         for label, slot, icon in [
             ("Build Areas",                    self._on_draw_build_area,   "build_areas.svg"),
             ("Import Premises (AddressBase)",   self._on_import_premises,  "import_premises_addressbase.svg"),
@@ -160,42 +322,58 @@ class ConductorDockWidget(QDockWidget):
             ("Place Chamber",                   self._on_place_chamber,    "place_chamber.svg"),
             ("Place Joint",                     self._on_place_joint,      "place_joint.svg"),
         ]:
-            cl.addWidget(self._tool_button(label, slot, icon=icon))
+            row = self._tool_button(label, slot, icon=icon)
+            cl.addWidget(row)
+            design_items.append(self._dialpad_item(row, icon))
         cl.addWidget(self._divider())
+        toggle.add_section("DESIGN", design_items)
 
         # CROSSINGS (not PIA-specific — available in Design tab)
         cl.addWidget(self._section_label("CROSSINGS"))
+        crossings_items = []
         for label, slot, icon in [
             ("Digitise Road Crossing",    self._on_digitise_road_crossing,    "digitise_road_crossing.svg"),
             ("Digitise Stream Crossing",  self._on_digitise_stream_crossing,  "digitise_stream_crossing.svg"),
         ]:
-            cl.addWidget(self._tool_button(label, slot, icon=icon))
+            row = self._tool_button(label, slot, icon=icon)
+            cl.addWidget(row)
+            crossings_items.append(self._dialpad_item(row, icon))
         cl.addWidget(self._divider())
+        toggle.add_section("CROSSINGS", crossings_items)
 
         # FIBRE
         cl.addWidget(self._section_label("FIBRE"))
+        fibre_items = []
         for label, slot, icon in [
             ("Assign Fibre Roles",      self._on_assign_fibres,        "assign_fibre_roles.svg"),
             ("Fibre Trace",             self._on_fibre_trace,          "fibre_trace.svg"),
             ("Fibre Count Calculator",  self._on_fibre_count,          "fibre_count_calculator.svg"),
             ("Route Splice Export",     self._on_route_splice_export,  "route_splice_export.svg"),
         ]:
-            cl.addWidget(self._tool_button(label, slot, icon=icon))
+            row = self._tool_button(label, slot, icon=icon)
+            cl.addWidget(row)
+            fibre_items.append(self._dialpad_item(row, icon))
         cl.addWidget(self._divider())
+        toggle.add_section("FIBRE", fibre_items)
 
         # BUILD
         cl.addWidget(self._section_label("BUILD"))
+        build_items = []
         for label, slot, icon in [
             ("Add Build Task",       self._placeholder,    "add_build_task.svg"),
             ("Generate Job Pack",    self._placeholder,    "generate_job_pack.svg"),
             ("Splice Plan Export",   self._on_splice_plan, "splice_plan_export.svg"),
             ("Single Line Diagram",  self._on_sld,         "single_line_diagram.svg"),
         ]:
-            cl.addWidget(self._tool_button(label, slot, icon=icon))
+            row = self._tool_button(label, slot, icon=icon)
+            cl.addWidget(row)
+            build_items.append(self._dialpad_item(row, icon))
         cl.addWidget(self._divider())
+        toggle.add_section("BUILD", build_items)
 
         # TOOLS
         cl.addWidget(self._section_label("TOOLS"))
+        tools_items = []
         for label, slot, icon in [
             ("Delete Asset",             self._on_delete_asset,    "delete_asset.svg"),
             ("Move Asset",               self._on_move_asset,      "move_asset.svg"),
@@ -204,16 +382,20 @@ class ConductorDockWidget(QDockWidget):
             ("BDUK Export",              self._placeholder,        "bduk_export.svg"),
             ("Cabinet Cost Calculator",  self._placeholder,        "cabinet_cost_calculator.svg"),
         ]:
-            cl.addWidget(self._tool_button(label, slot, icon=icon))
+            row = self._tool_button(label, slot, icon=icon)
+            cl.addWidget(row)
+            tools_items.append(self._dialpad_item(row, icon))
+        toggle.add_section("TOOLS", tools_items)
 
         cl.addItem(QSpacerItem(0, 0, QSizePolicy.Minimum, QSizePolicy.Expanding))
 
-        footer = QLabel("Conductor v0.1.0  ·  Mav3r1ck Media Studio")
+        footer = QLabel(f"Conductor v{plugin_version()}  \u00B7  Mav3r1ck Media Studio")
         footer.setStyleSheet(f"color:{MID}; font-size:10px; padding:8px 0px;")
         footer.setAlignment(Qt.AlignCenter)
         cl.addWidget(footer)
 
-        scroll_area.setWidget(content)
+        stack = toggle.build(content)
+        scroll_area.setWidget(stack)
         return scroll_area
 
     def _build_pia_tab(self):
@@ -229,41 +411,60 @@ class ConductorDockWidget(QDockWidget):
         cl.setContentsMargins(12, 16, 12, 16)
         cl.setSpacing(8)
 
-        # Info label
+        toggle = DialPadToggle(self, "pia", columns=4)
+        self._pia_toggle = toggle
+
+        # Info label + grid-view toggle
+        info_row = QWidget()
+        ir = QHBoxLayout(info_row)
+        ir.setContentsMargins(0, 0, 0, 0)
+        ir.setSpacing(6)
         info = QLabel("Physical Infrastructure Access tools for pole-mounted and Openreach subduct routes.")
         info.setWordWrap(True)
         info.setStyleSheet(f"color:{MID}; font-size:11px; padding-bottom:6px;")
-        cl.addWidget(info)
+        ir.addWidget(info, 1)
+        ir.addWidget(toggle.make_toggle_button())
+        cl.addWidget(info_row)
 
         # CIVIL
         cl.addWidget(self._section_label("CIVIL"))
+        civil_items = []
         for label, slot, icon in [
             ("Place Pole",              self._on_place_pole,           "place_pole.svg"),
             ("Place PIA UG Chamber",    self._on_place_pia_chamber,     "place_pia_ug_chamber.svg"),
             ("Digitise Aerial Span",    self._on_digitise_aerial_span,  "digitise_aerial_span.svg"),
             ("Digitise PIA UG Duct",    self._on_digitise_pia_ug_duct,  "digitise_pia_ug_duct.svg"),
         ]:
-            cl.addWidget(self._tool_button(label, slot, icon=icon))
+            row = self._tool_button(label, slot, icon=icon)
+            cl.addWidget(row)
+            civil_items.append(self._dialpad_item(row, icon))
         cl.addWidget(self._divider())
+        toggle.add_section("CIVIL", civil_items)
 
         # OPTICAL
         cl.addWidget(self._section_label("OPTICAL"))
+        optical_items = []
         for label, slot, icon in [
             ("Place CBT",               self._on_place_cbt,            "place_cbt.svg"),
             ("Digitise Aerial Drop",    self._on_digitise_aerial_drop, "digitise_aerial_drop.svg"),
             ("Digitise PIA UG Drop",    self._on_digitise_pia_ug_drop, "digitise_pia_ug_drop.svg"),
         ]:
-            cl.addWidget(self._tool_button(label, slot, icon=icon))
+            row = self._tool_button(label, slot, icon=icon)
+            cl.addWidget(row)
+            optical_items.append(self._dialpad_item(row, icon))
+        toggle.add_section("OPTICAL", optical_items)
 
         cl.addItem(QSpacerItem(0, 0, QSizePolicy.Minimum, QSizePolicy.Expanding))
 
-        pia_footer = QLabel("PIA tools  ·  Conductor v0.1.0")
+        pia_footer = QLabel(f"PIA tools  \u00B7  Conductor v{plugin_version()}")
         pia_footer.setStyleSheet(f"color:{MID}; font-size:10px; padding:8px 0px;")
         pia_footer.setAlignment(Qt.AlignCenter)
         cl.addWidget(pia_footer)
 
-        scroll_area.setWidget(content)
+        stack = toggle.build(content)
+        scroll_area.setWidget(stack)
         return scroll_area
+
 
     def _build_header(self):
         header = QWidget()
@@ -289,6 +490,12 @@ class ConductorDockWidget(QDockWidget):
         return header
 
     # ── WIDGET FACTORIES ───────────────────────────────────────────────────────
+
+    def _dialpad_item(self, row, icon):
+        """Extract the (row_widget, button, tool_id) tuple from a help-wrapped row widget."""
+        btn = row.layout().itemAt(0).widget()
+        tool_id = os.path.splitext(icon)[0] if icon else None
+        return (row, btn, tool_id)
 
     def _section_label(self, text):
         l = QLabel(text)
@@ -461,7 +668,6 @@ class ConductorDockWidget(QDockWidget):
             "PlacePoleMapTool", "PlaceCBTMapTool", "PlacePIAChamberMapTool",
             "DigitiseAerialSpanMapTool", "DigitisePIAUGDuctMapTool",
             "DigitiseAerialDropMapTool", "DigitisePIAUGDropMapTool",
-            "DigitiseCrossingMapTool",
         )
         if new_tool is None or type(new_tool).__name__ not in conductor_tool_types:
             self._clear_active_button()

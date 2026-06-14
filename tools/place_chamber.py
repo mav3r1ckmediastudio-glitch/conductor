@@ -365,10 +365,10 @@ class PlaceChamberMapTool(QgsMapToolEmitPoint):
         feat = QgsFeature(chamber_layer.fields())
         feat.setGeometry(QgsGeometry.fromPointXY(point))
 
-        for fname, val in attrs.items():
+        for fname, fvalue in attrs.items():
             idx = chamber_layer.fields().indexOf(fname)
-            if idx >= 0 and val is not None:
-                feat.setAttribute(idx, val)
+            if idx >= 0 and fvalue is not None:
+                feat.setAttribute(idx, fvalue)
 
         chamber_layer.startEditing()
         if chamber_layer.addFeature(feat):
