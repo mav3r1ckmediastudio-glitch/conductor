@@ -95,10 +95,51 @@ Post-construction, the same project answers:
 - Build-progress dashboards: % live per build area, RAG map of the network
   coming alive.
 
+## How the API makes it "live" (plain English)
+
+QGIS knows the *design*; **SMx** knows what's actually lit on the network (ONTs,
+subscribers, who's connected). An API is just a doorway between the two. Instead
+of exporting a spreadsheet by hand, the plugin "phones" SMx, asks for the current
+ONT/subscriber status, and gets structured data back. The shared key — **UPRN
+(and/or ONT ID)** — lets the plugin match each SMx record to the right property
+on the map, then stamp it with live status/ONT/router/dates and re-colour it.
+Press **Refresh** (or schedule nightly) and the map re-syncs from the live
+network — that's what makes it a living digital twin rather than a static design.
+
+Loop: authenticate (OAuth) → request ONT/subscriber data → match by UPRN/ONT ID →
+write to `live_properties` → re-style → repeat on demand/schedule.
+
+## SMx API — findings (June 2026)
+
+The platform is **Calix SMx**. Good news: SMx **ships with a built-in REST API**,
+so no third-party API is needed. Two surfaces:
+
+- **SMx Northbound API (on-prem, recommended)** — built into SMx, interactive
+  Swagger at `https://<your-SMx-FQDN>:18443/rest/v1/smx/doc` (default API port
+  `18443`). Directly exposes ONTs, subscribers, and services — the ONT↔subscriber
+  mapping the live layer needs.
+- **Calix Cloud Subscriber/Device API** — cloud-side, OAuth 2.0 via the Calix
+  Cloud developer portal (per-org app registration + tokens); public Postman
+  collection available.
+
+Auth on both: **OAuth 2.0**. "Free": the Northbound API is *included* with SMx
+(it's the integration interface), not a separate purchase.
+
+**To confirm with Calix account team / partner portal:** that your contract +
+SMx version has the Northbound API enabled, developer-portal access to register
+an OAuth app, and any per-endpoint licensing.
+
+Reference links:
+- Getting Started with the SMx API Interface (R22.x): https://www.calix.com/content/dam/calix/mycalix-misc/lib/iae/sm/22x/smx-api/99808.htm
+- Connecting an API Client to SMx: https://www.calix.com/content/dam/calix/mycalix-misc/lib/iae/sm/22x/smx-api/86499.htm
+- Accessing the Northbound APIDoc (Swagger): https://www.calix.com/content/dam/calix/mycalix-misc/lib/iae/sm/21x/smx-api/88973.htm
+- Calix Cloud Subscriber/Device API (Postman): https://documenter.getpostman.com/view/3367549/S1TN7M75
+- Map SMx/CMS-Managed ONTs to Subscribers: https://www.calix.com/content/dam/calix/mycalix-misc/lib/cloud/help/coc/113403.htm
+
 ## Open questions
-1. **Cloud platform & API** — which platform holds router/ONT/customer data, and
-   does it offer a free/REST API? (Determines whether step 3 is feasible, and
-   what auth it needs.) Until then, spreadsheet import is the path.
+1. **SMx API enablement** — confirm Northbound API is licensed/enabled on your
+   SMx, and obtain Calix Cloud developer-portal access for OAuth app registration.
+   (Spreadsheet import remains the MVP until then.)
 2. **`property_id` scheme** — format/source of the internal ID number, and is it
    1:1 with UPRN?
 3. **Status definitions** — exact rules for BUILT vs RFS vs LIVE (which records
