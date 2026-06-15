@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Conductor — Edit Asset Tools
-Click-to-edit for: Chamber, Duct, Joint, Cable, Drop Duct, Bundle.
-All follow the same pattern as Edit Cabinet/POP.
+Click-to-edit for: Cabinet/POP, Chamber, Duct, Joint, Cable, Drop Duct, Bundle.
 """
 
 import math
@@ -548,7 +547,18 @@ def _edit_bundle_dialog(feat):
 # UNIFIED EDIT MAP TOOL
 # ═══════════════════════════════════════════════════════════════════════════
 
+def _edit_pop_dialog(feat):
+    """Adapter for the Cabinet/POP edit dialog so it fits the same
+    dialog_fn(feat) -> (dlg, get_attrs) pattern as the other asset types."""
+    from .place_pop import CabinetDialog
+    pop_id  = _fv(feat, "pop_id", "unknown")
+    area_id = _fv(feat, "area_id", "")
+    dlg = CabinetDialog(point=None, pop_id=pop_id, area_id=area_id, existing_feat=feat)
+    return dlg, dlg.get_attributes
+
+
 EDIT_LAYER_MAP = {
+    "exchange_pops": ("exchange_pops", _edit_pop_dialog,      "pop_id"),
     "chambers":   ("chambers",   _edit_chamber_dialog,  "chamber_id"),
     "ducts":      ("ducts",      _edit_duct_dialog,     "duct_id"),
     "joints":     ("joints",     _edit_joint_dialog,    "joint_id"),
@@ -558,13 +568,14 @@ EDIT_LAYER_MAP = {
 }
 
 # Priority order for click detection
-EDIT_SEARCH_ORDER = ["chambers","joints","ducts","cables","drop_ducts","bundles"]
+EDIT_SEARCH_ORDER = ["exchange_pops","chambers","joints","ducts","cables","drop_ducts","bundles"]
 
 
 class EditAssetMapTool(QgsMapTool):
     """
     Click any Conductor asset to edit it.
-    Searches chambers, joints, ducts, cables, drop ducts, and bundles.
+    Searches exchange_pops (cabinets/POPs), chambers, joints, ducts, cables,
+    drop ducts, and bundles.
     """
 
     edited = pyqtSignal(str, str)  # layer_name, asset_id
@@ -586,7 +597,7 @@ class EditAssetMapTool(QgsMapTool):
         if feat is None:
             QMessageBox.information(None, "Conductor",
                 "No editable asset found at that location.\n"
-                "Click closer to a chamber, duct, joint, cable, drop duct, or bundle.")
+                "Click closer to a cabinet, chamber, duct, joint, cable, drop duct, or bundle.")
             return
 
         if layer_name not in EDIT_LAYER_MAP:

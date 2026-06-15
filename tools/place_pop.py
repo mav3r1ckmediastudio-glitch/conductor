@@ -13,7 +13,8 @@ from qgis.PyQt.QtWidgets import (
 )
 from qgis.core import (
     QgsFeature, QgsGeometry,
-    QgsFeatureRequest,
+    QgsFeatureRequest, QgsProject,
+    QgsCoordinateTransform, QgsCoordinateReferenceSystem,
 )
 from qgis.gui import QgsMapTool, QgsMapToolEmitPoint
 from ..conductor_utils import get_layer, fld, val, LayerEditContext, NAVY, TEAL, ORANGE, LIGHT, WHITE, MID, BTN_PRIMARY, BTN_SECONDARY, INPUT_STYLE, LABEL_STYLE, SUBLABEL_STYLE, SECTION_STYLE, MONO_STYLE, CALC_STYLE
@@ -603,11 +604,20 @@ class EditPOPMapTool(QgsMapTool):
         if not layer:
             return
 
-        # Find feature within ~10 pixels of click
-        point  = self.toMapCoordinates(event.pos())
+        # Find feature within ~10 pixels of click.
+        # toMapCoordinates() returns canvas-CRS coordinates, but
+        # exchange_pops is stored in EPSG:27700 — transform before filtering.
+        canvas_pt  = self.toMapCoordinates(event.pos())
+        canvas_crs = self._canvas.mapSettings().destinationCrs()
+        target_crs = QgsCoordinateReferenceSystem("EPSG:27700")
+        if canvas_crs != target_crs:
+            xform = QgsCoordinateTransform(canvas_crs, target_crs, QgsProject.instance())
+            point = xform.transform(canvas_pt)
+        else:
+            point = canvas_pt
         radius = self._canvas.mapUnitsPerPixel() * 10
         request = QgsFeatureRequest().setFilterRect(
-            point.buffer(radius).boundingBox()
+            QgsGeometry.fromPointXY(point).buffer(radius, 8).boundingBox()
         )
 
         feat = None

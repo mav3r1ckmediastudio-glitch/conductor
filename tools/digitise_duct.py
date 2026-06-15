@@ -217,7 +217,7 @@ class DigitiseDuctDialog(QDialog):
         f3 = QFormLayout(); f3.setSpacing(8); f3.setLabelAlignment(Qt.AlignRight)
 
         self.surface_type = QComboBox()
-        self.surface_type.addItems(["FIELD", "VERGE", "ROAD", "PRIVATE", "MIXED", "AERIAL"])
+        self.surface_type.addItems(["FIELD", "VERGE", "ROAD", "PRIVATE", "MIXED", "AERIAL", "WATERCOURSE"])
         self.surface_type.setStyleSheet(INPUT_STYLE)
         f3.addRow(self._lbl("Surface Type *"), self.surface_type)
 
@@ -227,6 +227,21 @@ class DigitiseDuctDialog(QDialog):
         self.depth_m.setSpecialValueText("— not yet set")
         self.depth_m.setStyleSheet(INPUT_STYLE)
         f3.addRow(self._lbl("Depth (m)"), self.depth_m)
+
+        self.sleeve_type = QComboBox()
+        self.sleeve_type.addItems(["NONE", "SCAFFOLD_BAR"])
+        self.sleeve_type.setStyleSheet(INPUT_STYLE)
+        self.sleeve_type.currentTextChanged.connect(self._on_sleeve_type_changed)
+        f3.addRow(self._lbl("Sleeve"), self.sleeve_type)
+
+        self.sleeve_length_m = QDoubleSpinBox()
+        self.sleeve_length_m.setMinimum(0); self.sleeve_length_m.setMaximum(20.0)
+        self.sleeve_length_m.setSingleStep(0.5); self.sleeve_length_m.setValue(0.0)
+        self.sleeve_length_m.setSpecialValueText("— not yet set")
+        self.sleeve_length_m.setSuffix(" m")
+        self.sleeve_length_m.setStyleSheet(INPUT_STYLE)
+        self.sleeve_length_m.setEnabled(False)
+        f3.addRow(self._lbl("Sleeve Length"), self.sleeve_length_m)
 
         fl.addLayout(f3)
         fl.addWidget(self._divider())
@@ -283,6 +298,11 @@ class DigitiseDuctDialog(QDialog):
         else:
             self.owner.setText("Gigaloch")
 
+    def _on_sleeve_type_changed(self, sleeve_type):
+        self.sleeve_length_m.setEnabled(sleeve_type != "NONE")
+        if sleeve_type == "NONE":
+            self.sleeve_length_m.setValue(0.0)
+
     def _update_id_preview(self, suffix):
         suffix = suffix.strip()
         base = f"{self._area_id}-DUCT-{self._duct_seq:03d}"
@@ -324,6 +344,8 @@ class DigitiseDuctDialog(QDialog):
             "wayleave_req":   self.wayleave_req.isChecked(),
             "status":         self.status.currentText(),
             "notes":          self.notes.text().strip(),
+            "sleeve_type":    self.sleeve_type.currentText(),
+            "sleeve_length_m": self.sleeve_length_m.value() if self.sleeve_length_m.value() > 0 else None,
         }
 
 
@@ -420,6 +442,17 @@ class DigitiseDuctMapTool(QgsMapTool):
     def canvasDoubleClickEvent(self, event):
         pass  # swallowed — right-click finishes
 
+    def _make_dialog(self, duct_id, duct_seq, compass_leg, area_id, pop_id,
+                      from_node, from_node_type, to_node, to_node_type, length_m):
+        """Create the duct dialog. Override in subclasses to customise defaults."""
+        return DigitiseDuctDialog(
+            duct_id=duct_id, duct_seq=duct_seq, compass_leg=compass_leg,
+            area_id=area_id, pop_id=pop_id,
+            from_node=from_node, from_node_type=from_node_type,
+            to_node=to_node, to_node_type=to_node_type,
+            length_m=length_m,
+        )
+
     def _finish(self):
         self._rubber.reset()
         self._snap_rubber.reset()
@@ -466,12 +499,9 @@ class DigitiseDuctMapTool(QgsMapTool):
 
         pop_id = cab_feat["pop_id"]
 
-        dlg = DigitiseDuctDialog(
-            duct_id=duct_id, duct_seq=seq, compass_leg=compass_leg,
-            area_id=self._project.area_id, pop_id=pop_id,
-            from_node=from_node, from_node_type=from_type,
-            to_node=to_node, to_node_type=to_type,
-            length_m=length_m,
+        dlg = self._make_dialog(
+            duct_id, seq, compass_leg, self._project.area_id, pop_id,
+            from_node, from_type, to_node, to_type, length_m,
         )
 
         if dlg.exec_() != QDialog.Accepted:

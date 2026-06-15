@@ -150,6 +150,7 @@ def trace_premises(uprn, area_id,
         entry_asset = str(d["ddct_id"])
         entry_type  = "drop_duct"
         fc = d["from_chamber"] if d["from_chamber"] and d["from_chamber"] != NULL else None
+        fp = d["from_pole"]    if d["from_pole"]    and d["from_pole"]    != NULL else None
         if fc:
             matched = [jf for jlist in joint_idx.values()
                        for jf in jlist
@@ -166,6 +167,21 @@ def trace_premises(uprn, area_id,
                     return (STATUS_PARTIAL, path,
                             f"Drop duct from joint {fc} but joint not found. "
                             f"Check from_chamber value on {entry_asset}.")
+        elif fp:
+            # PIA_AERIAL_DROP — from_pole holds a pole_id, not a joint_id.
+            # Find the CBT joint mounted on that pole.
+            matched = [jf for jlist in joint_idx.values()
+                       for jf in jlist
+                       if str(jf["joint_type"] or "") == "CBT"
+                       and str(jf["pole_id"]) == str(fp)]
+            if matched:
+                first_joint = str(matched[0]["joint_id"])
+            else:
+                path.append(entry_asset)
+                path.append(str(fp))
+                return (STATUS_PARTIAL, path,
+                        f"Aerial drop from pole {fp} but no CBT found on that pole. "
+                        f"Check from_pole value on {entry_asset}.")
         else:
             first_joint = None
 

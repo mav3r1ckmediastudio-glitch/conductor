@@ -155,6 +155,8 @@ LAYER_SCHEMA = [
         _f("from_pole",      V.String,  30),
         _f("to_pole",        V.String,  30),
         _f("openreach_ref",  V.String,  40),
+        _f("sleeve_type",     V.String,  20),
+        _f("sleeve_length_m", V.Double,   0),
     ]),
 
     ("cables", "LineString", [

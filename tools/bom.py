@@ -61,6 +61,26 @@ DEFAULT_COSTS = {
     "cbt_each":            180.00,   # estimate
     "aerial_cable_m":        0.85,   # aerial self-support
     "aerial_drop_m":         0.22,   # aerial drop wire
+    "stream_crossing_each":  800.00,  # estimate — directional drill/bore under watercourse
+    "scaffold_bar_m":          8.50,  # estimate — galvanised scaffold tube sleeve, per metre
+
+    # Cabinet active equipment (Cabinet Cost Calculator)
+    # — from Gigaloch Cabinet Calculator spreadsheet
+    "dux_shelf_each":        900.00,  # DU-X Rectifier Shelf (Known)
+    "inverter_each":         140.00,  # Inverter — 1 per DU-X shelf
+    "mgmt_switch_each":      350.00,  # Management/OOB Switch (Known) — 1 per cabinet
+    "calix_shelf_each":      400.00,  # Calix E7-2 Shelf (Approx)
+    "gpon_card_each":       4200.00,  # Calix GPON Card (Approx)
+    "gpon_optic_each":       110.00,  # Calix GPON Optic (Approx)
+    "battery_set_each":      190.00,  # Battery Set (Known)
+    "patch_panel_each":       60.00,  # Patch Panel (Assumption)
+    "aggreg_router_each":   8000.00,  # Aggregation Router (Approx)
+    "sundries_each":         150.00,  # Sundries (wiring, PDUs etc) — 1 per cabinet
+    # Cabinet build (only applies when pop_type == CABINET)
+    "cabinet_enclosure_each":1500.00, # Cabinet inc 2x fans (Assumption)
+    "groundworks_each":     1000.00,  # Groundworks (Assumption)
+    "electrical_hookup_each":500.00,  # Electrical Hookup
+    "backhaul_install_each": 950.00,  # Backhaul Install
 }
 
 
@@ -83,7 +103,28 @@ def _cost(qty, unit_cost):
 
 # ── Aggregation ───────────────────────────────────────────────────────────────
 
-def build_bom(costs=None, project=None):
+def _area_features(layer, area_id=None):
+    """Yield features from layer, optionally restricted to a single area_id.
+    If area_id is None, yields every feature (whole-project behaviour)."""
+    if area_id is None:
+        for feat in layer.getFeatures():
+            yield feat
+        return
+    field_names = [f.name() for f in layer.fields()]
+    if "area_id" not in field_names:
+        for feat in layer.getFeatures():
+            yield feat
+        return
+    for feat in layer.getFeatures():
+        fa = feat["area_id"]
+        if fa and fa != NULL and str(fa) == str(area_id):
+            yield feat
+
+
+def build_bom(costs=None, project=None, area_id=None):
+    """Build a BoM dict. If area_id is given, restrict to features whose
+    area_id matches (used by the Cabinet Cost Calculator for per-cabinet
+    rollups); otherwise covers the whole project."""
     if costs is None:
         costs = load_costs()
 
@@ -100,7 +141,7 @@ def build_bom(costs=None, project=None):
     cable_layer = get_layer("Cables", project)
     if cable_layer:
         cable_groups = {}
-        for feat in cable_layer.getFeatures():
+        for feat in _area_features(cable_layer, area_id):
             fc     = int(feat["fibre_count"]) if feat["fibre_count"] and feat["fibre_count"] != NULL else 0
             ft     = _str(feat["fibre_type"]) or "Unknown"
             ct     = _str(feat["cable_type"]) or "FEEDER"
@@ -127,7 +168,7 @@ def build_bom(costs=None, project=None):
     bundle_layer = get_layer("Bundles", project)
     if bundle_layer:
         bundle_groups = {}
-        for feat in bundle_layer.getFeatures():
+        for feat in _area_features(bundle_layer, area_id):
             fc     = int(feat["fibre_count"]) if feat["fibre_count"] and feat["fibre_count"] != NULL else 1
             length = _round2(feat["length_m"])
             if fc not in bundle_groups:
@@ -152,7 +193,7 @@ def build_bom(costs=None, project=None):
     if ddct_layer:
         total_len   = 0.0
         total_count = 0
-        for feat in ddct_layer.getFeatures():
+        for feat in _area_features(ddct_layer, area_id):
             total_len   += _round2(feat["length_m"])
             total_count += 1
         if total_count:
@@ -172,7 +213,7 @@ def build_bom(costs=None, project=None):
     if joint_layer:
         joint_groups    = {}
         splitter_groups = {}
-        for feat in joint_layer.getFeatures():
+        for feat in _area_features(joint_layer, area_id):
             jt  = _str(feat["joint_type"]) or "SPLICE"
             ct  = _str(feat["closure_type"]) or "Standard"
             key = (jt, ct)
@@ -214,7 +255,10 @@ def build_bom(costs=None, project=None):
     duct_layer = get_layer("Ducts", project)
     if duct_layer:
         duct_groups = {}
-        for feat in duct_layer.getFeatures():
+        road_crossing_count = 0
+        stream_crossing_count = 0
+        scaffold_bar_length_m = 0.0
+        for feat in _area_features(duct_layer, area_id):
             dt     = _str(feat["duct_type"]) or "STANDARD"
             st     = _str(feat["surface_type"]) or "Unknown"
             key    = (dt, st)
@@ -223,6 +267,16 @@ def build_bom(costs=None, project=None):
                 duct_groups[key] = {"count": 0, "length_m": 0.0}
             duct_groups[key]["count"]    += 1
             duct_groups[key]["length_m"] += length
+
+            if st.upper() == "ROAD":
+                road_crossing_count += 1
+            elif st.upper() == "WATERCOURSE":
+                stream_crossing_count += 1
+
+            if _str(feat["sleeve_type"]).upper() == "SCAFFOLD_BAR":
+                sleeve_len = feat["sleeve_length_m"]
+                if sleeve_len:
+                    scaffold_bar_length_m += _round2(sleeve_len)
 
         for (dt, st), vals in sorted(duct_groups.items()):
             if "SHOTGUN" in dt.upper():
@@ -241,12 +295,46 @@ def build_bom(costs=None, project=None):
                 "notes":       f"{vals['count']} run(s)",
             })
 
+        if road_crossing_count:
+            unit_cost = costs.get("road_crossing_each", 1500.00)
+            bom["Duct"].append({
+                "description": "Road Crossing (works/permit allowance)",
+                "unit":        "each",
+                "qty":         road_crossing_count,
+                "unit_cost":   unit_cost,
+                "total":       _cost(road_crossing_count, unit_cost),
+                "notes":       "",
+            })
+
+        if stream_crossing_count:
+            unit_cost = costs.get("stream_crossing_each", 800.00)
+            bom["Duct"].append({
+                "description": "Stream Crossing (works/consent allowance)",
+                "unit":        "each",
+                "qty":         stream_crossing_count,
+                "unit_cost":   unit_cost,
+                "total":       _cost(stream_crossing_count, unit_cost),
+                "notes":       "",
+            })
+
+        if scaffold_bar_length_m:
+            unit_cost = costs.get("scaffold_bar_m", 8.50)
+            qty = round(scaffold_bar_length_m, 1)
+            bom["Duct"].append({
+                "description": "Scaffold Bar (duct sleeve)",
+                "unit":        "m",
+                "qty":         qty,
+                "unit_cost":   unit_cost,
+                "total":       _cost(qty, unit_cost),
+                "notes":       "Protective sleeve at stream/road crossings",
+            })
+
 
     # ── PIA (Poles, CBTs, Aerial Cable, Aerial Drops) ─────────────────────────
     chamber_layer = get_layer("Chambers", project)
     if chamber_layer:
         pole_count = 0
-        for feat in chamber_layer.getFeatures():
+        for feat in _area_features(chamber_layer, area_id):
             pt = _str(feat["pole_type"]) if "pole_type" in [f.name() for f in feat.fields()] else ""
             if pt:
                 pole_count += 1
@@ -263,7 +351,7 @@ def build_bom(costs=None, project=None):
 
     joint_layer2 = get_layer("Joints", project)
     if joint_layer2:
-        cbt_count = sum(1 for f in joint_layer2.getFeatures() if _str(f["joint_type"]) == "CBT")
+        cbt_count = sum(1 for f in _area_features(joint_layer2, area_id) if _str(f["joint_type"]) == "CBT")
         if cbt_count:
             unit_cost = costs.get("cbt_each", 180.00)
             bom["PIA"].append({
@@ -278,7 +366,7 @@ def build_bom(costs=None, project=None):
     cable_layer2 = get_layer("Cables", project)
     if cable_layer2:
         aerial_groups = {}
-        for feat in cable_layer2.getFeatures():
+        for feat in _area_features(cable_layer2, area_id):
             if _str(feat["cable_type"]).upper() != "AERIAL":
                 continue
             fc  = int(feat["fibre_count"]) if feat["fibre_count"] and feat["fibre_count"] != NULL else 0
@@ -304,7 +392,7 @@ def build_bom(costs=None, project=None):
     if ddct_layer2:
         aerial_drop_len   = 0.0
         aerial_drop_count = 0
-        for feat in ddct_layer2.getFeatures():
+        for feat in _area_features(ddct_layer2, area_id):
             if _str(feat["drop_type"]).upper() == "PIA_AERIAL_DROP":
                 aerial_drop_len   += _round2(feat["length_m"])
                 aerial_drop_count += 1
@@ -342,6 +430,90 @@ def build_bom(costs=None, project=None):
 
 
 # ── Dialog ────────────────────────────────────────────────────────────────────
+
+def edit_costs_dialog(parent, on_saved=None):
+    """Open a dialog to edit and persist unit costs (£ ex. VAT).
+    Calls on_saved() after the user saves changes. Shared between the
+    BoM dialog and the Cabinet Cost Calculator."""
+    from qgis.PyQt.QtWidgets import (QDialog, QFormLayout, QDialogButtonBox,
+                                      QScrollArea, QWidget, QVBoxLayout)
+    costs = load_costs()
+
+    dlg = QDialog(parent)
+    dlg.setWindowTitle("Edit Unit Costs (£ ex. VAT)")
+    dlg.setMinimumWidth(380)
+    root = QVBoxLayout(dlg)
+
+    scroll = QScrollArea(); scroll.setWidgetResizable(True)
+    fw = QWidget(); fl = QFormLayout(fw); fl.setSpacing(6)
+
+    LABELS = {
+        "shotgun_duct_m":    "Shotgun duct (per m)",
+        "duct_16mm_m":       "16mm duct (per m)",
+        "duct_7mm_m":        "7mm duct (per m)",
+        "cable_spine_m":     "Spine cable (per m)",
+        "cable_7mm_m":       "7mm fibre cable (per m)",
+        "chamber_each":      "Chamber (each)",
+        "joint_each":        "Joint closure (each)",
+        "splitter_1x2_each": "Splitter 1:2 (each)",
+        "splitter_1x4_each": "Splitter 1:4 (each)",
+        "splitter_1x8_each": "Splitter 1:8 (each)",
+        "splitter_1x16_each":"Splitter 1:16 (each)",
+        "splitter_1x32_each":"Splitter 1:32 (each)",
+        "bundle_m":          "Bundle (per m)",
+        "drop_duct_m":       "Drop duct (per m)",
+        "ont_each":          "ONT (each)",
+        "road_crossing_each":"Road crossing (each)",
+        "stream_crossing_each":"Stream crossing (each)",
+        "scaffold_bar_m":    "Scaffold bar sleeve (per m)",
+        "pole_each":         "Pole (each)",
+        "cbt_each":          "CBT (each)",
+        "aerial_cable_m":    "Aerial cable (per m)",
+        "aerial_drop_m":     "Aerial drop wire (per m)",
+        "dux_shelf_each":     "DU-X Rectifier Shelf (each)",
+        "inverter_each":      "Inverter (each, 1 per DU-X)",
+        "mgmt_switch_each":   "Management/OOB Switch (per cabinet)",
+        "calix_shelf_each":   "Calix E7-2 Shelf (each)",
+        "gpon_card_each":     "Calix GPON Card (each)",
+        "gpon_optic_each":    "Calix GPON Optic (each)",
+        "battery_set_each":   "Battery Set (each)",
+        "patch_panel_each":   "Patch Panel (each)",
+        "aggreg_router_each": "Aggregation Router (each)",
+        "sundries_each":      "Sundries — wiring/PDUs (per cabinet)",
+        "cabinet_enclosure_each": "Cabinet enclosure inc. fans (per cabinet)",
+        "groundworks_each":   "Cabinet groundworks (per cabinet)",
+        "electrical_hookup_each": "Electrical hookup (per cabinet)",
+        "backhaul_install_each":  "Backhaul install (per cabinet)",
+    }
+
+    spinboxes = {}
+    for key, default in DEFAULT_COSTS.items():
+        label = LABELS.get(key, key)
+        sb = QDoubleSpinBox()
+        sb.setDecimals(2); sb.setMinimum(0); sb.setMaximum(99999)
+        sb.setValue(costs.get(key, default))
+        sb.setPrefix("£ ")
+        fl.addRow(QLabel(label), sb)
+        spinboxes[key] = sb
+
+    scroll.setWidget(fw)
+    root.addWidget(scroll)
+
+    reset_btn = QPushButton("Reset to Defaults")
+    reset_btn.clicked.connect(lambda: [sb.setValue(DEFAULT_COSTS[k]) for k, sb in spinboxes.items()])
+    root.addWidget(reset_btn)
+
+    btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+    btns.accepted.connect(dlg.accept)
+    btns.rejected.connect(dlg.reject)
+    root.addWidget(btns)
+
+    if dlg.exec_() == QDialog.Accepted:
+        new_costs = {k: sb.value() for k, sb in spinboxes.items()}
+        save_costs(new_costs)
+        if on_saved:
+            on_saved()
+
 
 class BomDialog(QDialog):
 
@@ -418,67 +590,7 @@ class BomDialog(QDialog):
 
     def _edit_costs(self):
         """Open a dialog to edit and persist unit costs."""
-        from qgis.PyQt.QtWidgets import (QDialog, QFormLayout, QDialogButtonBox,
-                                          QScrollArea, QWidget, QVBoxLayout)
-        costs = load_costs()
-
-        dlg = QDialog(self)
-        dlg.setWindowTitle("Edit Unit Costs (£ ex. VAT)")
-        dlg.setMinimumWidth(380)
-        root = QVBoxLayout(dlg)
-
-        scroll = QScrollArea(); scroll.setWidgetResizable(True)
-        fw = QWidget(); fl = QFormLayout(fw); fl.setSpacing(6)
-
-        LABELS = {
-            "shotgun_duct_m":    "Shotgun duct (per m)",
-            "duct_16mm_m":       "16mm duct (per m)",
-            "duct_7mm_m":        "7mm duct (per m)",
-            "cable_spine_m":     "Spine cable (per m)",
-            "cable_7mm_m":       "7mm fibre cable (per m)",
-            "chamber_each":      "Chamber (each)",
-            "joint_each":        "Joint closure (each)",
-            "splitter_1x2_each": "Splitter 1:2 (each)",
-            "splitter_1x4_each": "Splitter 1:4 (each)",
-            "splitter_1x8_each": "Splitter 1:8 (each)",
-            "splitter_1x16_each":"Splitter 1:16 (each)",
-            "splitter_1x32_each":"Splitter 1:32 (each)",
-            "bundle_m":          "Bundle (per m)",
-            "drop_duct_m":       "Drop duct (per m)",
-            "ont_each":          "ONT (each)",
-            "road_crossing_each":"Road crossing (each)",
-            "pole_each":         "Pole (each)",
-            "cbt_each":          "CBT (each)",
-            "aerial_cable_m":    "Aerial cable (per m)",
-            "aerial_drop_m":     "Aerial drop wire (per m)",
-        }
-
-        spinboxes = {}
-        for key, default in DEFAULT_COSTS.items():
-            label = LABELS.get(key, key)
-            sb = QDoubleSpinBox()
-            sb.setDecimals(2); sb.setMinimum(0); sb.setMaximum(99999)
-            sb.setValue(costs.get(key, default))
-            sb.setPrefix("£ ")
-            fl.addRow(QLabel(label), sb)
-            spinboxes[key] = sb
-
-        scroll.setWidget(fw)
-        root.addWidget(scroll)
-
-        reset_btn = QPushButton("Reset to Defaults")
-        reset_btn.clicked.connect(lambda: [sb.setValue(DEFAULT_COSTS[k]) for k, sb in spinboxes.items()])
-        root.addWidget(reset_btn)
-
-        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        btns.accepted.connect(dlg.accept)
-        btns.rejected.connect(dlg.reject)
-        root.addWidget(btns)
-
-        if dlg.exec_() == QDialog.Accepted:
-            new_costs = {k: sb.value() for k, sb in spinboxes.items()}
-            save_costs(new_costs)
-            self._run()
+        edit_costs_dialog(self, on_saved=self._run)
 
     def _run(self):
         try:

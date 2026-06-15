@@ -14,8 +14,12 @@ from qgis.PyQt.QtWidgets import (
     QStackedWidget, QGridLayout, QToolButton,
 )
 from qgis.core import QgsProject, QgsSnappingConfig, QgsTolerance, QgsSettings
-from .conductor_utils import NAVY, TEAL, ORANGE, LIGHT, WHITE, MID, SKY, PURPLE, plugin_version
+from .conductor_utils import (
+    NAVY, TEAL, ORANGE, LIGHT, WHITE, MID, SKY, PURPLE,
+    GREEN, RED, GREEN_BG, ORANGE_BG, RED_BG, plugin_version,
+)
 from .help_system import HelpContentStore, wrap_with_help
+from datetime import datetime
 
 
 class DialPadToggle:
@@ -228,6 +232,9 @@ class ConductorDockWidget(QDockWidget):
         pc_layout.addWidget(pc_btn)
         root.addWidget(pc_bar)
 
+        # Project summary panel
+        root.addWidget(self._build_summary_panel())
+
         # ── TAB WIDGET ────────────────────────────────────────────────────
         self._tabs = QTabWidget()
         self._tabs.setStyleSheet(f"""
@@ -265,8 +272,164 @@ class ConductorDockWidget(QDockWidget):
         self._tabs.addTab(self._build_design_tab(), "DESIGN")
         self._tabs.addTab(self._build_pia_tab(), "PIA")
 
+        # Combined grid-mode toggle, shown in the tab bar's top-right corner
+        # so it applies to whichever tab (Design / PIA) is currently active.
+        grid_btn = QToolButton()
+        grid_btn.setCheckable(True)
+        grid_btn.setText("\u25A6 Grid view")
+        grid_btn.setToolTip("Toggle compact grid view for this tab")
+        grid_btn.setCursor(Qt.PointingHandCursor)
+        grid_btn.setStyleSheet(f"""
+            QToolButton {{
+                background:{NAVY}; color:{MID}; border:1px solid {MID};
+                border-radius:3px; font-size:11px; padding:4px 8px;
+                margin-right:4px;
+            }}
+            QToolButton:hover {{ border-color:{TEAL}; color:{WHITE}; }}
+            QToolButton:checked {{
+                background:{TEAL}; color:{WHITE}; border-color:{TEAL};
+            }}
+        """)
+        grid_btn.clicked.connect(self._on_grid_mode_clicked)
+        self._grid_mode_btn = grid_btn
+        # Keep this button in sync whenever either tab's view is toggled
+        # via the compact view's own internal toggle.
+        self._design_toggle._toggle_buttons.append(grid_btn)
+        self._pia_toggle._toggle_buttons.append(grid_btn)
+        self._tabs.setCornerWidget(grid_btn, Qt.TopRightCorner)
+        self._tabs.currentChanged.connect(self._on_tab_changed)
+
         root.addWidget(self._tabs)
         self.setWidget(container)
+
+    # ── PROJECT SUMMARY PANEL ────────────────────────────────────────────────
+
+    def _build_summary_panel(self):
+        """Persistent project summary panel shown above the tabs, regardless
+        of which tab (Design / PIA) is currently active."""
+        panel = QWidget()
+        panel.setStyleSheet(f"background:{LIGHT};")
+        outer = QVBoxLayout(panel)
+        outer.setContentsMargins(8, 6, 8, 6)
+        outer.setSpacing(6)
+
+        # Header row: status text + refresh button
+        header_row = QWidget()
+        hr = QHBoxLayout(header_row)
+        hr.setContentsMargins(0, 0, 0, 0)
+        hr.setSpacing(6)
+
+        self._summary_updated_label = QLabel("Project summary")
+        self._summary_updated_label.setStyleSheet(f"color:{MID}; font-size:11px;")
+        hr.addWidget(self._summary_updated_label, 1)
+
+        refresh_btn = QPushButton("\u21BB")
+        refresh_btn.setFixedSize(24, 24)
+        refresh_btn.setToolTip("Refresh project summary")
+        refresh_btn.setCursor(Qt.PointingHandCursor)
+        refresh_btn.setStyleSheet(f"""
+            QPushButton {{
+                background:{WHITE}; color:{NAVY}; border:1px solid {MID};
+                border-radius:3px; font-size:13px; padding:0px;
+            }}
+            QPushButton:hover {{ border-color:{TEAL}; color:{TEAL}; }}
+        """)
+        refresh_btn.clicked.connect(self._on_refresh_summary)
+        hr.addWidget(refresh_btn)
+        outer.addWidget(header_row)
+
+        # Row 1: premises / routed / partial / unserved
+        row1 = QWidget()
+        g1 = QHBoxLayout(row1)
+        g1.setContentsMargins(0, 0, 0, 0)
+        g1.setSpacing(6)
+        self._sum_premises = self._stat_cell(g1, "--", "premises")
+        self._sum_routed   = self._stat_cell(g1, "--", "routed",   fg=GREEN,  bg=GREEN_BG)
+        self._sum_partial  = self._stat_cell(g1, "--", "partial",  fg=ORANGE, bg=ORANGE_BG)
+        self._sum_unserved = self._stat_cell(g1, "--", "unserved", fg=RED,    bg=RED_BG)
+        outer.addWidget(row1)
+
+        # Row 2: fibre length / duct length / estimated materials cost
+        row2 = QWidget()
+        g2 = QHBoxLayout(row2)
+        g2.setContentsMargins(0, 0, 0, 0)
+        g2.setSpacing(6)
+        self._sum_fibre = self._stat_cell(g2, "--", "fibre")
+        self._sum_duct  = self._stat_cell(g2, "--", "duct")
+        self._sum_cost  = self._stat_cell(g2, "--", "est. materials")
+        outer.addWidget(row2)
+
+        return panel
+
+    def _stat_cell(self, layout, value_text, caption, fg=None, bg=None):
+        """A small bordered cell showing a value over a caption, used in the
+        project summary panel. Returns the value QLabel for later updates."""
+        cell = QWidget()
+        cell.setStyleSheet(
+            f"background:{bg or WHITE}; border:1px solid {MID}; border-radius:4px;"
+        )
+        cl = QVBoxLayout(cell)
+        cl.setContentsMargins(4, 4, 4, 4)
+        cl.setSpacing(0)
+
+        value_lbl = QLabel(value_text)
+        value_lbl.setAlignment(Qt.AlignCenter)
+        value_lbl.setStyleSheet(f"color:{fg or NAVY}; font-size:15px; font-weight:bold; border:none; background:transparent;")
+        cl.addWidget(value_lbl)
+
+        cap_lbl = QLabel(caption)
+        cap_lbl.setAlignment(Qt.AlignCenter)
+        cap_lbl.setStyleSheet(f"color:{fg or MID}; font-size:10px; border:none; background:transparent;")
+        cl.addWidget(cap_lbl)
+
+        layout.addWidget(cell, 1)
+        return value_lbl
+
+    def _reset_summary_panel(self):
+        """Show placeholder dashes when no project is open / nothing computed yet."""
+        for lbl in (self._sum_premises, self._sum_routed, self._sum_partial,
+                    self._sum_unserved, self._sum_fibre, self._sum_duct, self._sum_cost):
+            lbl.setText("--")
+        self._summary_updated_label.setText("Project summary")
+
+    def _on_refresh_summary(self):
+        if not self._project:
+            self._reset_summary_panel()
+            return
+
+        try:
+            from .tools.project_summary import compute_summary
+            data = compute_summary(project=self._project)
+        except Exception as e:
+            QMessageBox.warning(self, "Project summary", f"Could not compute project summary:\n{e}")
+            return
+
+        self._sum_premises.setText(str(data["premises"]))
+        self._sum_routed.setText(str(data["routed"]))
+        self._sum_partial.setText(str(data["partial"]))
+        self._sum_unserved.setText(str(data["unserved"]))
+        self._sum_fibre.setText(f"{data['fibre_km']:.1f} km")
+        self._sum_duct.setText(f"{data['duct_km']:.1f} km")
+        self._sum_cost.setText(f"\u00A3{data['materials_cost']:,.0f}")
+
+        stamp = datetime.now().strftime("%H:%M")
+        suffix = "  (partial)" if data.get("error") else ""
+        self._summary_updated_label.setText(f"Project summary \u00B7 updated {stamp}{suffix}")
+        if data.get("error"):
+            self._summary_updated_label.setToolTip(data["error"])
+        else:
+            self._summary_updated_label.setToolTip("")
+
+    # ── GRID-MODE TOGGLE (shared between Design / PIA tabs) ──────────────────
+
+    def _active_dialpad_toggle(self):
+        return self._pia_toggle if self._tabs.currentIndex() == 1 else self._design_toggle
+
+    def _on_grid_mode_clicked(self, checked):
+        self._active_dialpad_toggle().set_grid(checked)
+
+    def _on_tab_changed(self, index):
+        self._grid_mode_btn.setChecked(self._active_dialpad_toggle()._is_grid)
 
     def _build_design_tab(self):
         """Build the existing Design tab content."""
@@ -284,7 +447,7 @@ class ConductorDockWidget(QDockWidget):
         toggle = DialPadToggle(self, "design", columns=4)
         self._design_toggle = toggle
 
-        # Project status label + grid-view toggle
+        # Project status label
         status_row = QWidget()
         sr = QHBoxLayout(status_row)
         sr.setContentsMargins(0, 0, 0, 0)
@@ -292,7 +455,6 @@ class ConductorDockWidget(QDockWidget):
         self._status_label = QLabel("No project open")
         self._status_label.setStyleSheet(f"color:{MID}; font-size:11px; padding-bottom:4px;")
         sr.addWidget(self._status_label, 1)
-        sr.addWidget(toggle.make_toggle_button())
         cl.addWidget(status_row)
 
         # PROJECT
@@ -360,8 +522,6 @@ class ConductorDockWidget(QDockWidget):
         cl.addWidget(self._section_label("BUILD"))
         build_items = []
         for label, slot, icon in [
-            ("Add Build Task",       self._placeholder,    "add_build_task.svg"),
-            ("Generate Job Pack",    self._placeholder,    "generate_job_pack.svg"),
             ("Splice Plan Export",   self._on_splice_plan, "splice_plan_export.svg"),
             ("Single Line Diagram",  self._on_sld,         "single_line_diagram.svg"),
         ]:
@@ -379,8 +539,7 @@ class ConductorDockWidget(QDockWidget):
             ("Move Asset",               self._on_move_asset,      "move_asset.svg"),
             ("Validate Fibre Routes",    self._on_validate_routes, "validate_fibre_routes.svg"),
             ("Bill of Materials",        self._on_bom,             "bill_of_materials.svg"),
-            ("BDUK Export",              self._placeholder,        "bduk_export.svg"),
-            ("Cabinet Cost Calculator",  self._placeholder,        "cabinet_cost_calculator.svg"),
+            ("Cabinet Cost Calculator",  self._on_cabinet_cost_calculator, "cabinet_cost_calculator.svg"),
         ]:
             row = self._tool_button(label, slot, icon=icon)
             cl.addWidget(row)
@@ -414,7 +573,7 @@ class ConductorDockWidget(QDockWidget):
         toggle = DialPadToggle(self, "pia", columns=4)
         self._pia_toggle = toggle
 
-        # Info label + grid-view toggle
+        # Info label
         info_row = QWidget()
         ir = QHBoxLayout(info_row)
         ir.setContentsMargins(0, 0, 0, 0)
@@ -423,7 +582,6 @@ class ConductorDockWidget(QDockWidget):
         info.setWordWrap(True)
         info.setStyleSheet(f"color:{MID}; font-size:11px; padding-bottom:6px;")
         ir.addWidget(info, 1)
-        ir.addWidget(toggle.make_toggle_button())
         cl.addWidget(info_row)
 
         # CIVIL
@@ -655,6 +813,7 @@ class ConductorDockWidget(QDockWidget):
             self.iface.mapCanvas().mapToolSet.connect(self._on_map_tool_set)
         except Exception:
             pass
+        self._on_refresh_summary()
 
     def _on_map_tool_set(self, new_tool, old_tool):
         """Deactivate button highlight if the tool was cleared externally."""
@@ -929,6 +1088,13 @@ class ConductorDockWidget(QDockWidget):
         from .tools.bom import open_bom_dialog
         self._bom_dlg = open_bom_dialog(self.iface, self, project=self._project)
 
+    def _on_cabinet_cost_calculator(self):
+        if not self._project:
+            QMessageBox.warning(self, "No Project", "Please open a project first.")
+            return
+        from .tools.cabinet_cost import open_cabinet_cost_dialog
+        self._cabinet_cost_dlg = open_cabinet_cost_dialog(self.iface, self, project=self._project)
+
     def _on_validate_routes(self):
         if not self._project:
             QMessageBox.warning(self, "No Project", "Please open a project first.")
@@ -937,22 +1103,16 @@ class ConductorDockWidget(QDockWidget):
         self._validate_dlg = open_validate_routes_dialog(self.iface, self, project=self._project)
 
     def _on_digitise_road_crossing(self):
-        if not self._project:
-            QMessageBox.warning(self, "No Project", "Please open a project first.")
-            return
-        self._activate_tool(self._on_digitise_road_crossing)
-        self.iface.messageBar().pushInfo(
-            "Conductor", "Road Crossing tool — coming soon."
-        )
+        self._run_map_tool(
+            self._on_digitise_road_crossing, 'digitise_road_crossing', 'DigitiseRoadCrossingMapTool', 'placed',
+            lambda did: self.iface.messageBar().pushSuccess( "Conductor", f"Road Crossing {did} saved." ),
+            'Left-click to add vertices across the road. Snaps to chambers/poles/cabinet. Right-click to finish. Ctrl+Z to undo last point. Esc to cancel.')
 
     def _on_digitise_stream_crossing(self):
-        if not self._project:
-            QMessageBox.warning(self, "No Project", "Please open a project first.")
-            return
-        self._activate_tool(self._on_digitise_stream_crossing)
-        self.iface.messageBar().pushInfo(
-            "Conductor", "Stream Crossing tool — coming soon."
-        )
+        self._run_map_tool(
+            self._on_digitise_stream_crossing, 'digitise_stream_crossing', 'DigitiseStreamCrossingMapTool', 'placed',
+            lambda did: self.iface.messageBar().pushSuccess( "Conductor", f"Stream Crossing {did} saved." ),
+            'Left-click to add vertices across the watercourse. Snaps to chambers/poles/cabinet. Right-click to finish. Ctrl+Z to undo last point. Esc to cancel.')
 
     # ── CALLBACKS — PIA TAB ────────────────────────────────────────────────────
 
@@ -962,10 +1122,6 @@ class ConductorDockWidget(QDockWidget):
 
 
 
-
-    def _placeholder(self):
-        QMessageBox.information(self, "Coming Soon",
-            "This tool is not yet implemented.\nIt will be added in a future update.")
 
     # ── CLOSE ─────────────────────────────────────────────────────────────────
 

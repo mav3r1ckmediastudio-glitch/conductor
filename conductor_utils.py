@@ -25,6 +25,11 @@ WHITE  = "#FFFFFF"
 MID    = "#CBD5E1"
 SKY    = "#00AAFF"
 PURPLE = "#7B2D8B"
+GREEN  = "#1A6B3C"
+RED    = "#C0392B"
+GREEN_BG  = "#EAF7EE"
+ORANGE_BG = "#FFF4E6"
+RED_BG    = "#FDECEA"
 
 # ── Derived UI style constants ────────────────────────────────────────────────
 BTN_PRIMARY   = f"background:{NAVY}; color:{WHITE}; border:none; border-radius:4px; padding:7px 18px; font-size:12px; font-weight:bold;"
