@@ -535,6 +535,7 @@ class ConductorDockWidget(QDockWidget):
         cl.addWidget(self._section_label("TOOLS"))
         tools_items = []
         for label, slot, icon in [
+            ("Edit Asset",               self._on_edit_asset,      "edit_cabinet_pop.svg"),
             ("Delete Asset",             self._on_delete_asset,    "delete_asset.svg"),
             ("Move Asset",               self._on_move_asset,      "move_asset.svg"),
             ("Validate Fibre Routes",    self._on_validate_routes, "validate_fibre_routes.svg"),
@@ -643,8 +644,24 @@ class ConductorDockWidget(QDockWidget):
         layout.addStretch()
 
         sub = QLabel("FTTP Design")
-        sub.setStyleSheet(f"color:{TEAL}; font-size:11px;")
+        sub.setStyleSheet(f"color:{TEAL}; font-size:11px; padding-right:8px;")
         layout.addWidget(sub)
+
+        settings_btn = QToolButton()
+        settings_ic = self._icon("optical_budget_calculator.svg")
+        if settings_ic:
+            settings_btn.setIcon(settings_ic)
+            settings_btn.setIconSize(QSize(20, 20))
+        else:
+            settings_btn.setText("\u2699")
+        settings_btn.setToolTip("Optical budget settings")
+        settings_btn.setCursor(Qt.PointingHandCursor)
+        settings_btn.setStyleSheet(f"""
+            QToolButton {{ background:transparent; border:none; padding:2px; }}
+            QToolButton:hover {{ background:rgba(255,255,255,40); border-radius:4px; }}
+        """)
+        settings_btn.clicked.connect(self._on_optical_budget)
+        layout.addWidget(settings_btn)
         return header
 
     # ── WIDGET FACTORIES ───────────────────────────────────────────────────────
@@ -1094,6 +1111,13 @@ class ConductorDockWidget(QDockWidget):
             return
         from .tools.cabinet_cost import open_cabinet_cost_dialog
         self._cabinet_cost_dlg = open_cabinet_cost_dialog(self.iface, self, project=self._project)
+
+    def _on_optical_budget(self):
+        """Open the optical power budget settings used by the Fibre Route
+        Validator's loss/margin calculation. Settings are global (QgsSettings),
+        so no project needs to be open to view or edit them."""
+        from .tools.optical_budget import edit_optical_dialog
+        edit_optical_dialog(self)
 
     def _on_validate_routes(self):
         if not self._project:

@@ -25,10 +25,28 @@ from .conductor_utils import NAVY, TEAL, ORANGE, LIGHT, WHITE, MID
 class HelpContentStore:
     """Loads and provides access to help content entries."""
 
+    MANUAL_FILENAME = "conductor_manual.html"
+
     def __init__(self, plugin_dir, filename="help_content.json"):
         self._path = os.path.join(plugin_dir, filename)
+        self._plugin_dir = plugin_dir
         self._content = {}
         self.reload()
+
+    def manual_url(self, tool_id):
+        """Return a QUrl pointing at this tool's section of the bundled
+        manual, or None if the tool has no manual_page entry or the
+        manual file isn't present."""
+        entry = self._content.get(tool_id, {})
+        manual_page = entry.get("manual_page")
+        if not manual_page:
+            return None
+        manual_path = os.path.join(self._plugin_dir, self.MANUAL_FILENAME)
+        if not os.path.exists(manual_path):
+            return None
+        url = QtCore.QUrl.fromLocalFile(manual_path)
+        url.setFragment(manual_page)
+        return url
 
     def reload(self):
         """Re-read the help content file from disk."""
@@ -98,6 +116,17 @@ class HelpDialog(QtWidgets.QDialog):
         self._layout.addLayout(self.related_row)
 
         close_row = QtWidgets.QHBoxLayout()
+
+        self.manual_btn = QtWidgets.QPushButton("\U0001F4D6  Open Manual")
+        self.manual_btn.setCursor(QtCore.Qt.PointingHandCursor)
+        self.manual_btn.setStyleSheet(
+            f"QPushButton {{ background:{WHITE}; color:{TEAL}; border:1px solid {TEAL};"
+            f" border-radius:4px; padding:6px 16px; font-size:12px; }}"
+            f"QPushButton:hover {{ background:{TEAL}; color:{WHITE}; }}"
+        )
+        self.manual_btn.clicked.connect(self._open_manual)
+        close_row.addWidget(self.manual_btn)
+
         close_row.addStretch()
         close_btn = QtWidgets.QPushButton("Close")
         close_btn.setCursor(QtCore.Qt.PointingHandCursor)
@@ -111,15 +140,37 @@ class HelpDialog(QtWidgets.QDialog):
         close_row.addWidget(close_btn)
         self._layout.addLayout(close_row)
 
+        self._current_tool_id = tool_id
         self.show_tool(tool_id)
 
+    def _open_manual(self):
+        url = self.store.manual_url(self._current_tool_id)
+        if url is None:
+            QtWidgets.QMessageBox.information(
+                self, "Conductor",
+                "No manual section is linked for this tool yet."
+            )
+            return
+
+        from .conductor_utils import open_url_with_fragment
+        open_url_with_fragment(url.toString())
+
     def show_tool(self, tool_id):
+        self._current_tool_id = tool_id
         entry = self.store.get(tool_id)
 
         title = entry.get("title", tool_id)
         if entry.get("status") == "placeholder":
             title += "  (not yet implemented)"
         self.title_label.setText(title)
+
+        manual_url = self.store.manual_url(tool_id)
+        self.manual_btn.setEnabled(manual_url is not None)
+        self.manual_btn.setToolTip(
+            "Open this tool's section of the manual"
+            if manual_url is not None else
+            "No manual section linked for this tool yet"
+        )
 
         parts = []
         if entry.get("purpose"):

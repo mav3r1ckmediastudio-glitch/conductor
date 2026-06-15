@@ -567,10 +567,10 @@ Calix E7-2 (1 card, 8 ports): 256 customers theoretical max
     <h2>Digitise Drop Duct</h2>
     <p>Click <strong>Digitise Drop Duct</strong>. First click snaps to a chamber or joint; second click snaps to a premises point. Right-click saves. Drop ducts are always 7mm speedpipe.</p>
 
-    <h3>Duct sleeve (scaffold bar)</h3>
+    <h3 id="sleeve">Duct sleeve (scaffold bar)</h3>
     <p>On any duct, the <strong>Sleeve</strong> field can be set to <code>SCAFFOLD_BAR</code> when either end is embedded in a stream bank (or otherwise protected) instead of ploughing through or boring under — enter the <strong>Sleeve Length</strong> too. This feeds a dedicated "Scaffold Bar (duct sleeve)" line into the Bill of Materials.</p>
 
-    <h2>Crossings</h2>
+    <h2 id="crossings">Crossings</h2>
     <p>Two thin wrappers around Digitise Duct, found in the CROSSINGS section of the Design tab:</p>
     <table>
       <tr><th>Tool</th><th>Behaviour</th></tr>
@@ -1353,13 +1353,46 @@ SCOT-222-BDL-007</div>
 </div><!-- /shell -->
 
 <script>
-function show(id) {
+// showPage(target) drives navigation without depending on a click event,
+// so it can be called on load from a URL hash (e.g. manual.html#cabinetcost
+// or manual.html#civil:crossings to also scroll to an element with that id).
+function showPage(target) {
+  const parts  = target.split(':');
+  const id     = parts[0];
+  const anchor = parts[1];
+  const page = document.getElementById('page-' + id);
+  if (!page) return false;
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  document.getElementById('page-' + id).classList.add('active');
-  event.currentTarget.classList.add('active');
+  page.classList.add('active');
+  const navItem = document.querySelector(".nav-item[onclick=\"show('" + id + "')\"]");
+  if (navItem) navItem.classList.add('active');
+  if (anchor) {
+    const el = document.getElementById(anchor);
+    if (el) { el.scrollIntoView(); return true; }
+  }
   document.querySelector('.main').scrollTop = 0;
+  return true;
 }
+
+function show(id) {
+  showPage(id);
+  if (history.replaceState) history.replaceState(null, '', '#' + id);
+}
+
+// Deep-link support: manual.html#cabinetcost or manual.html#civil:crossings
+window.addEventListener('DOMContentLoaded', function () {
+  const hash = window.location.hash.replace('#', '');
+  if (hash) showPage(hash);
+});
+
+// If the manual is already open in a tab and a new "Open Manual" click just
+// changes the #hash on that existing tab, DOMContentLoaded won't fire again
+// - but hashchange will, so handle that case too.
+window.addEventListener('hashchange', function () {
+  const hash = window.location.hash.replace('#', '');
+  if (hash) showPage(hash);
+});
 
 function toggle(header) {
   const acc = header.parentElement;

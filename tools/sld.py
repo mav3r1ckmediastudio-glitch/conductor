@@ -10,6 +10,8 @@ from qgis.PyQt.QtCore import Qt
 from qgis.core import QgsProject, NULL
 from ..conductor_utils import get_layer, fld, val, LayerEditContext
 from ..conductor_utils import safe_write_text
+from .validate_routes import _build_index, _build_cable_node_index
+from .optical_budget import calculate_link_budget, load_optical
 
 NAVY   = '#1A3A5C'
 TEAL   = '#1D7A6E'
@@ -48,9 +50,9 @@ def build_network(project=None):
             pc   = val(feat['postcode'])  or ''
             premises_map[uprn] = ', '.join(p for p in [a1, a2, pc] if p)
 
-    layer = get('cables')
-    if layer:
-        for feat in layer.getFeatures():
+    cable_layer = get('cables')
+    if cable_layer:
+        for feat in cable_layer.getFeatures():
             cid = str(feat['cable_id'])
             cables[cid] = {
                 'cable_id':    cid,
@@ -66,9 +68,9 @@ def build_network(project=None):
                 cabinet = str(feat['from_node'])
                 area_id = str(val(feat['area_id']) or '')
 
-    layer = get('joints')
-    if layer:
-        for feat in layer.getFeatures():
+    joint_layer = get('joints')
+    if joint_layer:
+        for feat in joint_layer.getFeatures():
             jid = str(feat['joint_id'])
             joints[jid] = {
                 'joint_id':    jid,
@@ -78,9 +80,9 @@ def build_network(project=None):
                 'chamber_id':  val(feat['chamber_id']),
             }
 
-    layer = get('bundles')
-    if layer:
-        for feat in layer.getFeatures():
+    bundle_layer = get('bundles')
+    if bundle_layer:
+        for feat in bundle_layer.getFeatures():
             bid  = str(feat['bundle_id'])
             uprn = str(val(feat['uprn']) or '')
             fj   = str(val(feat['from_joint']) or '')
@@ -94,9 +96,9 @@ def build_network(project=None):
 
     # Load aerial drops keyed by from_chamber (CBT joint_id)
     # Only include PIA_AERIAL_DROP records to avoid picking up underground drops
-    layer = get('drop_ducts')
-    if layer:
-        for feat in layer.getFeatures():
+    ddct_layer = get('drop_ducts')
+    if ddct_layer:
+        for feat in ddct_layer.getFeatures():
             fc = val(feat['from_chamber'])
             dt = str(val(feat['drop_type']) or '')
             if fc and dt == 'PIA_AERIAL_DROP':
@@ -109,6 +111,33 @@ def build_network(project=None):
                     'address': premises_map.get(uprn, uprn or 'Unknown'),
                     'length_m': length,
                 })
+
+    # ── Per-premises optical budget ────────────────────────────
+    # Reuse the same trace engine and settings as Fibre Trace / Validate
+    # Fibre Routes, so the figures shown here are consistent everywhere.
+    bundle_idx     = _build_index(bundle_layer, "uprn")     if bundle_layer else {}
+    ddct_idx       = _build_index(ddct_layer,   "uprn")     if ddct_layer   else {}
+    joint_idx      = _build_index(joint_layer,  "joint_id") if joint_layer  else {}
+    cable_node_idx = _build_cable_node_index(cable_layer)   if cable_layer  else {}
+    optical = load_optical()
+
+    for blist in bundles.values():
+        for b in blist:
+            budget = calculate_link_budget(
+                b['uprn'], area_id, bundle_idx, ddct_idx, joint_idx, cable_node_idx, optical
+            )
+            b['loss_db']   = budget['loss_db']
+            b['margin_db'] = budget['margin_db']
+            b['link_pass'] = budget['link_pass']
+
+    for dlist in aerial_drops.values():
+        for d in dlist:
+            budget = calculate_link_budget(
+                d['uprn'], area_id, bundle_idx, ddct_idx, joint_idx, cable_node_idx, optical
+            )
+            d['loss_db']   = budget['loss_db']
+            d['margin_db'] = budget['margin_db']
+            d['link_pass'] = budget['link_pass']
 
     return cables, joints, bundles, aerial_drops, from_node, cabinet, area_id
 
@@ -167,6 +196,9 @@ def render_node(node_id, cables, joints, bundles, aerial_drops, from_node, visit
                 H.append('<span class="bundle-id">' + bid + '</span>')
                 H.append('<span class="bundle-addr">' + addr + '</span>')
                 H.append('<span class="bundle-meta">' + str(bfibre) + 'F &middot; ' + str(blen) + 'm</span>')
+                if b.get('loss_db') is not None:
+                    cls = 'budget-pass' if b.get('link_pass') else 'budget-fail'
+                    H.append('<span class="budget ' + cls + '">' + ('%.1f' % b['loss_db']) + 'dB &middot; ' + ('%+.1f' % b['margin_db']) + 'dB margin</span>')
                 H.append('</div></div>')
             H.append('</div>')
 
@@ -183,6 +215,9 @@ def render_node(node_id, cables, joints, bundles, aerial_drops, from_node, visit
                 H.append('<span class="aerial-id">&#x1F4F6; ' + did + '</span>')
                 H.append('<span class="aerial-addr">' + addr + '</span>')
                 H.append('<span class="aerial-meta">' + str(dlen) + 'm &middot; Aerial drop</span>')
+                if d.get('loss_db') is not None:
+                    cls = 'budget-pass' if d.get('link_pass') else 'budget-fail'
+                    H.append('<span class="budget ' + cls + '">' + ('%.1f' % d['loss_db']) + 'dB &middot; ' + ('%+.1f' % d['margin_db']) + 'dB margin</span>')
                 H.append('</div></div>')
             H.append('</div>')
 
@@ -281,6 +316,10 @@ def generate_sld(output_path, project=None):
         '.aerial-id{color:#005E8B;font-weight:600;display:block;}'
         '.aerial-addr{color:#1A1A1A;display:block;margin-top:1px;}'
         '.aerial-meta{color:#888;font-size:10px;display:block;margin-top:1px;}'
+        '.budget{font-size:10px;font-weight:600;display:inline-block;margin-top:2px;'
+        'padding:1px 5px;border-radius:3px;}'
+        '.budget-pass{color:#0A6B2D;background:#E6F7EA;}'
+        '.budget-fail{color:#A32D2D;background:#FCEBEB;}'
         '.dark-storage{font-size:11px;color:#888;margin:6px 0 6px 16px;font-style:italic;}'
         '.legend{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;background:white;'
         'border:1px solid var(--mid);border-radius:6px;padding:10px 14px;}'

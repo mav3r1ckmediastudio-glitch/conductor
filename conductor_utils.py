@@ -299,3 +299,59 @@ def safe_write_text(path, text, what="file"):
     except Exception as e:
         log(f"{what}: failed to write '{path}': {e}", "critical")
         raise
+
+
+# ── External link helper ───────────────────────────────────────────────────
+def open_url_with_fragment(url_string):
+    """
+    Open url_string (typically a file:// URL with a #fragment, e.g. the
+    bundled manual at conductor_manual.html#cabinetcost) in the user's
+    default browser, preserving the fragment/query string.
+
+    On Windows, both QDesktopServices.openUrl() and webbrowser.open() strip
+    everything after the file path for file:// URLs (verified empirically -
+    they go through os.startfile()/ShellExecute, which resolves the file
+    path via its extension association and discards the rest of the URL).
+    To work around this, find the default browser executable via the
+    registry and launch it directly with the full URL as an argument -
+    browsers parse #fragments from argv correctly.
+
+    Falls back to webbrowser.open() (no fragment) if anything above fails,
+    so the manual still opens - just possibly on its Overview page.
+    """
+    import sys
+    if sys.platform.startswith("win"):
+        try:
+            import winreg
+            with winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\http\UserChoice"
+            ) as k:
+                progid, _ = winreg.QueryValueEx(k, "ProgId")
+            with winreg.OpenKey(
+                winreg.HKEY_CLASSES_ROOT, f"{progid}\\shell\\open\\command"
+            ) as k:
+                cmd, _ = winreg.QueryValueEx(k, "")
+
+            import shlex
+            parts = shlex.split(cmd, posix=False)
+            parts = [p.strip('"') for p in parts]
+            # Replace the %1 placeholder (or append if absent) with our URL
+            if "%1" in parts:
+                parts = [url_string if p == "%1" else p for p in parts]
+            else:
+                parts.append(url_string)
+
+            import subprocess
+            subprocess.Popen(parts)
+            return True
+        except Exception as e:
+            from qgis.core import QgsMessageLog, Qgis
+            QgsMessageLog.logMessage(
+                f"Conductor: open_url_with_fragment direct-launch failed "
+                f"({e}), falling back to webbrowser.open()",
+                "Conductor", Qgis.Warning,
+            )
+
+    import webbrowser
+    return webbrowser.open(url_string)

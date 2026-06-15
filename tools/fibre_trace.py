@@ -20,13 +20,17 @@ from qgis.core import (
 )
 from qgis.gui import QgsMapTool, QgsRubberBand
 
-from ..conductor_utils import get_layer, fld, val, NAVY, TEAL, ORANGE, LIGHT, WHITE, MID
+from ..conductor_utils import (
+    get_layer, fld, val, NAVY, TEAL, ORANGE, LIGHT, WHITE, MID,
+    GREEN, RED, GREEN_BG, RED_BG,
+)
 
 # Reuse the trace engine from validate_routes
 from .validate_routes import (
-    _build_index, _build_cable_node_index, trace_premises,
+    _build_index, _build_cable_node_index,
     STATUS_OK, STATUS_PARTIAL, STATUS_UNSERVED
 )
+from .optical_budget import calculate_link_budget, splitter_loss_for_ratio
 
 # ── Rubber-band colour ───────────────────────────────────────────────────────
 YELLOW      = QColor(255, 230,   0, 128)   # single highlight colour for all hops
@@ -103,7 +107,7 @@ class FibreTracePanel(QDialog):
         super().__init__(parent, Qt.Tool | Qt.WindowStaysOnTopHint)
         self._tool = None  # set by set_panel
         self.setWindowTitle("Conductor — Fibre Trace")
-        self.setMinimumWidth(360)
+        self.setMinimumWidth(380)
         self.setMinimumHeight(220)
         self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
 
@@ -134,15 +138,65 @@ class FibreTracePanel(QDialog):
         sep.setStyleSheet(f"color:{MID};")
         root.addWidget(sep)
 
-        # Detail text
+        # Detail text — fixed height so long hop lists scroll internally
         self._detail = QTextEdit()
         self._detail.setReadOnly(True)
+        self._detail.setMaximumHeight(130)
         self._detail.setStyleSheet(
             "QTextEdit { font-family: 'Consolas','Courier New',monospace; "
             f"font-size:11px; background:{LIGHT}; border:1px solid {MID}; "
             "border-radius:3px; padding:4px; }"
         )
         root.addWidget(self._detail)
+
+        # ── Optical budget card ────────────────────────────────────
+        self._budget_box = QFrame()
+        self._budget_box.setStyleSheet(
+            f"QFrame#budgetBox {{ border:1px solid {MID}; border-radius:4px; }}"
+        )
+        self._budget_box.setObjectName("budgetBox")
+        budget_layout = QVBoxLayout(self._budget_box)
+        budget_layout.setContentsMargins(10, 8, 10, 8)
+        budget_layout.setSpacing(6)
+
+        budget_hdr = QHBoxLayout()
+        budget_title = QLabel("Optical budget")
+        budget_title.setStyleSheet(f"font-size:12px; font-weight:600; color:{NAVY};")
+        self._budget_badge = QLabel("")
+        self._budget_badge.setStyleSheet(
+            "font-size:11px; font-weight:600; padding:2px 10px; border-radius:8px;"
+        )
+        budget_hdr.addWidget(budget_title)
+        budget_hdr.addStretch()
+        budget_hdr.addWidget(self._budget_badge)
+        budget_layout.addLayout(budget_hdr)
+
+        metrics_row = QHBoxLayout()
+        metrics_row.setSpacing(8)
+        self._metric_loss,      loss_card      = self._build_metric_card("Total loss")
+        self._metric_margin,    margin_card    = self._build_metric_card("Margin")
+        self._metric_splitters, splitters_card = self._build_metric_card("Splitters")
+        metrics_row.addWidget(loss_card)
+        metrics_row.addWidget(margin_card)
+        metrics_row.addWidget(splitters_card)
+        budget_layout.addLayout(metrics_row)
+
+        self._breakdown_btn = QPushButton("Show breakdown")
+        self._breakdown_btn.setStyleSheet(
+            f"QPushButton {{ text-align:left; border:none; color:{TEAL}; "
+            "font-size:11px; padding:0; }}"
+        )
+        self._breakdown_btn.clicked.connect(self._toggle_breakdown)
+        budget_layout.addWidget(self._breakdown_btn)
+
+        self._breakdown_lbl = QLabel("")
+        self._breakdown_lbl.setStyleSheet(f"font-size:11px; color:{NAVY};")
+        self._breakdown_lbl.setTextFormat(Qt.RichText)
+        self._breakdown_lbl.setVisible(False)
+        budget_layout.addWidget(self._breakdown_lbl)
+
+        root.addWidget(self._budget_box)
+        self._budget_box.setVisible(False)
 
         btn_row = QHBoxLayout()
         self._btn_clear = QPushButton("Clear Trace")
@@ -160,7 +214,38 @@ class FibreTracePanel(QDialog):
         btn_row.addWidget(self._btn_close)
         root.addLayout(btn_row)
 
-    def show_result(self, uprn, address, status, path, reason):
+    def _build_metric_card(self, caption):
+        """Return (value_label, card_frame) for a small metric card used in
+        the optical budget box (caption above, value below)."""
+        card = QFrame()
+        card.setStyleSheet(
+            f"QFrame {{ background:{LIGHT}; border-radius:4px; }}"
+        )
+        lay = QVBoxLayout(card)
+        lay.setContentsMargins(8, 6, 8, 6)
+        lay.setSpacing(2)
+        cap_lbl = QLabel(caption)
+        cap_lbl.setStyleSheet("font-size:10px; color:#777;")
+        val_lbl = QLabel("—")
+        val_lbl.setStyleSheet(f"font-size:14px; font-weight:600; color:{NAVY};")
+        lay.addWidget(cap_lbl)
+        lay.addWidget(val_lbl)
+        return val_lbl, card
+
+    def _toggle_breakdown(self):
+        showing = self._breakdown_lbl.isVisible()
+        self._breakdown_lbl.setVisible(not showing)
+        self._breakdown_btn.setText("Hide breakdown" if not showing else "Show breakdown")
+        self._resize_to_content()
+
+    def _resize_to_content(self):
+        """Grow/shrink the dialog's height to fit its current contents
+        (e.g. after the budget card or breakdown table is shown/hidden),
+        keeping the user's chosen width."""
+        self.layout().activate()
+        self.resize(self.width(), self.sizeHint().height())
+
+    def show_result(self, uprn, address, status, path, reason, budget=None):
         if status == STATUS_OK:
             status_text = f"✔  ROUTED  —  {address}"
             colour = "#16A34A"
@@ -190,10 +275,88 @@ class FibreTracePanel(QDialog):
 
         self._detail.setPlainText("\n".join(lines))
 
+        self._update_budget_box(budget)
+        self._resize_to_content()
+
+    def _update_budget_box(self, budget):
+        """Show/populate the optical budget card, or hide it if there's no
+        loss figure to show (route not complete)."""
+        if not budget or budget.get("loss_db") is None:
+            self._budget_box.setVisible(False)
+            return
+
+        loss_db   = budget["loss_db"]
+        margin_db = budget["margin_db"]
+        link_pass = budget["link_pass"]
+        breakdown = budget.get("breakdown") or {}
+        optical   = budget.get("optical") or {}
+
+        if link_pass:
+            self._budget_badge.setText("PASS")
+            self._budget_badge.setStyleSheet(
+                "font-size:11px; font-weight:600; padding:2px 10px; border-radius:8px; "
+                f"background:{GREEN_BG}; color:{GREEN};"
+            )
+        else:
+            self._budget_badge.setText("FAIL")
+            self._budget_badge.setStyleSheet(
+                "font-size:11px; font-weight:600; padding:2px 10px; border-radius:8px; "
+                f"background:{RED_BG}; color:{RED};"
+            )
+
+        self._metric_loss.setText(f"{loss_db:.2f} dB")
+        self._metric_margin.setText(f"{margin_db:+.2f} dB")
+        self._metric_margin.setStyleSheet(
+            f"font-size:14px; font-weight:600; color:{GREEN if link_pass else RED};"
+        )
+
+        splitters = breakdown.get("splitters", [])
+        self._metric_splitters.setText(" + ".join(splitters) if splitters else "none")
+
+        self._breakdown_lbl.setText(self._format_breakdown_html(loss_db, breakdown, optical))
+        self._breakdown_lbl.setVisible(False)
+        self._breakdown_btn.setText("Show breakdown")
+
+        self._budget_box.setVisible(True)
+
+    @staticmethod
+    def _format_breakdown_html(loss_db, breakdown, optical):
+        rows = []
+
+        fibre_km = breakdown.get("fibre_length_m", 0.0) / 1000.0
+        rows.append((f"Fibre attenuation ({fibre_km:.2f} km)", breakdown.get("fibre_db", 0.0)))
+
+        splice_count = breakdown.get("splice_count", 0)
+        if splice_count:
+            per_splice = optical.get("splice_loss_db", 0.0)
+            rows.append((f"Splices ({splice_count} × {per_splice:.2f} dB)",
+                          breakdown.get("splice_db", 0.0)))
+
+        for ratio in breakdown.get("splitters", []):
+            loss = splitter_loss_for_ratio(ratio, optical.get("splitter_loss_db", {}))
+            rows.append((f"Splitter {ratio}", loss))
+
+        connector_db = breakdown.get("connector_db", 0.0)
+        if connector_db:
+            rows.append(("Connectors", connector_db))
+
+        cells = "".join(
+            f"<tr><td>{label}</td>"
+            f"<td style=\'text-align:right; padding-left:10px;\'>{value:.2f} dB</td></tr>"
+            for label, value in rows
+        )
+        cells += (
+            f"<tr><td style=\'border-top:1px solid {MID}; font-weight:600;\'>Total</td>"
+            f"<td style=\'border-top:1px solid {MID}; text-align:right; "
+            f"padding-left:10px; font-weight:600;\'>{loss_db:.2f} dB</td></tr>"
+        )
+        return f"<table width=\'100%\' cellspacing=\'0\' cellpadding=\'2\'>{cells}</table>"
+
     def clear(self):
         self._status_lbl.setText("Click a premises on the map to trace its route.")
         self._status_lbl.setStyleSheet(f"font-size:12px; color:{NAVY}; font-weight:600;")
         self._detail.clear()
+        self._budget_box.setVisible(False)
 
     def closeEvent(self, event):
         if self._tool:
@@ -389,7 +552,7 @@ class FibreTraceMapTool(QgsMapTool):
         cable_node_idx = _build_cable_node_index(cable_layer)  if cable_layer  else {}
 
         try:
-            status, path, reason = trace_premises(
+            budget = calculate_link_budget(
                 uprn, area_id,
                 bundle_idx, ddct_idx,
                 joint_idx, cable_node_idx,
@@ -397,6 +560,8 @@ class FibreTraceMapTool(QgsMapTool):
         except Exception as e:
             self._iface.messageBar().pushCritical("Fibre Trace", f"Trace error: {e}")
             return
+
+        status, path, reason = budget["status"], budget["path"], budget["reason"]
 
         # ── Draw rubber bands for each hop ────────────────────────────────────
 
@@ -430,7 +595,7 @@ class FibreTraceMapTool(QgsMapTool):
         if self._panel and not self._panel.isVisible():
             self._panel.show()
         if self._panel:
-            self._panel.show_result(uprn, address, status, path, reason)
+            self._panel.show_result(uprn, address, status, path, reason, budget=budget)
 
         # Message bar summary
         if status == STATUS_OK:

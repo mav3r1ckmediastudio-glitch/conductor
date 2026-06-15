@@ -83,7 +83,7 @@ def compute_summary(project=None, costs=None):
                 uprn = prem["uprn"]
                 area_id = prem["area_id"] if "area_id" in prem.fields().names() else ""
                 try:
-                    status, _path, _reason = trace_premises(
+                    status, _path, _reason, _loss_db = trace_premises(
                         uprn, area_id,
                         bundle_idx, ddct_idx,
                         joint_idx, cable_node_idx,

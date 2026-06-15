@@ -8,7 +8,8 @@
     "related_tools": [
       "open_project",
       "build_areas"
-    ]
+    ],
+    "manual_page": "project"
   },
   "open_project": {
     "title": "Open Project",
@@ -18,7 +19,8 @@
     "common_mistakes": "After QGIS reloads the Conductor plugin (e.g. after an update), the project state is reset — you must Open Project again before any tools will work, even if the layers are still visible on the map.",
     "related_tools": [
       "new_project"
-    ]
+    ],
+    "manual_page": "project"
   },
   "build_areas": {
     "title": "Build Areas",
@@ -29,7 +31,8 @@
     "related_tools": [
       "import_premises_addressbase",
       "place_cabinet_pop"
-    ]
+    ],
+    "manual_page": "civil"
   },
   "import_premises_addressbase": {
     "title": "Import Premises (AddressBase)",
@@ -40,7 +43,8 @@
     "related_tools": [
       "build_areas",
       "fibre_count_calculator"
-    ]
+    ],
+    "manual_page": "premises"
   },
   "place_cabinet_pop": {
     "title": "Place Cabinet / POP",
@@ -52,7 +56,8 @@
       "edit_cabinet_pop",
       "place_chamber",
       "digitise_duct"
-    ]
+    ],
+    "manual_page": "civil"
   },
   "edit_cabinet_pop": {
     "title": "Edit Cabinet / POP",
@@ -63,7 +68,8 @@
     "related_tools": [
       "place_cabinet_pop",
       "move_asset"
-    ]
+    ],
+    "manual_page": "civil"
   },
   "digitise_duct": {
     "title": "Digitise Duct",
@@ -74,7 +80,8 @@
     "related_tools": [
       "place_chamber",
       "digitise_cable"
-    ]
+    ],
+    "manual_page": "civil"
   },
   "digitise_cable": {
     "title": "Digitise Cable",
@@ -86,7 +93,8 @@
       "place_joint",
       "fibre_trace",
       "digitise_aerial_span"
-    ]
+    ],
+    "manual_page": "fibre"
   },
   "digitise_drop_duct": {
     "title": "Digitise Drop Duct",
@@ -97,7 +105,8 @@
     "related_tools": [
       "digitise_bundle",
       "digitise_pia_ug_drop"
-    ]
+    ],
+    "manual_page": "civil"
   },
   "digitise_bundle": {
     "title": "Digitise Bundle",
@@ -108,7 +117,8 @@
     "related_tools": [
       "digitise_drop_duct",
       "assign_fibre_roles"
-    ]
+    ],
+    "manual_page": "fibre"
   },
   "place_chamber": {
     "title": "Place Chamber",
@@ -119,7 +129,8 @@
     "related_tools": [
       "place_joint",
       "digitise_duct"
-    ]
+    ],
+    "manual_page": "civil"
   },
   "place_joint": {
     "title": "Place Joint",
@@ -130,7 +141,8 @@
     "related_tools": [
       "place_chamber",
       "digitise_cable"
-    ]
+    ],
+    "manual_page": "fibre"
   },
   "digitise_road_crossing": {
     "title": "Digitise Road Crossing",
@@ -141,7 +153,8 @@
     "related_tools": [
       "digitise_duct",
       "digitise_stream_crossing"
-    ]
+    ],
+    "manual_page": "civil:crossings"
   },
   "digitise_stream_crossing": {
     "title": "Digitise Stream Crossing",
@@ -152,7 +165,8 @@
     "related_tools": [
       "digitise_duct",
       "digitise_road_crossing"
-    ]
+    ],
+    "manual_page": "civil:crossings"
   },
   "assign_fibre_roles": {
     "title": "Assign Fibre Roles",
@@ -164,7 +178,8 @@
       "validate_fibre_routes",
       "fibre_trace",
       "fibre_count_calculator"
-    ]
+    ],
+    "manual_page": "assign"
   },
   "fibre_trace": {
     "title": "Fibre Trace",
@@ -175,7 +190,8 @@
     "related_tools": [
       "fibre_count_calculator",
       "route_splice_export"
-    ]
+    ],
+    "manual_page": "trace"
   },
   "fibre_count_calculator": {
     "title": "Fibre Count Calculator",
@@ -186,7 +202,8 @@
     "related_tools": [
       "fibre_trace",
       "validate_fibre_routes"
-    ]
+    ],
+    "manual_page": "fibrecount"
   },
   "route_splice_export": {
     "title": "Route Splice Export",
@@ -198,7 +215,8 @@
       "fibre_trace",
       "fibre_count_calculator",
       "splice_plan_export"
-    ]
+    ],
+    "manual_page": "routesplice"
   },
   "splice_plan_export": {
     "title": "Splice Plan Export",
@@ -209,7 +227,8 @@
     "related_tools": [
       "route_splice_export",
       "fibre_trace"
-    ]
+    ],
+    "manual_page": "splice"
   },
   "single_line_diagram": {
     "title": "Single Line Diagram",
@@ -231,7 +250,8 @@
     "related_tools": [
       "move_asset",
       "validate_fibre_routes"
-    ]
+    ],
+    "manual_page": "civil"
   },
   "move_asset": {
     "title": "Move Asset",
@@ -241,7 +261,8 @@
     "common_mistakes": "Moving a node (chamber, joint, cabinet) doesn't automatically re-route the ducts/cables connected to it — check the connected geometry afterwards and adjust if needed.",
     "related_tools": [
       "delete_asset"
-    ]
+    ],
+    "manual_page": "civil"
   },
   "validate_fibre_routes": {
     "title": "Validate Fibre Routes",
@@ -252,7 +273,8 @@
     "related_tools": [
       "assign_fibre_roles",
       "fibre_count_calculator"
-    ]
+    ],
+    "manual_page": "validate"
   },
   "bill_of_materials": {
     "title": "Bill of Materials",
@@ -263,7 +285,8 @@
     "related_tools": [
       "cabinet_cost_calculator",
       "single_line_diagram"
-    ]
+    ],
+    "manual_page": "bom"
   },
   "cabinet_cost_calculator": {
     "title": "Cabinet Cost Calculator",
@@ -274,7 +297,8 @@
     "related_tools": [
       "bill_of_materials",
       "place_pop"
-    ]
+    ],
+    "manual_page": "cabinetcost"
   },
   "place_pole": {
     "title": "Place Pole",
@@ -285,7 +309,8 @@
     "related_tools": [
       "place_cbt",
       "digitise_aerial_span"
-    ]
+    ],
+    "manual_page": "aerial"
   },
   "place_pia_ug_chamber": {
     "title": "Place PIA UG Chamber",
@@ -296,7 +321,8 @@
     "related_tools": [
       "digitise_pia_ug_duct",
       "place_pole"
-    ]
+    ],
+    "manual_page": "aerial"
   },
   "digitise_aerial_span": {
     "title": "Digitise Aerial Span",
@@ -308,7 +334,8 @@
       "place_pole",
       "place_cbt",
       "digitise_cable"
-    ]
+    ],
+    "manual_page": "aerial"
   },
   "digitise_pia_ug_duct": {
     "title": "Digitise PIA UG Duct",
@@ -320,7 +347,8 @@
       "place_pia_ug_chamber",
       "place_pole",
       "digitise_pia_ug_drop"
-    ]
+    ],
+    "manual_page": "aerial"
   },
   "place_cbt": {
     "title": "Place CBT",
@@ -332,7 +360,8 @@
       "place_pole",
       "digitise_aerial_drop",
       "assign_fibre_roles"
-    ]
+    ],
+    "manual_page": "aerial"
   },
   "digitise_aerial_drop": {
     "title": "Digitise Aerial Drop",
@@ -343,7 +372,8 @@
     "related_tools": [
       "place_cbt",
       "digitise_bundle"
-    ]
+    ],
+    "manual_page": "aerial"
   },
   "digitise_pia_ug_drop": {
     "title": "Digitise PIA UG Drop",
@@ -354,6 +384,7 @@
     "related_tools": [
       "place_pia_ug_chamber",
       "digitise_drop_duct"
-    ]
+    ],
+    "manual_page": "aerial"
   }
 }

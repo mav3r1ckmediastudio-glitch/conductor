@@ -86,7 +86,7 @@ def _trace_from_premises(uprn, area_id, project):
     joint_idx      = _build_index(joint_layer,  "joint_id") if joint_layer  else {}
     cable_node_idx = _build_cable_node_index(cable_layer)   if cable_layer  else {}
 
-    status, path, reason = trace_premises(
+    status, path, reason, _loss_db = trace_premises(
         uprn, area_id, bundle_idx, ddct_idx, joint_idx, cable_node_idx
     )
     joints = _all_joints_on_route(path)

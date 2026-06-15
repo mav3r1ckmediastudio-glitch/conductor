@@ -128,29 +128,106 @@ def _build_cable_node_index(cable_layer):
     return idx
 
 
+def _fibre_loss_db(length_m, optical):
+    """Fibre attenuation loss (dB) for a cable/duct/bundle of the given length (m)."""
+    try:
+        if length_m is None or length_m == NULL:
+            return 0.0
+        return (float(length_m) / 1000.0) * optical.get("fibre_atten_db_km", 0.0)
+    except Exception:
+        return 0.0
+
+
+def _joint_loss_breakdown(joint_idx, joint_id, optical):
+    """Return a breakdown of the through-splice loss for a joint:
+    {'total', 'splice', 'splitter', 'splitter_ratio'}. 'splitter' and
+    'splitter_ratio' are 0.0 / None unless the joint has a splitter fitted
+    (has_splitter / split_ratio)."""
+    feats = joint_idx.get(str(joint_id), [])
+    if not feats:
+        return {"total": 0.0, "splice": 0.0, "splitter": 0.0, "splitter_ratio": None}
+    jf = feats[0]
+    splice = optical.get("splice_loss_db", 0.0)
+    splitter = 0.0
+    splitter_ratio = None
+    field_names = jf.fields().names()
+    has_split = jf["has_splitter"] if "has_splitter" in field_names else None
+    if has_split and has_split != NULL:
+        ratio = jf["split_ratio"] if "split_ratio" in field_names else None
+        if ratio and ratio != NULL:
+            from .optical_budget import splitter_loss_for_ratio
+            splitter = splitter_loss_for_ratio(str(ratio), optical.get("splitter_loss_db", {}))
+            splitter_ratio = str(ratio)
+    return {"total": splice + splitter, "splice": splice, "splitter": splitter, "splitter_ratio": splitter_ratio}
+
+
+def _joint_loss_db(joint_idx, joint_id, optical):
+    """Through-splice loss for a joint, plus splitter insertion loss if the
+    joint has a splitter fitted (has_splitter / split_ratio)."""
+    return _joint_loss_breakdown(joint_idx, joint_id, optical)["total"]
+
+
+def _copy_breakdown(bd):
+    """Deep-ish copy of a per-path breakdown dict (None stays None)."""
+    if bd is None:
+        return None
+    return {k: (list(v) if isinstance(v, list) else v) for k, v in bd.items()}
+
+
+def _accumulate_breakdown(bd, fibre_db=0.0, fibre_length_m=None, joint=None, connector_db=None):
+    """Mutate a per-path breakdown dict in place, adding the given loss
+    components. No-op if bd is None (breakdown tracking not requested)."""
+    if bd is None:
+        return
+    bd["fibre_db"] = bd.get("fibre_db", 0.0) + fibre_db
+    try:
+        if fibre_length_m is not None and fibre_length_m != NULL:
+            bd["fibre_length_m"] = bd.get("fibre_length_m", 0.0) + float(fibre_length_m)
+    except Exception:
+        pass
+    if joint is not None:
+        if joint["splice"]:
+            bd["splice_db"] = bd.get("splice_db", 0.0) + joint["splice"]
+            bd["splice_count"] = bd.get("splice_count", 0) + 1
+        if joint["splitter"]:
+            bd["splitter_db"] = bd.get("splitter_db", 0.0) + joint["splitter"]
+            bd.setdefault("splitters", []).append(joint["splitter_ratio"])
+    if connector_db is not None:
+        bd["connector_db"] = bd.get("connector_db", 0.0) + connector_db
+
+
 def trace_premises(uprn, area_id,
                    bundle_idx, ddct_idx,
-                   joint_idx, cable_node_idx):
+                   joint_idx, cable_node_idx,
+                   optical=None, breakdown=None):
+    if optical is None:
+        from .optical_budget import DEFAULT_OPTICAL, DEFAULT_SPLITTER_LOSS_DB
+        optical = dict(DEFAULT_OPTICAL)
+        optical["splitter_loss_db"] = dict(DEFAULT_SPLITTER_LOSS_DB)
+
     path = []
 
     bundles = bundle_idx.get(str(uprn), [])
     ddcts   = ddct_idx.get(str(uprn), [])
 
-    entry_asset = None
-    entry_type  = None
-    first_joint = None
+    entry_asset    = None
+    entry_type     = None
+    entry_length_m = None
+    first_joint    = None
 
     if bundles:
         b = bundles[0]
-        entry_asset = str(b["bundle_id"])
-        entry_type  = "bundle"
+        entry_asset    = str(b["bundle_id"])
+        entry_type     = "bundle"
+        entry_length_m = b["length_m"]
         first_joint = str(b["from_joint"]) if b["from_joint"] and b["from_joint"] != NULL else None
     elif ddcts:
         d = ddcts[0]
-        entry_asset = str(d["ddct_id"])
-        entry_type  = "drop_duct"
+        entry_asset    = str(d["ddct_id"])
+        entry_type     = "drop_duct"
+        entry_length_m = d["length_m"]
         fc = d["from_chamber"] if d["from_chamber"] and d["from_chamber"] != NULL else None
-        fp = d["from_pole"]    if d["from_pole"]    and d["from_pole"]    != NULL else None
+        fp = d["from_pole"]    if d["from_pole"]    and d["from_pole"]   != NULL else None
         if fc:
             matched = [jf for jlist in joint_idx.values()
                        for jf in jlist
@@ -166,7 +243,7 @@ def trace_premises(uprn, area_id,
                     path.append(str(fc))
                     return (STATUS_PARTIAL, path,
                             f"Drop duct from joint {fc} but joint not found. "
-                            f"Check from_chamber value on {entry_asset}.")
+                            f"Check from_chamber value on {entry_asset}.", None)
         elif fp:
             # PIA_AERIAL_DROP — from_pole holds a pole_id, not a joint_id.
             # Find the CBT joint mounted on that pole.
@@ -177,11 +254,11 @@ def trace_premises(uprn, area_id,
             if matched:
                 first_joint = str(matched[0]["joint_id"])
             else:
-                path.append(entry_asset)
-                path.append(str(fp))
-                return (STATUS_PARTIAL, path,
+               path.append(entry_asset)
+               path.append(str(fp))
+               return (STATUS_PARTIAL, path,
                         f"Aerial drop from pole {fp} but no CBT found on that pole. "
-                        f"Check from_pole value on {entry_asset}.")
+                        f"Check from_pole value on {entry_asset}.", None)
         else:
             first_joint = None
 
@@ -192,27 +269,37 @@ def trace_premises(uprn, area_id,
             # not a broken route, so it's UNSERVED rather than PARTIAL.
             return (STATUS_UNSERVED, path,
                     "No bundle or drop duct connects this premises to the network yet. "
-                    "Digitise a Drop Duct or Bundle from this premises to a joint.")
+                    "Digitise a Drop Duct or Bundle from this premises to a joint.", None)
         return (STATUS_PARTIAL, path + [entry_asset],
-                f"{(entry_type or 'asset').replace('_',' ').title()} {entry_asset} has no from_joint value.")
+                f"{(entry_type or 'asset').replace('_',' ').title()} {entry_asset} has no from_joint value.", None)
 
     joints = joint_idx.get(first_joint, [])
     if not joints:
         return (STATUS_PARTIAL, path + [entry_asset],
                 f"from_joint '{first_joint}' not found in joints layer. "
-                f"Joint may have been deleted or ID mismatch.")
+                f"Joint may have been deleted or ID mismatch.", None)
+
+    # Loss accrued before the BFS starts: the drop/bundle fibre run from the
+    # premises to first_joint, plus first_joint's own splice/splitter loss.
+    entry_fibre_loss = _fibre_loss_db(entry_length_m, optical)
+    entry_joint      = _joint_loss_breakdown(joint_idx, first_joint, optical)
+    entry_loss       = entry_fibre_loss + entry_joint["total"]
+
+    init_bd = {} if breakdown is not None else None
+    _accumulate_breakdown(init_bd, fibre_db=entry_fibre_loss,
+                          fibre_length_m=entry_length_m, joint=entry_joint)
 
     # BFS — explore all branches, return shortest path to cabinet
-    # State: (current_node, path_so_far, visited_set)
+    # State: (current_node, path_so_far, visited_set, loss_so_far_db, breakdown_so_far)
     from collections import deque
     queue = deque()
-    queue.append((first_joint, [first_joint], {first_joint}))
+    queue.append((first_joint, [first_joint], {first_joint}, entry_loss, init_bd))
 
     best_partial = None
     best_partial_reason = f"No cable connected to joint {first_joint}. Digitise a cable from this joint toward the cabinet."
 
     while queue:
-        current_node, cur_path, visited = queue.popleft()
+        current_node, cur_path, visited, cur_loss, cur_bd = queue.popleft()
 
         if len(cur_path) > MAX_HOPS * 2:
             continue  # safety cap
@@ -235,21 +322,34 @@ def trace_premises(uprn, area_id,
 
             cable_id = str(cable["cable_id"])
             new_path = cur_path + [cable_id]
+            cable_fibre_loss = _fibre_loss_db(cable["length_m"], optical)
+            new_loss = cur_loss + cable_fibre_loss
+            new_bd   = _copy_breakdown(cur_bd)
+            _accumulate_breakdown(new_bd, fibre_db=cable_fibre_loss, fibre_length_m=cable["length_m"])
 
             if isinstance(next_node, str) and ("CAB" in next_node.upper() or "POP" in next_node.upper()):
                 new_path.append(next_node)
-                return (STATUS_OK, new_path, f"Route complete — {len(new_path)} hops.")
+                connector_db  = optical.get("connector_loss_db", 0.0)
+                total_loss_db = new_loss + connector_db
+                _accumulate_breakdown(new_bd, connector_db=connector_db)
+                if breakdown is not None:
+                    breakdown.clear()
+                    breakdown.update(new_bd)
+                return (STATUS_OK, new_path, f"Route complete — {len(new_path)} hops.", total_loss_db)
 
             new_visited = visited | {next_node}
             new_path    = new_path + [next_node]
-            queue.append((next_node, new_path, new_visited))
+            next_joint  = _joint_loss_breakdown(joint_idx, next_node, optical)
+            new_loss    = new_loss + next_joint["total"]
+            _accumulate_breakdown(new_bd, joint=next_joint)
+            queue.append((next_node, new_path, new_visited, new_loss, new_bd))
 
             if best_partial is None or len(new_path) > len(best_partial):
                 best_partial = new_path
                 best_partial_reason = (f"Dead end reached at {next_node} — "                                       f"no onward cable leads to the cabinet.")
 
     return (STATUS_PARTIAL, best_partial or [first_joint],
-            best_partial_reason)
+            best_partial_reason, None)
 
 
 # ── Worker thread ─────────────────────────────────────────────────────────────
@@ -286,6 +386,9 @@ class ValidateWorker(QThread):
             joint_idx      = _build_index(joint_layer,  "joint_id")
             cable_node_idx = _build_cable_node_index(cable_layer)
 
+            from .optical_budget import load_optical, link_budget_db
+            optical   = load_optical()
+            budget_db = link_budget_db(optical)
 
             premises_list = list(premises_layer.getFeatures())
             total = len(premises_list)
@@ -306,24 +409,36 @@ class ValidateWorker(QThread):
                 area_id = prem["area_id"] if "area_id" in prem.fields().names() else ""
 
                 try:
-                    status, path, reason = trace_premises(
+                    status, path, reason, loss_db = trace_premises(
                         uprn, area_id,
                         bundle_idx, ddct_idx,
                         joint_idx, cable_node_idx,
+                        optical=optical,
                     )
                 except Exception as e:
-                    status = STATUS_ERROR
-                    path   = []
-                    reason = f"Exception during trace: {e}"
+                    status  = STATUS_ERROR
+                    path    = []
+                    reason  = f"Exception during trace: {e}"
+                    loss_db = None
+
+                if loss_db is not None:
+                    margin_db = budget_db - loss_db
+                    link_pass = margin_db >= 0
+                else:
+                    margin_db = None
+                    link_pass = None
 
                 summary[status] = summary.get(status, 0) + 1
                 results.append({
-                    "uprn":    str(uprn),
-                    "address": str(address),
-                    "status":  status,
-                    "path":    path,
-                    "reason":  reason,
-                    "geom":    prem.geometry(),
+                    "uprn":      str(uprn),
+                    "address":   str(address),
+                    "status":    status,
+                    "path":      path,
+                    "reason":    reason,
+                    "geom":      prem.geometry(),
+                    "loss_db":   loss_db,
+                    "margin_db": margin_db,
+                    "link_pass": link_pass,
                 })
                 self.result.emit(results[-1])
 
@@ -443,12 +558,14 @@ class ValidateRoutesDialog(QDialog):
 
         splitter = QSplitter(Qt.Vertical)
 
-        self._table = QTableWidget(0, 4)
-        self._table.setHorizontalHeaderLabels(["Status", "UPRN", "Address", "Detail"])
+        self._table = QTableWidget(0, 6)
+        self._table.setHorizontalHeaderLabels(["Status", "UPRN", "Address", "Loss (dB)", "Margin (dB)", "Detail"])
         self._table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
         self._table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
         self._table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
-        self._table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
+        self._table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        self._table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeToContents)
+        self._table.horizontalHeader().setSectionResizeMode(5, QHeaderView.Stretch)
         self._table.setSelectionBehavior(QTableWidget.SelectRows)
         self._table.setEditTriggers(QTableWidget.NoEditTriggers)
         self._table.setAlternatingRowColors(True)
@@ -500,6 +617,10 @@ class ValidateRoutesDialog(QDialog):
         self._btn_export.setStyleSheet("QPushButton { padding:7px 14px; border-radius:4px; font-size:12px; border:1px solid #bbb; } QPushButton:hover { background:#e8e8e8; } QPushButton:disabled { color:#aaa; }")
         self._btn_export.clicked.connect(self._export_csv)
 
+        self._btn_optical = QPushButton("\u2699  Power Budget Settings")
+        self._btn_optical.setStyleSheet("QPushButton { padding:7px 14px; border-radius:4px; font-size:12px; border:1px solid #bbb; } QPushButton:hover { background:#e8e8e8; }")
+        self._btn_optical.clicked.connect(self._edit_optical)
+
         self._btn_close = QPushButton("Close")
         self._btn_close.setStyleSheet("QPushButton { padding:7px 14px; border-radius:4px; font-size:12px; border:1px solid #bbb; } QPushButton:hover { background:#e8e8e8; }")
         self._btn_close.clicked.connect(self.close)
@@ -507,6 +628,7 @@ class ValidateRoutesDialog(QDialog):
         btn_row.addWidget(self._btn_run)
         btn_row.addWidget(self._btn_zoom)
         btn_row.addWidget(self._btn_export)
+        btn_row.addWidget(self._btn_optical)
         btn_row.addStretch()
         btn_row.addWidget(self._btn_close)
         root.addLayout(btn_row)
@@ -527,6 +649,12 @@ class ValidateRoutesDialog(QDialog):
 
     def _update_stat(self, widget, value):
         widget._value_label.setText(str(value))
+
+    def _edit_optical(self):
+        """Open a dialog to edit and persist optical power budget settings,
+        then re-run validation so loss/margin figures reflect the change."""
+        from .optical_budget import edit_optical_dialog
+        edit_optical_dialog(self, on_saved=self._run)
 
     def _run(self):
         self._table.setRowCount(0)
@@ -567,14 +695,30 @@ class ValidateRoutesDialog(QDialog):
         status_item.setFont(QFont("", -1, QFont.Bold))
         uprn_item    = QTableWidgetItem(r["uprn"])
         address_item = QTableWidgetItem(r["address"])
+
+        loss_db   = r.get("loss_db")
+        margin_db = r.get("margin_db")
+        link_pass = r.get("link_pass")
+
+        loss_item   = QTableWidgetItem(f"{loss_db:.2f}" if loss_db is not None else "—")
+        margin_item = QTableWidgetItem(f"{margin_db:+.2f}" if margin_db is not None else "—")
+        if link_pass is True:
+            margin_item.setForeground(QBrush(STATUS_COLOURS[STATUS_OK]))
+            margin_item.setFont(QFont("", -1, QFont.Bold))
+        elif link_pass is False:
+            margin_item.setForeground(QBrush(STATUS_COLOURS[STATUS_UNSERVED]))
+            margin_item.setFont(QFont("", -1, QFont.Bold))
+
         reason_item  = QTableWidgetItem(r["reason"])
-        for item in (status_item, uprn_item, address_item, reason_item):
+        for item in (status_item, uprn_item, address_item, loss_item, margin_item, reason_item):
             item.setData(Qt.UserRole, len(self.results) - 1)
             item.setBackground(QBrush(bg))
         self._table.setItem(row, 0, status_item)
         self._table.setItem(row, 1, uprn_item)
         self._table.setItem(row, 2, address_item)
-        self._table.setItem(row, 3, reason_item)
+        self._table.setItem(row, 3, loss_item)
+        self._table.setItem(row, 4, margin_item)
+        self._table.setItem(row, 5, reason_item)
 
     def _on_finished(self, results, summary):
         self._progress.setVisible(False)
@@ -607,6 +751,13 @@ class ValidateRoutesDialog(QDialog):
             f"Status:  {r['status']}",
             f"Reason:  {r['reason']}",
         ]
+        loss_db   = r.get("loss_db")
+        margin_db = r.get("margin_db")
+        link_pass = r.get("link_pass")
+        if loss_db is not None:
+            verdict = "PASS" if link_pass else "FAIL"
+            lines.append(f"Optical loss:  {loss_db:.2f} dB")
+            lines.append(f"Margin:        {margin_db:+.2f} dB  ({verdict})")
         if r["status"] == STATUS_PARTIAL:
             found = find_break_asset(r["path"], self.project)
             if found:
@@ -676,9 +827,18 @@ class ValidateRoutesDialog(QDialog):
         from ..conductor_utils import safe_write_text, log
         buf = io.StringIO()
         writer = csv.writer(buf)
-        writer.writerow(["UPRN", "Address", "Status", "Reason", "Path"])
+        writer.writerow(["UPRN", "Address", "Status", "Loss (dB)", "Margin (dB)", "Link", "Reason", "Path"])
         for r in self.results:
-            writer.writerow([r["uprn"], r["address"], r["status"], r["reason"], " \u2192 ".join(r["path"])])
+            loss_db   = r.get("loss_db")
+            margin_db = r.get("margin_db")
+            link_pass = r.get("link_pass")
+            writer.writerow([
+                r["uprn"], r["address"], r["status"],
+                f"{loss_db:.2f}" if loss_db is not None else "",
+                f"{margin_db:+.2f}" if margin_db is not None else "",
+                "PASS" if link_pass is True else ("FAIL" if link_pass is False else ""),
+                r["reason"], " \u2192 ".join(r["path"]),
+            ])
         try:
             actual = safe_write_text(path, buf.getvalue(), what="Validation CSV")
         except Exception as e:

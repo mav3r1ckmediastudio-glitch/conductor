@@ -15,14 +15,19 @@ from qgis.PyQt.QtWidgets import (
 from qgis.core import (
     QgsProject, QgsFeatureRequest, QgsRectangle,
     QgsCoordinateTransform, QgsCoordinateReferenceSystem, QgsWkbTypes,
+    QgsGeometry, QgsPointXY,
 )
 from qgis.gui import QgsMapTool
 from ..conductor_utils import get_layer, fld, val, LayerEditContext, NAVY, TEAL, ORANGE, LIGHT, WHITE, MID, BTN_PRIMARY, BTN_SECONDARY, INPUT_STYLE, LABEL_STYLE, SECTION_STYLE, MONO_STYLE
 
 # ── SHARED HELPERS ────────────────────────────────────────────────────────────
 
-def _find_feature(canvas, project, layer_names, canvas_pos, radius_px=12):
-    """Find nearest feature from a list of layers."""
+def _find_features(canvas, project, layer_names, canvas_pos, radius_px=12):
+    """Find ALL features from a list of layers within radius_px of canvas_pos,
+    sorted by distance to the click point (closest first). Returns a list of
+    (layer_name, layer, feat, distance) tuples — may contain matches from
+    several layers when assets are stacked (e.g. a joint sitting on a chamber,
+    or a CBT mounted on a pole)."""
     canvas_crs = canvas.mapSettings().destinationCrs()
     target_crs = QgsCoordinateReferenceSystem("EPSG:27700")
     canvas_pt  = canvas.getCoordinateTransform().toMapCoordinates(canvas_pos)
@@ -38,15 +43,83 @@ def _find_feature(canvas, project, layer_names, canvas_pos, radius_px=12):
         pt_27700.x()-radius, pt_27700.y()-radius,
         pt_27700.x()+radius, pt_27700.y()+radius,
     )
+    click_geom = QgsGeometry.fromPointXY(QgsPointXY(pt_27700.x(), pt_27700.y()))
 
+    matches = []
     for layer_name in layer_names:
         layer = project.get_layer(layer_name)
         if not layer or layer.featureCount() == 0:
             continue
         for feat in layer.getFeatures(QgsFeatureRequest().setFilterRect(rect)):
-            return layer_name, layer, feat
+            geom = feat.geometry()
+            dist = geom.distance(click_geom) if geom and not geom.isEmpty() else 0.0
+            matches.append((layer_name, layer, feat, dist))
 
-    return None, None, None
+    matches.sort(key=lambda m: m[3])
+    return matches
+
+
+_LAYER_DISPLAY = {
+    "exchange_pops": "Cabinet / POP",
+    "chambers":      "Chamber",
+    "joints":        "Joint",
+    "ducts":         "Duct",
+    "cables":        "Cable",
+    "drop_ducts":    "Drop Duct",
+    "bundles":       "Bundle",
+}
+
+
+def _pick_asset_dialog(matches):
+    """Several assets overlap at the clicked point — ask the user which one
+    to edit. Returns (layer_name, layer, feat) for the chosen asset, or None
+    if cancelled."""
+    dlg = QDialog()
+    dlg.setWindowTitle("Multiple Assets Found")
+    dlg.setMinimumWidth(380)
+    dlg.setModal(True)
+    root = QVBoxLayout(dlg); root.setSpacing(0); root.setContentsMargins(0,0,0,0)
+
+    hdr = QLabel("  Multiple Assets Found")
+    hdr.setFixedHeight(40)
+    hdr.setStyleSheet(f"background:{NAVY}; color:{WHITE}; font-size:13px; font-weight:bold;")
+    root.addWidget(hdr)
+
+    body = QVBoxLayout(); body.setContentsMargins(12, 12, 12, 12); body.setSpacing(6)
+    info = QLabel("These assets overlap at the point you clicked. Choose which one to edit:")
+    info.setWordWrap(True)
+    body.addWidget(info)
+
+    result = {"choice": None}
+
+    for layer_name, layer, feat, _dist in matches:
+        _, _dialog_fn, id_field = EDIT_LAYER_MAP[layer_name]
+        asset_id = str(feat[id_field])
+        label = _LAYER_DISPLAY.get(layer_name, layer_name)
+        btn = QPushButton(f"{label}  \u2014  {asset_id}")
+        btn.setStyleSheet(
+            f"QPushButton {{ padding:8px 12px; text-align:left; border:1px solid {MID}; "
+            f"border-radius:4px; }} QPushButton:hover {{ border-color:{TEAL}; background:{LIGHT}; }}"
+        )
+
+        def _choose(_checked=False, ln=layer_name, ly=layer, ft=feat):
+            result["choice"] = (ln, ly, ft)
+            dlg.accept()
+
+        btn.clicked.connect(_choose)
+        body.addWidget(btn)
+
+    cancel_btn = QPushButton("Cancel")
+    cancel_btn.setStyleSheet(
+        f"QPushButton {{ padding:7px 14px; border-radius:4px; font-size:12px; border:1px solid {MID}; }} "
+        f"QPushButton:hover {{ background:{LIGHT}; }}"
+    )
+    cancel_btn.clicked.connect(dlg.reject)
+    body.addWidget(cancel_btn)
+
+    root.addLayout(body)
+    dlg.exec_()
+    return result["choice"]
 
 
 def _fv(feat, name, default=""):
@@ -136,17 +209,14 @@ def _base_dialog(title, asset_id, subtitle=""):
 def _edit_chamber_dialog(feat):
     cid = _fv(feat, "chamber_id")
     dlg, root = _base_dialog("Edit Chamber", cid,
-        f"Direction: {_fv(feat,'compass_dir')}  ·  Cabinet: {_fv(feat,'pop_id')}")
+        f"Type: {_fv(feat,'chamber_type')}  ·  Direction: {_fv(feat,'compass_dir')}  ·  Cabinet: {_fv(feat,'pop_id')}")
 
     widgets = {}
     def build(fl):
         fl.addWidget(_section("IDENTITY"))
         f1 = QFormLayout(); f1.setSpacing(8); f1.setLabelAlignment(Qt.AlignRight)
         f1.addRow(_lbl("Chamber ID"), _ro(cid))
-
-        widgets['chamber_function'] = _combo(
-            ["ACCESS", "JOINT", "BURIED_JOINT"], _fv(feat,"chamber_function","ACCESS"))
-        f1.addRow(_lbl("Chamber Function"), widgets['chamber_function'])
+        f1.addRow(_lbl("Chamber Type"), _ro(_fv(feat,"chamber_type")))
 
         widgets['ring_count'] = _spin(_fv(feat,"ring_count",4), 0, 10)
         f1.addRow(_lbl("Ring Count"), widgets['ring_count'])
@@ -190,7 +260,6 @@ def _edit_chamber_dialog(feat):
     def get_attrs():
         lid = widgets['lid_type'].currentText()
         return {
-            "chamber_function": widgets['chamber_function'].currentText(),
             "ring_count":       widgets['ring_count'].value() or None,
             "owner":            widgets['owner'].text().strip(),
             "pia_ref":          widgets['pia_ref'].text().strip(),
@@ -299,9 +368,9 @@ def _edit_joint_dialog(feat):
         f1.addRow(_lbl("Joint ID"), _ro(jid))
 
         widgets['joint_type'] = _combo(
-            ["SPLICE","BLOWING_POINT","END_OF_LINE"], _fv(feat,"joint_type","SPLICE"))
+            ["SPLICE","CBT","BLOWING_POINT","END_OF_LINE"], _fv(feat,"joint_type","SPLICE"))
         widgets['joint_type'].currentTextChanged.connect(
-            lambda t: widgets['has_splitter'].setEnabled(t=="SPLICE")
+            lambda t: widgets['has_splitter'].setEnabled(t in ("SPLICE","CBT"))
         )
         f1.addRow(_lbl("Joint Type"), widgets['joint_type'])
 
@@ -320,7 +389,7 @@ def _edit_joint_dialog(feat):
         widgets['has_splitter'] = QCheckBox("Contains a passive optical splitter")
         widgets['has_splitter'].setStyleSheet(f"font-size:12px; color:{NAVY}; font-weight:bold;")
         widgets['has_splitter'].setChecked(bool(_fv(feat,"has_splitter",False)))
-        widgets['has_splitter'].setEnabled(_fv(feat,"joint_type","SPLICE")=="SPLICE")
+        widgets['has_splitter'].setEnabled(_fv(feat,"joint_type","SPLICE") in ("SPLICE","CBT"))
         fl.addWidget(widgets['has_splitter'])
 
         f2 = QFormLayout(); f2.setSpacing(8); f2.setLabelAlignment(Qt.AlignRight)
@@ -328,14 +397,18 @@ def _edit_joint_dialog(feat):
             ["— none —","1:2","1:4","1:8","1:16","1:32"], _fv(feat,"split_ratio","— none —"))
         f2.addRow(_lbl("Split Ratio"), widgets['split_ratio'])
 
+        _cl_val = _fv(feat, 'cascade_level', None)
+        _cl_map = {1: "1 — Primary", 2: "2 — Secondary"}
+        _cl_text = _cl_map.get(int(_cl_val), "— none —") if _cl_val not in (None, "") else "— none —"
         widgets['cascade_level'] = _combo(
-            ["— none —","1 — Primary","2 — Secondary"],
-            f"{_fv(feat,'cascade_level','')} —" if _fv(feat,'cascade_level') else "— none —")
+            ["— none —","1 — Primary","2 — Secondary"], _cl_text)
         f2.addRow(_lbl("Cascade Level"), widgets['cascade_level'])
 
-        widgets['cascade_type'] = _combo(
-            ["— none —","URBAN_1_2_1_16","RURAL_1_4_1_8","DIRECT_1_32"],
-            _fv(feat,"cascade_type","— none —"))
+        _ct_val   = _fv(feat, "cascade_type", None)
+        _ct_items = ["— none —","URBAN_1_2_1_16","RURAL_1_4_1_8","DIRECT_1_32"]
+        if _ct_val and _ct_val not in _ct_items:
+            _ct_items.append(_ct_val)  # preserve legacy/unrecognised values rather than wiping them
+        widgets['cascade_type'] = _combo(_ct_items, _ct_val if _ct_val else "— none —")
         f2.addRow(_lbl("Cascade Type"), widgets['cascade_type'])
         fl.addLayout(f2)
 
@@ -590,15 +663,23 @@ class EditAssetMapTool(QgsMapTool):
         if event.button() != Qt.LeftButton:
             return
 
-        layer_name, layer, feat = _find_feature(
+        matches = _find_features(
             self._canvas, self._project, EDIT_SEARCH_ORDER, event.pos()
         )
 
-        if feat is None:
+        if not matches:
             QMessageBox.information(None, "Conductor",
                 "No editable asset found at that location.\n"
                 "Click closer to a cabinet, chamber, duct, joint, cable, drop duct, or bundle.")
             return
+
+        if len(matches) == 1:
+            layer_name, layer, feat, _dist = matches[0]
+        else:
+            picked = _pick_asset_dialog(matches)
+            if picked is None:
+                return
+            layer_name, layer, feat = picked
 
         if layer_name not in EDIT_LAYER_MAP:
             return
