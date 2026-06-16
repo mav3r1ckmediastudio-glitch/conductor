@@ -461,7 +461,7 @@ Calix E7-2 (1 card, 8 ports): 256 customers theoretical max
     <p class="page-subtitle">Creating and opening Conductor projects.</p>
 
     <h2>Project summary panel</h2>
-    <p>A status band sits permanently above the Design/PIA tabs, between the postcode search bar and the tab row. It stays visible regardless of which tab is active, giving an at-a-glance read on the overall build:</p>
+    <p>A status band sits permanently above the Design/PIA tabs, between the postcode search bar and the tab row. It stays visible regardless of which tab is active, giving an at-a-glance read on the overall build. The panel <strong>auto-refreshes</strong> on project open, when the Validate or Auto-Assign dialogs close, and 2.5s after any layer commit to bundles, drop ducts, cables, joints, or premises.</p>
     <table>
       <tr><th>Stat</th><th>Source</th></tr>
       <tr><td>Premises</td><td>Total feature count in the Premises layer</td></tr>
@@ -883,7 +883,7 @@ premises.uprn
         <div class="step-num"></div>
         <div class="step-body">
           <div class="step-title">At each joint with a splitter</div>
-          <div class="step-desc">Allocate one fibre as splitter input. Fan outputs to customer bundles. Spare ports marked SPLITTER_OUTPUT_SPARE.</div>
+          <div class="step-desc"><strong>Fibre consumption:</strong> F1 = splitter input; outputs start at F2. A 1:4 uses 5 fibres (F1–F5); a 1:8 uses 9 (F1–F9). Onward splices start after the last port.<br><strong>Port types:</strong> Feeder splitters assign ports to outbound distribution cables (one per leg). CBT closures assign ports to aerial drops keyed by from_chamber=CBT joint_id. Unassigned ports → SPLITTER_OUTPUT_SPARE.</div>
         </div>
       </div>
       <div class="step">
@@ -1259,6 +1259,9 @@ premises.uprn
 <!-- ═══════════════════════════════ SYMBOLOGY ══════════════════════════════ -->
 <div id="page-symbology" class="page">
   <div style="padding: 40px 48px;">
+    <h2>Splitter port panel</h2>
+    <p>When editing a joint or CBT with <code>has_splitter = true</code> after Auto-Assign has run, the Edit Joint dialog shows a port assignment panel. Ports display in a 2-column grid: CBT ports show UPRN and address; feeder splitter ports show outbound cable ID and destination joint. Unassigned ports show <em>Spare — unassigned</em>. Re-run Auto-Assign to update assignments.</p>
+
     <h1>Symbology</h1>
     <p class="page-subtitle">How layers are displayed on the map. Applied automatically when a project is loaded.</p>
 
@@ -1400,11 +1403,15 @@ SCOT-222-BDL-007</div>
       <tr><th>Tool</th><th>Snaps to</th></tr>
       <tr><td>Digitise Duct</td><td>Chambers, cabinet</td></tr>
       <tr><td>Digitise Cable</td><td>Joints, cabinet</td></tr>
-      <tr><td>Digitise Drop Duct</td><td>Joints, chambers (start) → premises (end)</td></tr>
-      <tr><td>Digitise Bundle</td><td>Joints (start) → premises (end)</td></tr>
+      <tr><td>Digitise Drop Duct</td><td>Joints/chambers (start); premises (end); free vertices; floating segment preview</td></tr>
+      <tr><td>Digitise Bundle</td><td>Joints (start); drop duct vertices (secondary); premises (end)</td></tr>
+      <tr><td>Digitise PIA Aerial Span</td><td>CBT joints (primary); PIA poles (secondary for chaining); free cursor</td></tr>
+      <tr><td>Digitise PIA Aerial Drop</td><td>CBT joints (start); premises (end); free vertices</td></tr>
+      <tr><td>Place CBT</td><td>PIA_POLE chambers — cyan snap indicator</td></tr>
       <tr><td>Place Joint</td><td>Chambers (within 14px radius)</td></tr>
     </table>
-    <p>Snap radius: <code>canvas.mapUnitsPerPixel() × 14–16 pixels</code></p>
+    <p>Snap radius: <code>canvas.mapUnitsPerPixel() × 14–16 pixels</code>. All multi-vertex line tools show a floating segment from the last vertex to the cursor.</p>
+    <div class="callout info"><strong>BoM accuracy:</strong> Use secondary vertex snapping (cable→duct, bundle→drop duct) to ensure fibre routes mirror civil infrastructure exactly. Drift compounds across a project.</div>
 
     <h2>Double-click phantom event</h2>
     <div class="callout info">QGIS fires <code>canvasReleaseEvent</code> twice on a fast double-click. All two-click tools (Drop Duct, Bundle) guard against this using a <code>_last_click_pos</code> check. If you digitise a drop duct and it saves immediately to the wrong location, slow down the two clicks slightly.</div>
