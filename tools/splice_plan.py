@@ -173,13 +173,27 @@ def generate_html(joint_id, output_path, project=None):
     # Pair through-splices: from-side only (splice_to_cable is set)
     splice_pairs = [a for a in splices if a['splice_to_cable'] is not None
                     and a['splice_to_fibre'] is not None]
-    # Deduplicate - only show each physical splice once (from side)
+    # Deduplicate - only show each physical splice once.
+    # Use absolute fibre position for both sides of the key so T2+ fibres
+    # match correctly regardless of whether splice_to_fibre is absolute or
+    # positional in the stored record.
+    def _abs(tube, fibre):
+        """Convert tube+fibre_in_tube to absolute fibre number."""
+        t = tube or 1
+        f = fibre or 1
+        # If fibre > 12 it's already absolute
+        if f > 12:
+            return f
+        return (t - 1) * 12 + f
+
     seen_pairs = set()
     unique_splices = []
     for a in splice_pairs:
+        abs_self  = _abs(a['tube_number'], a['fibre_number'])
+        abs_other = _abs(a['splice_to_tube'], a['splice_to_fibre'])
         key = tuple(sorted([
-            (a['cable_id'], a['tube_number'], a['fibre_number']),
-            (a['splice_to_cable'], a['splice_to_tube'], a['splice_to_fibre'])
+            (a['cable_id'],        abs_self),
+            (a['splice_to_cable'], abs_other),
         ]))
         if key not in seen_pairs:
             seen_pairs.add(key)

@@ -184,12 +184,13 @@
   "fibre_trace": {
     "title": "Fibre Trace",
     "status": "implemented",
-    "purpose": "Traces the fibre path between two points along the duct/cable network, following splices and joints.",
-    "how_to": "1. Click the Fibre Trace tool.\n2. Click the start point on the network.\n3. Click the end point.\n4. The trace highlights and reports the route, distance, and fibre count.",
-    "common_mistakes": "Clicking on a feature that isn't snapped to the network layer will fail to start a trace — make sure snapping is enabled.",
+    "purpose": "Traces the fibre path between a premises and the cabinet, following splices and joints, and shows the optical power budget (loss, margin, PASS/FAIL) for that route.",
+    "how_to": "1. Click the Fibre Trace tool.\n2. Click a premises on the map — it snaps to the nearest one within range.\n3. The route highlights and the panel reports the hop-by-hop path and status.\n4. If the route is complete, an Optical Budget card shows total loss, margin and PASS/FAIL against the configured link class, with an expandable per-element breakdown.\n5. To change the optical power budget settings (fibre attenuation, splice/connector loss, link class, splitter losses), use the ⚙ gear icon in the panel header.",
+    "common_mistakes": "Clicking on a feature that isn't snapped to the network layer will fail to start a trace — make sure snapping is enabled. The optical budget card only appears for routes with status ROUTED; PARTIAL/UNSERVED routes have no loss figure to show.",
     "related_tools": [
-      "fibre_count_calculator",
-      "route_splice_export"
+      "validate_fibre_routes",
+      "route_splice_export",
+      "fibre_count_calculator"
     ],
     "manual_page": "trace"
   },
@@ -239,7 +240,8 @@
     "related_tools": [
       "route_splice_export",
       "bill_of_materials"
-    ]
+    ],
+    "manual_page": "sld"
   },
   "delete_asset": {
     "title": "Delete Asset",

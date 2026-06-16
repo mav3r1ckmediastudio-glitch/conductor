@@ -205,6 +205,7 @@
 
   <div class="nav-section">Analysis</div>
   <div class="nav-item" onclick="show('validate')"><span class="icon">✅</span> Route Validator</div>
+  <div class="nav-item" onclick="show('optical')"><span class="icon">⚙️</span> Optical Power Budget</div>
   <div class="nav-item" onclick="show('assign')"><span class="icon">🔢</span> Fibre Assignment</div>
   <div class="nav-item" onclick="show('trace')"><span class="icon">🔍</span> Fibre Trace</div>
   <div class="nav-item" onclick="show('fibrecount')"><span class="icon">🧮</span> Fibre Count Calculator</div>
@@ -212,6 +213,7 @@
   <div class="nav-item" onclick="show('routesplice')"><span class="icon">🗺</span> Route Splice Export</div>
   <div class="nav-item" onclick="show('bom')"><span class="icon">📦</span> Bill of Materials</div>
   <div class="nav-item" onclick="show('cabinetcost')"><span class="icon">💰</span> Cabinet Cost Calculator</div>
+  <div class="nav-item" onclick="show('sld')"><span class="icon">🧬</span> Single Line Diagram</div>
 
   <div class="nav-section">Reference</div>
   <div class="nav-item" onclick="show('symbology')"><span class="icon">🎨</span> Symbology</div>
@@ -758,8 +760,99 @@ premises.uprn
       <div class="accordion-body"><p>The cable traversal reached a joint with no further cables toward the cabinet. Check the cable topology near this joint — a cable segment may be missing or pointing the wrong direction.</p></div>
     </div>
 
+    <h2>Optical power budget columns</h2>
+    <p>Alongside Status, Address and Reason, the results table includes <strong>Loss (dB)</strong> and <strong>Margin (dB)</strong> columns for every premises that traced through to the cabinet (status ROUTED). Margin is shown in green when the route passes the configured link budget and in bold red when it fails — letting you spot over-length or over-split routes at a glance across the whole project, not just one premises at a time as in Fibre Trace.</p>
+    <p>Click <strong>⚙ Power Budget Settings</strong> in the validator panel to open the same optical power budget settings used everywhere else in Conductor (also reachable from the header gear icon — see <a href="#" onclick="show('optical'); return false;">Optical Power Budget</a>). Saving the dialog automatically re-runs validation so the Loss/Margin columns reflect the new settings immediately.</p>
+
     <h2>Export results</h2>
-    <p>Click <strong>↓ Export CSV</strong> to save the full results table. Columns: UPRN, Address, Status, Reason, Path (full asset chain).</p>
+    <p>Click <strong>↓ Export CSV</strong> to save the full results table. Columns: UPRN, Address, Status, Loss (dB), Margin (dB), Link, Reason, Path (full asset chain).</p>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ OPTICAL BUDGET ═══════════════════════════ -->
+<div id="page-optical" class="page">
+  <div style="padding: 40px 48px;">
+    <h1>Optical Power Budget</h1>
+    <p class="page-subtitle">Shared settings behind the loss/margin figures in the Route Validator, Fibre Trace, and the SLD.</p>
+
+    <h2>Where the settings live</h2>
+    <p>The optical power budget settings are now a single shared settings dialog, opened from either of two places:</p>
+    <ul>
+      <li>The <strong>⚙ gear icon</strong> in the Conductor panel header (top-right, next to the FTTP Design subtitle) — the primary way in.</li>
+      <li>The <strong>⚙ Power Budget Settings</strong> button inside the Route Validator panel, which also re-runs validation on save.</li>
+    </ul>
+    <div class="callout info">This replaces the old standalone Optical Budget Calculator tool. There's nothing to run and no separate results window — the settings dialog just configures the numbers that the Route Validator, Fibre Trace, and Single Line Diagram all use when they calculate loss and margin.</div>
+
+    <h2>How the link budget is calculated</h2>
+    <p>For a traced route from premises to cabinet, the total loss is the sum of:</p>
+    <ul>
+      <li><strong>Fibre attenuation</strong> — route length (km) × attenuation per km</li>
+      <li><strong>Splice loss</strong> — per-fusion-splice loss × number of through-splices on the route</li>
+      <li><strong>Splitter insertion loss</strong> — looked up from the split ratio(s) encountered (e.g. 1:8)</li>
+      <li><strong>Connector loss</strong> — a flat allowance covering the POP, CBT, and ONT terminations</li>
+    </ul>
+    <p>The usable budget is the configured <strong>link class</strong> figure (Tx min − Rx sensitivity) minus the <strong>safety margin</strong>. <strong>Margin = budget − total loss</strong>; the link <strong>PASS</strong>es when margin ≥ 0 dB.</p>
+
+    <h2>Default values (UK GPON/XGS-PON, G.652D fibre)</h2>
+    <table>
+      <tr><th>Setting</th><th>Default</th><th>Notes</th></tr>
+      <tr><td>Fibre attenuation</td><td>0.25 dB/km</td><td>G.652D @ 1310/1550nm</td></tr>
+      <tr><td>Splice loss</td><td>0.10 dB</td><td>Per fusion splice (through joint)</td></tr>
+      <tr><td>Connector loss</td><td>1.50 dB</td><td>Flat allowance for POP + CBT + ONT (3 × 0.5dB)</td></tr>
+      <tr><td>Safety margin</td><td>3.0 dB</td><td>Deducted from the link class budget</td></tr>
+      <tr><td>Link class</td><td>B+ (28.0 dB)</td><td>C+ (32.0 dB) also available</td></tr>
+    </table>
+
+    <h3>Splitter insertion loss</h3>
+    <table>
+      <tr><th>Split ratio</th><th>Default loss</th></tr>
+      <tr><td>1:2</td><td>3.5 dB</td></tr>
+      <tr><td>1:4</td><td>7.0 dB</td></tr>
+      <tr><td>1:8</td><td>10.5 dB</td></tr>
+      <tr><td>1:16</td><td>14.0 dB</td></tr>
+      <tr><td>1:32</td><td>17.5 dB</td></tr>
+    </table>
+    <div class="callout info">Ratios not in the table fall back to a theoretical estimate of <code>10 × log₁₀(N) + 1.5 dB</code> excess loss.</div>
+
+    <h2>Editing settings</h2>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num"></div>
+        <div class="step-body">
+          <div class="step-title">Open the dialog</div>
+          <div class="step-desc">Click the <strong>⚙</strong> gear icon in the Conductor panel header (or <strong>⚙ Power Budget Settings</strong> in the Route Validator).</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num"></div>
+        <div class="step-body">
+          <div class="step-title">Adjust values</div>
+          <div class="step-desc">Change fibre attenuation, splice loss, connector loss, safety margin, link class, and/or the per-ratio splitter losses.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num"></div>
+        <div class="step-body">
+          <div class="step-title">Reset to Defaults (optional)</div>
+          <div class="step-desc">Click <strong>Reset to Defaults</strong> to restore the UK GPON/XGS-PON values above.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num"></div>
+        <div class="step-body">
+          <div class="step-title">Save</div>
+          <div class="step-desc">Click OK. The new values are stored at project level and used immediately by Fibre Trace, the Route Validator (which re-runs automatically), and the next Single Line Diagram export.</div>
+        </div>
+      </div>
+    </div>
+
+    <h2>Where the results show up</h2>
+    <table>
+      <tr><th>Tool</th><th>What you see</th></tr>
+      <tr><td><a href="#" onclick="show('validate'); return false;">Route Validator</a></td><td>Loss (dB) and Margin (dB) columns for every ROUTED premises, margin colour-coded pass/fail</td></tr>
+      <tr><td><a href="#" onclick="show('trace'); return false;">Fibre Trace</a></td><td>Optical budget card — PASS/FAIL badge, total loss, margin, splitters, expandable breakdown</td></tr>
+      <tr><td><a href="#" onclick="show('sld'); return false;">Single Line Diagram</a></td><td>A small loss/margin badge on each premises and drop, colour-coded pass/fail</td></tr>
+    </table>
   </div>
 </div>
 
@@ -842,10 +935,10 @@ premises.uprn
 <div id="page-trace" class="page">
   <div style="padding: 40px 48px;">
     <h1>Fibre Trace</h1>
-    <p class="page-subtitle">Click any premises to highlight its full route back to the cabinet.</p>
+    <p class="page-subtitle">Click any premises to highlight its full route back to the cabinet — and see its optical power budget.</p>
 
     <h2>How it works</h2>
-    <p>Fibre Trace runs the same BFS traversal as the Route Validator, but instead of producing a results table it draws the route directly on the map canvas — every drop, cable, and joint between the clicked premises and the cabinet, lit up in a single highlight colour.</p>
+    <p>Fibre Trace runs the same BFS traversal as the Route Validator, but instead of producing a results table it draws the route directly on the map canvas — every drop, cable, and joint between the clicked premises and the cabinet, lit up in a single highlight colour. For routes that complete (status ROUTED), the panel also calculates the optical power budget for that exact path, using the same engine and settings as the Route Validator and Single Line Diagram.</p>
 
     <h2>Running a trace</h2>
     <div class="steps">
@@ -867,7 +960,14 @@ premises.uprn
         <div class="step-num"></div>
         <div class="step-body">
           <div class="step-title">Review the highlighted route</div>
-          <div class="step-desc">Every drop, cable, and joint on the path back to the cabinet is highlighted in semi-transparent yellow. The panel shows the address, UPRN, status (ROUTED / PARTIAL), and the full hop-by-hop path.</div>
+          <div class="step-desc">Every drop, cable, and joint on the path back to the cabinet is highlighted in semi-transparent yellow. The status bar at the top of the panel shows the address and status (ROUTED / PARTIAL / UNSERVED), and the detail box below lists the UPRN, reason, and the full hop-by-hop path.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num"></div>
+        <div class="step-body">
+          <div class="step-title">Check the Optical budget card</div>
+          <div class="step-desc">For any ROUTED premises, an <strong>Optical budget</strong> card appears below the detail box, with a PASS/FAIL badge and three metric tiles — <strong>Total loss</strong>, <strong>Margin</strong>, and <strong>Splitters</strong> on the route. Click <strong>Show breakdown</strong> to expand a per-element table (fibre attenuation, splices, splitters, connectors) that sums to the total loss figure. PARTIAL and UNSERVED routes have no loss figure, so the card stays hidden.</div>
         </div>
       </div>
       <div class="step">
@@ -879,7 +979,19 @@ premises.uprn
       </div>
     </div>
 
-    <div class="callout tip"><strong>Diagnosing faults.</strong> If a customer reports a break, click their premises and follow the highlighted route on the map to identify exactly which cable run or joint to investigate in the field. A PARTIAL status shows the route as far as it could be traced before the break.</div>
+    <h2>Reading the Optical budget card</h2>
+    <table>
+      <tr><th>Element</th><th>Meaning</th></tr>
+      <tr><td>Badge (PASS / FAIL)</td><td>Green PASS when the route's margin is ≥ 0 dB against the configured link class; red FAIL when the loss exceeds the available budget.</td></tr>
+      <tr><td>Total loss</td><td>Sum of fibre attenuation, splice loss, splitter insertion loss, and the flat connector allowance across the whole traced route.</td></tr>
+      <tr><td>Margin</td><td>Link class budget (minus safety margin) less the total loss. Shown in green when positive, red when negative.</td></tr>
+      <tr><td>Splitters</td><td>The split ratio(s) encountered on the route (e.g. <code>1:8</code>), or "none" if the route has no splitter.</td></tr>
+      <tr><td>Show breakdown</td><td>Expands a table of every contributing loss element with its dB value, ending in the total — the same figures used for the badge and metric tiles.</td></tr>
+    </table>
+
+    <div class="callout tip"><strong>Diagnosing faults.</strong> If a customer reports a break, click their premises and follow the highlighted route on the map to identify exactly which cable run or joint to investigate in the field. A PARTIAL status shows the route as far as it could be traced before the break — and won't show an optical budget, since the loss can't be calculated for an incomplete path.</div>
+    <div class="callout tip"><strong>Diagnosing a FAIL.</strong> Click <strong>Show breakdown</strong> to see which element is driving the loss — usually fibre attenuation on a long run, or an oversized splitter. Compare against the Bill of Materials / SLD for that cabinet to spot routes that need a different split ratio.</div>
+    <div class="callout info">The optical power budget settings used here (fibre attenuation, splice/connector loss, link class, splitter losses) are shared across Fibre Trace, the Route Validator, and the Single Line Diagram. Open them via the <strong>⚙</strong> gear icon in the panel header — see <a href="#" onclick="show('optical'); return false;">Optical Power Budget</a>.</div>
     <div class="callout info">The highlight is drawn with QGIS rubber bands and is automatically cleared when the dock panel closes, when another Conductor tool is activated, or when the trace panel is closed.</div>
   </div>
 </div>
@@ -1110,6 +1222,40 @@ premises.uprn
   </div>
 </div>
 
+<!-- ═══════════════════════════════ SLD ════════════════════════════════════ -->
+<div id="page-sld" class="page">
+  <div style="padding: 40px 48px;">
+    <h1>Single Line Diagram</h1>
+    <p class="page-subtitle">A self-contained HTML schematic of the whole network, from cabinet to every drop.</p>
+
+    <h2>How it works</h2>
+    <p>Click <strong>Single Line Diagram</strong> with a project open. Conductor walks the topology outward from the cabinet — joints, cables, bundles and aerial drops — and renders it as a tree, opening automatically in your browser as one self-contained HTML file (no internet connection required).</p>
+
+    <h2>Reading a node</h2>
+    <table>
+      <tr><th>Node type</th><th>Shown as</th></tr>
+      <tr><td>Pass-through joint</td><td>Joint ID, "Pass-through", chamber ID</td></tr>
+      <tr><td>Splitter joint</td><td>Joint ID, split ratio (e.g. "1:8 splitter"), chamber ID</td></tr>
+      <tr><td>CBT (aerial closure)</td><td>Joint ID, "CBT — Pole: &lt;pole id&gt;"</td></tr>
+      <tr><td>End of line</td><td>Joint ID, "End of line"</td></tr>
+    </table>
+    <p>Underground bundles hang off their joint in a green-dashed list (bundle ID, served address, fibre count and length); aerial drops hang off in a blue-dashed list (📶 drop ID, served address, length, "Aerial drop").</p>
+
+    <h2>Optical budget badges</h2>
+    <p>Every bundle and aerial drop row now carries a small badge showing its optical power budget — the same figures as Fibre Trace and the Route Validator, calculated once per premises and reused everywhere:</p>
+    <ul>
+      <li><strong>Green badge</strong> (<code>budget-pass</code>) — e.g. <code>14.2dB · +6.8dB margin</code> — the route passes the configured link budget.</li>
+      <li><strong>Red badge</strong> (<code>budget-fail</code>) — same format, margin shown as a negative figure — the route exceeds the budget and needs attention (shorter run, smaller splitter, or different link class).</li>
+      <li>No badge — the route to that premises isn't complete (PARTIAL/UNSERVED in the Route Validator), so there's no loss figure to show.</li>
+    </ul>
+    <div class="callout tip"><strong>Spotting problem drops at a glance.</strong> Because the badge is right next to the address on every bundle/drop row, you can scan a whole branch of the SLD and immediately see which premises are failing their optical budget — without running the Route Validator or clicking through each one in Fibre Trace.</div>
+    <div class="callout info">The badge values come from the same <a href="#" onclick="show('optical'); return false;">Optical Power Budget</a> settings used by Fibre Trace and the Route Validator. Change the settings via the ⚙ gear icon and re-run Single Line Diagram to refresh the badges.</div>
+
+    <h2>Navigating large diagrams</h2>
+    <p>On large networks the diagram can be long — use Ctrl+F in your browser to jump straight to a specific cabinet, chamber, joint, bundle, or drop ID.</p>
+  </div>
+</div>
+
 <!-- ═══════════════════════════════ SYMBOLOGY ══════════════════════════════ -->
 <div id="page-symbology" class="page">
   <div style="padding: 40px 48px;">
@@ -1293,9 +1439,10 @@ SCOT-222-BDL-007</div>
       <tr><td>Auto-Assign Fibres</td><td><span class="badge working">Working</span></td></tr>
       <tr><td>Splice Plan Export (HTML)</td><td><span class="badge working">Working</span></td></tr>
       <tr><td>Bill of Materials</td><td><span class="badge working">Working</span></td></tr>
-      <tr><td>Single Line Diagram (HTML)</td><td><span class="badge working">Working</span></td></tr>
+      <tr><td>Single Line Diagram (HTML, with per-drop optical budget badges)</td><td><span class="badge working">Working</span></td></tr>
       <tr><td>Map symbology + labels</td><td><span class="badge working">Working</span></td></tr>
-      <tr><td>Fibre Trace (interactive)</td><td><span class="badge working">Working</span></td></tr>
+      <tr><td>Fibre Trace (interactive, with Optical budget card)</td><td><span class="badge working">Working</span></td></tr>
+      <tr><td>Optical Power Budget settings (shared dialog, header gear icon)</td><td><span class="badge working">Working</span></td></tr>
       <tr><td>Fibre Count Calculator</td><td><span class="badge working">Working</span></td></tr>
       <tr><td>Route Splice Export</td><td><span class="badge partial">Working — branch indicators &amp; multi-cabinet testing pending</span></td></tr>
       <tr><td>Place Pole</td><td><span class="badge working">Working</span></td></tr>

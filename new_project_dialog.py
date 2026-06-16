@@ -343,7 +343,7 @@ LAYER_GROUPS = {
     "Active Equipment":       ["exchange_pops"],
     "Fibre Network":          ["joints", "bundles", "cables", "fibre_assignments"],
     "Civil Last Mile":        ["drop_ducts"],
-    "Passive Infrastructure": ["chambers", "ducts"],
+    "Passive Infrastructure": ["chambers", "poles", "ducts"],
     "Survey & Wayleave":      ["surveys", "wayleaves"],
     "Build & Progress":       ["build_tasks"],
     "Customers":              ["customers"],

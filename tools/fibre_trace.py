@@ -291,6 +291,38 @@ class FibreTracePanel(QDialog):
         breakdown = budget.get("breakdown") or {}
         optical   = budget.get("optical") or {}
 
+        # ── Topology validation ──────────────────────────────────────
+        splitter_list   = breakdown.get("splitters", [])
+        topology_error  = None
+        from collections import Counter
+        for ratio, count in Counter(splitter_list).items():
+            if count > 1:
+                topology_error = (
+                    f"Invalid topology: path passes through {count}× {ratio} splitters. "
+                    "Check CBT tail routing — each CBT must connect directly to the UG joint, "
+                    "not chain through other CBTs."
+                )
+                break
+
+        if topology_error:
+            self._budget_badge.setText("ERROR")
+            self._budget_badge.setStyleSheet(
+                "font-size:11px; font-weight:600; padding:2px 10px; border-radius:8px; "
+                f"background:{RED_BG}; color:{RED};"
+            )
+            self._metric_loss.setText(f"{loss_db:.2f} dB")
+            self._metric_margin.setText("N/A")
+            self._metric_margin.setStyleSheet(f"font-size:14px; font-weight:600; color:{RED};")
+            self._metric_splitters.setText(" + ".join(splitter_list) if splitter_list else "none")
+            self._breakdown_lbl.setText(
+                f'<p style="color:{RED}; font-size:11px;">⚠️ {topology_error}</p>'
+                + self._format_breakdown_html(loss_db, breakdown, optical)
+            )
+            self._breakdown_lbl.setVisible(True)
+            self._breakdown_btn.setText("Hide breakdown")
+            self._budget_box.setVisible(True)
+            return
+        # ── Normal PASS / FAIL ────────────────────────────────────────
         if link_pass:
             self._budget_badge.setText("PASS")
             self._budget_badge.setStyleSheet(
@@ -338,7 +370,9 @@ class FibreTracePanel(QDialog):
 
         connector_db = breakdown.get("connector_db", 0.0)
         if connector_db:
-            rows.append(("Connectors", connector_db))
+            _connector_count = 3  # POP patch panel + CBT entry + ONT
+            _per_connector   = connector_db / _connector_count
+            rows.append((f"Connectors ({_connector_count} × {_per_connector:.2f} dB)", connector_db))
 
         cells = "".join(
             f"<tr><td>{label}</td>"

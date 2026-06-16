@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
 """
 Conductor — Digitise Drop Duct Tool
-Clean two-click workflow:
-  LMB click 1 → start point (joint or free)
-  LMB click 2 → end point (premises or free)
-  RMB         → save and reset
-  Esc         → exit
+Multi-vertex rubber-band digitising mirroring native QGIS behaviour:
+  LMB         -> add vertex (snaps to joint / chamber / premises)
+  Mouse move  -> live floating segment from last vertex to cursor
+  LMB on premises -> final vertex snapped to premises point
+  RMB         -> finish and save (requires >=2 points)
+  Ctrl+Z      -> undo last vertex
+  Esc         -> cancel and exit
 """
 
 import math
@@ -15,7 +17,7 @@ from qgis.PyQt.QtWidgets import QMessageBox
 from qgis.core import (
     QgsFeature, QgsGeometry, QgsPointXY, QgsProject,
     QgsCoordinateTransform, QgsCoordinateReferenceSystem,
-    QgsFeatureRequest, QgsRectangle, QgsDistanceArea, QgsWkbTypes,
+    QgsFeatureRequest, QgsRectangle, QgsWkbTypes,
 )
 from qgis.gui import QgsMapTool, QgsRubberBand
 from ..conductor_utils import get_layer, fld, val, LayerEditContext
@@ -36,14 +38,10 @@ def _to_canvas(canvas, pt_27700):
 
 def _snap(canvas, project, pos, radius_px=16):
     return snap_to_node(canvas, project, pos,
-        [("joints", "joint_id", "JOINT"),
+        [("joints",   "joint_id",   "JOINT"),
          ("chambers", "chamber_id", "CHAMBER"),
-         ("premises", "uprn", "PREMISES")],
+         ("premises", "uprn",       "PREMISES")],
         snap_radius_px=radius_px, fallback=True, stringify_id=True)
-
-
-def _calc_length(p1, p2):
-    return line_length_m([p1, p2])
 
 
 def _next_id(layer, area_id):
@@ -75,126 +73,113 @@ class DigitiseDropMapTool(QgsMapTool):
         super().__init__(canvas)
         self._canvas  = canvas
         self._project = project
-        self._pt1          = None   # start point (27700)
-        self._id1          = None   # joint/chamber id from snap_to_node
-        self._type1        = None   # "JOINT" | "CHAMBER" | "FREE"
-        self._pt2          = None   # end point (27700)
-        self._id2          = None   # uprn
-        self._last_click_pos = None  # guard against double-click phantom release
+        self._points     = []
+        self._node_ids   = []
+        self._node_types = []
 
+        # Committed path - brown
         self._rubber = QgsRubberBand(canvas, QgsWkbTypes.LineGeometry)
         self._rubber.setColor(QColor(139, 69, 19, 220))
         self._rubber.setWidth(2)
 
+        # Floating segment - lighter
+        self._float_rubber = QgsRubberBand(canvas, QgsWkbTypes.LineGeometry)
+        self._float_rubber.setColor(QColor(139, 69, 19, 120))
+        self._float_rubber.setWidth(1)
+
+        # Snap indicator
+        self._snap_rubber = QgsRubberBand(canvas, QgsWkbTypes.PointGeometry)
+        self._snap_rubber.setColor(QColor(200, 90, 0, 220))
+        self._snap_rubber.setIconSize(10)
+
         self.setCursor(QCursor(Qt.CrossCursor))
 
-    # ── EVENTS ───────────────────────────────────────────────────────────────
-
-    def canvasReleaseEvent(self, event):
-        """Use Release not Press — avoids double-fire issues."""
-        if event.button() == Qt.RightButton:
-            if self._pt1 and self._pt2:
-                self._save()
-            else:
-                self._reset()
-                _info("Drop cancelled. Click start point to begin. Esc to exit.")
-            return
-
-        if event.button() != Qt.LeftButton:
-            return
-
-        # Guard: QGIS double-click fires Release twice at the same pixel.
-        # Ignore the phantom second release to prevent _pt2 being overwritten.
-        current_pos = (event.pos().x(), event.pos().y())
-        if current_pos == self._last_click_pos:
-            return
-        self._last_click_pos = current_pos
-
+    def canvasMoveEvent(self, event):
         pt, node_id, node_type = _snap(self._canvas, self._project, event.pos())
 
-        if self._pt1 is None:
-            # First click — set start
-            self._pt1 = pt
-            self._id1 = node_id
-            self._type1 = node_type
-            self._rubber.reset(QgsWkbTypes.LineGeometry)
-            self._rubber.addPoint(_to_canvas(self._canvas, pt), True)
-            label = f"Joint {node_id}" if node_type == "JOINT" else \
-                    f"Chamber {node_id}" if node_type == "CHAMBER" else "Free point"
-            _info(f"Start: {label} — now click the end point. RMB to save.")
+        self._snap_rubber.reset(QgsWkbTypes.PointGeometry)
+        if node_id and node_type != "FREE":
+            self._snap_rubber.addPoint(_to_canvas(self._canvas, pt), True)
 
-        elif self._pt2 is None:
-            # Second click — set end
-            self._pt2 = pt
-            self._id2 = node_id if node_type == "PREMISES" else "0"
-            # Draw final rubber band
-            self._rubber.reset(QgsWkbTypes.LineGeometry)
-            self._rubber.addPoint(_to_canvas(self._canvas, self._pt1), False)
-            self._rubber.addPoint(_to_canvas(self._canvas, self._pt2), True)
-            label = f"UPRN {node_id}" if node_type == "PREMISES" else "Free point"
-            _info(f"End: {label} — RMB to save, or click to adjust.")
+        self._float_rubber.reset(QgsWkbTypes.LineGeometry)
+        if self._points:
+            self._float_rubber.addPoint(_to_canvas(self._canvas, self._points[-1]))
+            self._float_rubber.addPoint(_to_canvas(self._canvas, pt), True)
 
-        else:
-            # Third+ click — update end point
-            self._pt2 = pt
-            self._id2 = node_id if node_type == "PREMISES" else "0"
+    def canvasPressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            pt, node_id, node_type = _snap(self._canvas, self._project, event.pos())
+
+            self._points.append(pt)
+            self._node_ids.append(node_id)
+            self._node_types.append(node_type)
+
             self._rubber.reset(QgsWkbTypes.LineGeometry)
-            self._rubber.addPoint(_to_canvas(self._canvas, self._pt1), False)
-            self._rubber.addPoint(_to_canvas(self._canvas, self._pt2), True)
-            _info("End point updated — RMB to save.")
+            for p in self._points:
+                self._rubber.addPoint(_to_canvas(self._canvas, p))
+            self._rubber.show()
+
+            if len(self._points) == 1:
+                label = f"Joint {node_id}"   if node_type == "JOINT" else \
+                        f"Chamber {node_id}" if node_type == "CHAMBER" else "Free point"
+                _info(f"Start: {label} - keep clicking to add vertices. RMB to finish.")
+            elif node_type == "PREMISES":
+                _info(f"Premises UPRN {node_id} - RMB to save.")
+            else:
+                _info(f"Vertex added ({len(self._points)}) - keep clicking or RMB to finish.")
+
+        elif event.button() == Qt.RightButton:
+            if len(self._points) < 2:
+                self._reset()
+                _info("Drop cancelled - need at least 2 points. Esc to exit.")
+                return
+            self._save()
 
     def canvasDoubleClickEvent(self, event):
-        pass  # swallow double-click
-
-    # ── SAVE ─────────────────────────────────────────────────────────────────
+        pass
 
     def _save(self):
         layer = self._project.get_layer("drop_ducts")
         if not layer:
             QMessageBox.critical(None, "Conductor", "drop_ducts layer not found.")
-            self._reset()
-            return
+            self._reset(); return
 
         drop_id  = _next_id(layer, self._project.area_id)
-        length_m = _calc_length(self._pt1, self._pt2)
+        length_m = line_length_m(self._points)
 
-        feat = QgsFeature(layer.fields())
-        feat.setGeometry(QgsGeometry.fromPolylineXY([self._pt1, self._pt2]))
-
-        # Resolve the start node into the correct FK for drop_ducts.
-        #
-        # _id1/_type1 come from snap_to_node and may be a JOINT id, a
-        # CHAMBER id, or "0"/FREE (no snap). drop_ducts only has
-        # from_chamber and from_pole columns — a joint_id is not a valid
-        # value for either, so a JOINT start is resolved to the chamber
-        # it sits in (normal splitter joint) or the pole it's mounted on
-        # (CBT — aerial drop).
         from_chamber = None
         from_pole    = None
         drop_type    = None
+        type1        = self._node_types[0]
+        id1          = self._node_ids[0]
 
-        if self._type1 == "CHAMBER" and self._id1 and self._id1 != "0":
-            from_chamber = self._id1
-
-        elif self._type1 == "JOINT" and self._id1 and self._id1 != "0":
+        if type1 == "CHAMBER" and id1 and id1 != "0":
+            from_chamber = id1
+        elif type1 == "JOINT" and id1 and id1 != "0":
             joint_layer = self._project.get_layer("joints")
             if joint_layer:
                 for jf in joint_layer.getFeatures():
-                    if str(jf["joint_id"]) == str(self._id1):
+                    if str(jf["joint_id"]) == str(id1):
                         if str(jf["joint_type"] or "") == "CBT":
-                            # CBT is mounted on a pole — record the pole,
-                            # not the joint, and flag this as an aerial drop.
-                            from_pole = jf["pole_id"]
-                            drop_type = "PIA_AERIAL_DROP"
+                            from_pole    = jf["pole_id"]
+                            from_chamber = str(id1)   # CBT joint_id — BFS keys on this
+                            drop_type    = "PIA_AERIAL_DROP"
                         else:
-                            # Normal splitter joint — record the chamber
-                            # it physically sits in.
                             from_chamber = jf["chamber_id"]
                         break
 
+        uprn = None
+        last_id   = self._node_ids[-1]
+        last_type = self._node_types[-1]
+        if last_type == "PREMISES" and last_id and last_id.isdigit():
+            uprn = int(last_id)
+
+        feat = QgsFeature(layer.fields())
+        feat.setGeometry(QgsGeometry.fromPolylineXY(self._points))
+
         attrs = {
             "ddct_id":      drop_id,
-            "uprn":         int(self._id2) if self._id2 and self._id2.isdigit() and self._id2 != "0" else None,
+            "uprn":         uprn,
             "area_id":      self._project.area_id,
             "from_chamber": from_chamber,
             "from_pole":    from_pole,
@@ -215,25 +200,24 @@ class DigitiseDropMapTool(QgsMapTool):
             if tl: tl.setItemVisibilityChecked(True)
             self.placed.emit(drop_id)
             self._reset()
-            _info(f"{drop_id} saved ({length_m}m) — click next start point. Esc to exit.")
+            _info(f"{drop_id} saved ({length_m:.0f}m) - click to start next drop. Esc to exit.")
         else:
             layer.rollBack()
             QMessageBox.critical(None, "Error", "Failed to save drop duct.")
             self._reset()
 
-    # ── CLEANUP ───────────────────────────────────────────────────────────────
-
     def _reset(self):
-        self._pt1 = self._pt2 = self._id1 = self._id2 = self._type1 = None
-        self._last_click_pos = None
+        self._points     = []
+        self._node_ids   = []
+        self._node_types = []
         self._rubber.reset(QgsWkbTypes.LineGeometry)
+        self._float_rubber.reset(QgsWkbTypes.LineGeometry)
+        self._snap_rubber.reset(QgsWkbTypes.PointGeometry)
 
     def deactivate(self):
-        try:
-            self._rubber.reset()
-            self._canvas.scene().removeItem(self._rubber)
-        except Exception:
-            pass
+        for rb in (self._rubber, self._float_rubber, self._snap_rubber):
+            try: rb.reset(); self._canvas.scene().removeItem(rb)
+            except Exception: pass
         self._canvas.refresh()
         super().deactivate()
 
@@ -241,3 +225,12 @@ class DigitiseDropMapTool(QgsMapTool):
         if event.key() == Qt.Key_Escape:
             self._reset()
             self._canvas.unsetMapTool(self)
+        elif event.key() == Qt.Key_Z and event.modifiers() == Qt.ControlModifier:
+            if self._points:
+                self._points.pop()
+                self._node_ids.pop()
+                self._node_types.pop()
+                self._rubber.reset(QgsWkbTypes.LineGeometry)
+                for p in self._points:
+                    self._rubber.addPoint(_to_canvas(self._canvas, p))
+                _info(f"Vertex removed - {len(self._points)} remaining.")

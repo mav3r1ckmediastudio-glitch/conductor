@@ -6,7 +6,8 @@ Click any Conductor asset to select it, then delete or move it.
 
 from qgis.PyQt.QtCore import Qt, pyqtSignal
 from qgis.PyQt.QtGui import QCursor, QColor
-from qgis.PyQt.QtWidgets import QMessageBox
+from qgis.PyQt.QtWidgets import QDialog, QVBoxLayout, QPushButton, QLabel, QMessageBox
+from ..conductor_utils import NAVY, WHITE, MID, TEAL, LIGHT
 from qgis.core import (
     QgsProject, QgsFeatureRequest, QgsRectangle,
     QgsCoordinateTransform, QgsCoordinateReferenceSystem,
@@ -106,8 +107,57 @@ def _find_feature_at(canvas, project, canvas_pos):
 # DELETE TOOL
 # ═══════════════════════════════════════════════════════════════════════════
 
+def _pick_asset_to_delete(matches):
+    """Several assets overlap — ask the user which one to delete.
+    Returns (layer_name, layer, feat) or None if cancelled."""
+    dlg = QDialog()
+    dlg.setWindowTitle("Multiple Assets Found")
+    dlg.setMinimumWidth(380)
+    dlg.setModal(True)
+    root = QVBoxLayout(dlg); root.setSpacing(0); root.setContentsMargins(0, 0, 0, 0)
+
+    hdr = QLabel("  Multiple Assets Found")
+    hdr.setFixedHeight(40)
+    hdr.setStyleSheet(f"background:{NAVY}; color:{WHITE}; font-size:13px; font-weight:bold;")
+    root.addWidget(hdr)
+
+    body = QVBoxLayout(); body.setContentsMargins(12, 12, 12, 12); body.setSpacing(6)
+    info = QLabel("These assets overlap at the point you clicked. Choose which one to delete:")
+    info.setWordWrap(True)
+    body.addWidget(info)
+
+    result = {"choice": None}
+
+    for layer_name, layer, feat, _dist in matches:
+        id_field = ID_FIELDS.get(layer_name, "fid")
+        asset_id = str(feat[id_field]) if id_field in [f.name() for f in feat.fields()] else str(feat.id())
+        label    = LAYER_LABELS.get(layer_name, layer_name)
+        btn = QPushButton(f"{label}  —  {asset_id}")
+        btn.setStyleSheet(
+            f"QPushButton {{ padding:8px 12px; text-align:left; border:1px solid {MID}; "
+            f"border-radius:4px; }} QPushButton:hover {{ border-color:#E05050; background:#FFF0F0; }}"
+        )
+        def _choose(_checked=False, ln=layer_name, ly=layer, ft=feat):
+            result["choice"] = (ln, ly, ft)
+            dlg.accept()
+        btn.clicked.connect(_choose)
+        body.addWidget(btn)
+
+    cancel_btn = QPushButton("Cancel")
+    cancel_btn.setStyleSheet(
+        f"QPushButton {{ padding:7px 14px; border-radius:4px; font-size:12px; border:1px solid {MID}; }} "
+        f"QPushButton:hover {{ background:{LIGHT}; }}"
+    )
+    cancel_btn.clicked.connect(dlg.reject)
+    body.addWidget(cancel_btn)
+    root.addLayout(body)
+    dlg.exec_()
+    return result["choice"]
+
+
 class DeleteAssetMapTool(QgsMapTool):
-    """Click a Conductor asset to delete it."""
+    """Click a Conductor asset to delete it. When multiple assets overlap,
+    a picker dialog lets the user choose which one to delete."""
 
     deleted = pyqtSignal(str, str)  # layer_name, asset_id
 
@@ -121,21 +171,27 @@ class DeleteAssetMapTool(QgsMapTool):
         if event.button() != Qt.LeftButton:
             return
 
-        layer_name, layer, feat = _find_feature_at(
-            self._canvas, self._project, event.pos()
-        )
+        from .edit_assets import _find_features
+        matches = _find_features(self._canvas, self._project, list(SEARCHABLE_LAYERS), event.pos())
 
-        if feat is None:
+        if not matches:
             QMessageBox.information(None, "Conductor",
                 "No Conductor asset found at that location.\n"
                 "Click closer to an asset, or press Esc to cancel.")
             return
 
+        if len(matches) == 1:
+            layer_name, layer, feat, _ = matches[0]
+        else:
+            picked = _pick_asset_to_delete(matches)
+            if picked is None:
+                return
+            layer_name, layer, feat = picked
+
         label    = LAYER_LABELS.get(layer_name, layer_name)
         id_field = ID_FIELDS.get(layer_name, "fid")
         asset_id = str(feat[id_field]) if id_field in [f.name() for f in feat.fields()] else str(feat.id())
 
-        # Name field for friendlier display
         name_candidates = ["pop_name", "area_name", "chamber_id", "task_name", "landowner"]
         display_name = ""
         for nc in name_candidates:

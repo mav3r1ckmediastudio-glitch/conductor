@@ -1,10 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-Conductor — Digitise PIA UG Drop Tool (PIA)
-Two-click workflow:
-  LMB click 1 → start — snaps to PIA_UG_CHAMBER in chambers layer
-  LMB click 2 → end   — snaps to premises
-  RMB         → save and reset
+Conductor - Digitise PIA UG Drop Tool (PIA)
+Multi-vertex rubber-band digitising mirroring native QGIS behaviour:
+  LMB click 1       -> start, snaps to PIA_UG_CHAMBER
+  LMB (subsequent)  -> add vertices freely along pavement/verge
+  Mouse move        -> live floating segment from last vertex to cursor
+  LMB on premises   -> snaps to premises point
+  RMB               -> finish and save (requires >=2 points)
+  Ctrl+Z            -> undo last vertex
+  Esc               -> cancel and exit
 Writes to drop_ducts with drop_type = PIA_UG_DROP.
 """
 
@@ -15,7 +19,7 @@ from qgis.PyQt.QtWidgets import QMessageBox
 from qgis.core import (
     QgsFeature, QgsGeometry, QgsProject,
     QgsCoordinateTransform, QgsCoordinateReferenceSystem,
-    QgsFeatureRequest, QgsRectangle, QgsDistanceArea, QgsWkbTypes,
+    QgsFeatureRequest, QgsRectangle, QgsWkbTypes,
 )
 from qgis.gui import QgsMapTool, QgsRubberBand
 from ..conductor_utils import get_layer, fld, val, LayerEditContext
@@ -33,13 +37,16 @@ def _to_canvas(canvas, pt):
     return QgsCoordinateTransform(src, dst, QgsProject.instance()).transform(pt)
 
 
+def _cursor_to_27700(canvas, event_pos):
+    canvas_pt = canvas.getCoordinateTransform().toMapCoordinates(event_pos)
+    return _to_27700(canvas, canvas_pt)
+
+
 def _snap_start(canvas, project, pos, radius_px=16):
-    """Snap to nearest PIA_UG_CHAMBER."""
     canvas_pt = canvas.getCoordinateTransform().toMapCoordinates(pos)
     pt = _to_27700(canvas, canvas_pt)
     r  = canvas.mapUnitsPerPixel() * radius_px
     rect = QgsRectangle(pt.x()-r, pt.y()-r, pt.x()+r, pt.y()+r)
-
     best_dist = r; best_pt = None; best_id = None
     layer = project.get_layer("chambers")
     if layer:
@@ -53,13 +60,11 @@ def _snap_start(canvas, project, pos, radius_px=16):
     return best_pt, best_id
 
 
-def _snap_end(canvas, project, pos, radius_px=16):
-    """Snap to nearest premises."""
+def _snap_premises(canvas, project, pos, radius_px=16):
     canvas_pt = canvas.getCoordinateTransform().toMapCoordinates(pos)
     pt = _to_27700(canvas, canvas_pt)
     r  = canvas.mapUnitsPerPixel() * radius_px
     rect = QgsRectangle(pt.x()-r, pt.y()-r, pt.x()+r, pt.y()+r)
-
     best_dist = r; best_pt = None; best_uprn = None
     layer = project.get_layer("premises")
     if layer:
@@ -68,13 +73,7 @@ def _snap_end(canvas, project, pos, radius_px=16):
             d  = math.hypot(fp.x()-pt.x(), fp.y()-pt.y())
             if d < best_dist:
                 best_dist = d; best_pt = fp; best_uprn = str(feat["uprn"])
-    if best_pt is None:
-        best_pt = pt
     return best_pt, best_uprn
-
-
-def _calc_length(p1, p2):
-    return line_length_m([p1, p2])
 
 
 def _next_id(layer, area_id):
@@ -105,14 +104,21 @@ class DigitisePIAUGDropMapTool(QgsMapTool):
         super().__init__(canvas)
         self._canvas  = canvas
         self._project = project
-        self._pt1 = self._pt2 = self._id1 = self._uprn = None
-        self._last_click_pos = None
+        self._points   = []
+        self._start_id = None
+        self._uprn     = None
 
-        # Light purple rubber band
+        # Committed path - light purple
         self._rubber = QgsRubberBand(canvas, QgsWkbTypes.LineGeometry)
         self._rubber.setColor(QColor(187, 136, 204, 220))
         self._rubber.setWidth(2)
 
+        # Floating segment - lighter
+        self._float_rubber = QgsRubberBand(canvas, QgsWkbTypes.LineGeometry)
+        self._float_rubber.setColor(QColor(187, 136, 204, 120))
+        self._float_rubber.setWidth(1)
+
+        # Snap indicator
         self._snap_rubber = QgsRubberBand(canvas, QgsWkbTypes.PointGeometry)
         self._snap_rubber.setColor(QColor(187, 136, 204, 220))
         self._snap_rubber.setIconSize(10)
@@ -121,20 +127,23 @@ class DigitisePIAUGDropMapTool(QgsMapTool):
 
     def canvasMoveEvent(self, event):
         self._snap_rubber.reset(QgsWkbTypes.PointGeometry)
-        if self._pt1 is None:
-            pt, _ = _snap_start(self._canvas, self._project, event.pos())
-            if pt: self._snap_rubber.addPoint(_to_canvas(self._canvas, pt), True)
-        else:
-            pt, _ = _snap_end(self._canvas, self._project, event.pos())
-            if pt: self._snap_rubber.addPoint(_to_canvas(self._canvas, pt), True)
-            preview = pt or _to_27700(self._canvas, self.toMapCoordinates(event.pos()))
-            self._rubber.reset(QgsWkbTypes.LineGeometry)
-            self._rubber.addPoint(_to_canvas(self._canvas, self._pt1))
-            self._rubber.addPoint(_to_canvas(self._canvas, preview), True)
 
-    def canvasReleaseEvent(self, event):
+        if not self._points:
+            pt, _ = _snap_start(self._canvas, self._project, event.pos())
+            if pt:
+                self._snap_rubber.addPoint(_to_canvas(self._canvas, pt), True)
+        else:
+            pt_premises, _ = _snap_premises(self._canvas, self._project, event.pos())
+            cursor_pt = pt_premises if pt_premises else _cursor_to_27700(self._canvas, event.pos())
+            if pt_premises:
+                self._snap_rubber.addPoint(_to_canvas(self._canvas, pt_premises), True)
+            self._float_rubber.reset(QgsWkbTypes.LineGeometry)
+            self._float_rubber.addPoint(_to_canvas(self._canvas, self._points[-1]))
+            self._float_rubber.addPoint(_to_canvas(self._canvas, cursor_pt), True)
+
+    def canvasPressEvent(self, event):
         if event.button() == Qt.RightButton:
-            if self._pt1 and self._pt2:
+            if len(self._points) >= 2:
                 self._save()
             else:
                 self._reset()
@@ -144,32 +153,35 @@ class DigitisePIAUGDropMapTool(QgsMapTool):
         if event.button() != Qt.LeftButton:
             return
 
-        current_pos = (event.pos().x(), event.pos().y())
-        if current_pos == self._last_click_pos:
-            return
-        self._last_click_pos = current_pos
-
-        if self._pt1 is None:
-            pt, node_id = _snap_start(self._canvas, self._project, event.pos())
+        if not self._points:
+            pt, chamber_id = _snap_start(self._canvas, self._project, event.pos())
             if pt is None:
                 QMessageBox.warning(
-                    None, "Conductor — No PIA UG Chamber Found",
+                    None, "Conductor - No PIA UG Chamber Found",
                     "No PIA UG Chamber found near that location.\n\n"
                     "PIA UG drops must start from a PIA UG Chamber."
                 )
                 return
-            self._pt1 = pt; self._id1 = node_id
+            self._points.append(pt)
+            self._start_id = chamber_id
             self._rubber.reset(QgsWkbTypes.LineGeometry)
             self._rubber.addPoint(_to_canvas(self._canvas, pt), True)
-            _info(f"Start: PIA UG Chamber {node_id} — now click the premises. RMB to save.")
+            _info(f"Start: PIA UG Chamber {chamber_id} - click to add vertices along route. RMB to save.")
         else:
-            pt, uprn = _snap_end(self._canvas, self._project, event.pos())
-            self._pt2 = pt; self._uprn = uprn
+            pt_premises, uprn = _snap_premises(self._canvas, self._project, event.pos())
+            if pt_premises:
+                pt = pt_premises
+                self._uprn = uprn
+                _info(f"Premises UPRN {uprn} - RMB to save.")
+            else:
+                pt = _cursor_to_27700(self._canvas, event.pos())
+                _info(f"Vertex added ({len(self._points) + 1}) - keep clicking or RMB to finish.")
+
+            self._points.append(pt)
             self._rubber.reset(QgsWkbTypes.LineGeometry)
-            self._rubber.addPoint(_to_canvas(self._canvas, self._pt1), False)
-            self._rubber.addPoint(_to_canvas(self._canvas, self._pt2), True)
-            label = f"UPRN {uprn}" if uprn else "Free point"
-            _info(f"End: {label} — RMB to save, or click to adjust.")
+            for p in self._points:
+                self._rubber.addPoint(_to_canvas(self._canvas, p))
+            self._rubber.show()
 
     def canvasDoubleClickEvent(self, event):
         pass
@@ -181,15 +193,15 @@ class DigitisePIAUGDropMapTool(QgsMapTool):
             self._reset(); return
 
         drop_id  = _next_id(layer, self._project.area_id)
-        length_m = _calc_length(self._pt1, self._pt2)
+        length_m = line_length_m(self._points)
 
         feat = QgsFeature(layer.fields())
-        feat.setGeometry(QgsGeometry.fromPolylineXY([self._pt1, self._pt2]))
+        feat.setGeometry(QgsGeometry.fromPolylineXY(self._points))
 
         attrs = {
             "ddct_id":      drop_id,
             "drop_type":    "PIA_UG_DROP",
-            "from_chamber": self._id1,
+            "from_chamber": self._start_id,
             "uprn":         int(self._uprn) if self._uprn and self._uprn.isdigit() else None,
             "area_id":      self._project.area_id,
             "length_m":     length_m,
@@ -207,26 +219,33 @@ class DigitisePIAUGDropMapTool(QgsMapTool):
             if tl: tl.setItemVisibilityChecked(True)
             self.placed.emit(drop_id)
             self._reset()
-            _info(f"{drop_id} saved ({length_m}m) — click next chamber to start another. Esc to exit.")
+            _info(f"{drop_id} saved ({length_m:.0f}m) - click next chamber to start another. Esc to exit.")
         else:
             layer.rollBack()
             QMessageBox.critical(None, "Error", "Failed to save PIA UG drop.")
             self._reset()
 
     def _reset(self):
-        self._pt1 = self._pt2 = self._id1 = self._uprn = None
-        self._last_click_pos = None
-        self._rubber.reset(QgsWkbTypes.LineGeometry)
-        self._snap_rubber.reset(QgsWkbTypes.PointGeometry)
+        self._points   = []
+        self._start_id = None
+        self._uprn     = None
+        for rb in (self._rubber, self._float_rubber, self._snap_rubber):
+            rb.reset()
 
     def deactivate(self):
-        try: self._rubber.reset(); self._canvas.scene().removeItem(self._rubber)
-        except Exception: pass
-        try: self._snap_rubber.reset(); self._canvas.scene().removeItem(self._snap_rubber)
-        except Exception: pass
+        for rb in (self._rubber, self._float_rubber, self._snap_rubber):
+            try: rb.reset(); self._canvas.scene().removeItem(rb)
+            except Exception: pass
         self._canvas.refresh()
         super().deactivate()
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Escape:
             self._reset(); self._canvas.unsetMapTool(self)
+        elif event.key() == Qt.Key_Z and event.modifiers() == Qt.ControlModifier:
+            if len(self._points) > 1:
+                self._points.pop()
+                self._rubber.reset(QgsWkbTypes.LineGeometry)
+                for p in self._points:
+                    self._rubber.addPoint(_to_canvas(self._canvas, p))
+                _info(f"Vertex removed - {len(self._points)} remaining.")

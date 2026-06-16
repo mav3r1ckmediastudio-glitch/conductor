@@ -159,13 +159,16 @@ def _dspin(default=0.0, lo=0.0, hi=99.9, step=0.1):
     s.setSingleStep(step); s.setValue(float(default) if default else 0.0)
     s.setStyleSheet(INPUT_STYLE); return s
 
-def _scrolled_form(root_layout, build_fn):
+def _scrolled_form(root_layout, build_fn, min_height=None):
     scroll = QScrollArea(); scroll.setWidgetResizable(True)
     scroll.setFrameShape(QFrame.NoFrame)
     scroll.setStyleSheet(f"background:{LIGHT}; border:none;")
     fw = QFrame(); fw.setStyleSheet(f"background:{LIGHT};")
     fl = QVBoxLayout(fw); fl.setContentsMargins(20,14,20,8); fl.setSpacing(8)
     build_fn(fl)
+    if min_height:
+        fw.setMinimumHeight(min_height)
+        scroll.setMinimumHeight(min_height)
     scroll.setWidget(fw)
     root_layout.addWidget(scroll)
 
@@ -185,7 +188,7 @@ def _save_attrs(layer, feat, attrs):
 
 def _base_dialog(title, asset_id, subtitle=""):
     dlg = QDialog(); dlg.setWindowTitle(title)
-    dlg.setMinimumWidth(500); dlg.setMaximumHeight(720); dlg.setModal(True)
+    dlg.setMinimumWidth(560); dlg.setModal(True)
     root = QVBoxLayout(dlg); root.setSpacing(0); root.setContentsMargins(0,0,0,0)
 
     hdr = QLabel(f"  {title}  —  {asset_id}")
@@ -248,7 +251,21 @@ def _edit_chamber_dialog(feat):
         widgets['notes'].setText(_fv(feat,"notes"))
         fl.addWidget(widgets['notes'])
 
-    _scrolled_form(root, build)
+    # Auto-size: force dialog tall enough to show port panel without scrolling
+    has_sp = bool(_fv(feat, "has_splitter", False))
+    if has_sp:
+        try:
+            n_ports = int(str(_fv(feat, "split_ratio", "1:8")).split(":")[1])
+        except Exception:
+            n_ports = 8
+        half = (n_ports + 1) // 2
+        content_h = 380 + half * 58
+        dlg.setMinimumWidth(660)
+        dlg.setMinimumHeight(min(content_h + 120, 900))
+    else:
+        content_h = None
+
+    _scrolled_form(root, build, min_height=content_h)
 
     br = QHBoxLayout(); br.setContentsMargins(20,12,20,16); br.addStretch()
     cancel = QPushButton("Cancel"); cancel.setStyleSheet(BTN_SECONDARY)
@@ -352,11 +369,138 @@ def _edit_duct_dialog(feat):
     return dlg, get_attrs
 
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+# SPLITTER PORT PANEL
+# ═══════════════════════════════════════════════════════════════════════════
+
+def _build_port_panel(fl, joint_id, split_ratio, joint_type, project):
+    """
+    Build a 2-column port grid showing what is assigned to each splitter port.
+    Reads fibre_assignments for SPLITTER_OUTPUT records at this joint,
+    then resolves the bundle_id to a UPRN and address (for CBTs via drop_ducts→premises,
+    for feeder splitters via cables).
+    Returns immediately without adding anything if no assignments exist yet.
+    """
+    from qgis.PyQt.QtWidgets import QGridLayout, QWidget
+    from qgis.PyQt.QtGui import QColor
+    from qgis.PyQt.QtCore import Qt
+
+    fa_layer = project.get_layer("fibre_assignments")
+    if not fa_layer:
+        return
+
+    try:
+        n_ports = int(str(split_ratio).split(":")[1])
+    except Exception:
+        n_ports = 8
+
+    # Gather SPLITTER_OUTPUT records for this joint
+    port_map = {}  # port_idx (0-based) -> asset_id
+    outputs = []
+    for feat in fa_layer.getFeatures():
+        if str(feat["joint_id"]) == str(joint_id) and            str(feat["fibre_role"] or "") == "SPLITTER_OUTPUT":
+            outputs.append(feat)
+    outputs.sort(key=lambda f: f["fibre_number"] or 0)
+    for idx, feat in enumerate(outputs):
+        port_map[idx] = str(feat["bundle_id"] or "")
+
+    if not port_map:
+        return  # auto-assign not run yet — don't show empty panel
+
+    # Resolve asset_id → display string
+    is_cbt = (str(joint_type) == "CBT")
+
+    # Build lookup: asset_id → display label
+    label_map = {}
+    if is_cbt:
+        # asset_id is a drop_duct ddct_id → resolve UPRN → address
+        dd_layer = project.get_layer("drop_ducts")
+        prem_layer = project.get_layer("premises")
+        uprn_to_addr = {}
+        if prem_layer:
+            from qgis.core import NULL as QNULL
+            for pf in prem_layer.getFeatures():
+                def _s(v):
+                    return "" if v is None or v == QNULL else str(v).strip()
+                addr = " ".join(filter(None, [
+                    _s(pf["address_1"]),
+                    _s(pf["address_2"]),
+                    _s(pf["town"]),
+                    _s(pf["postcode"]),
+                ])).strip()
+                uprn_to_addr[str(pf["uprn"])] = addr or str(pf["uprn"])
+        if dd_layer:
+            for df in dd_layer.getFeatures():
+                did = str(df["ddct_id"] or "")
+                uprn = str(df["uprn"] or "")
+                addr = uprn_to_addr.get(uprn, uprn) if uprn else "—"
+                label_map[did] = f"{uprn}  {addr}" if uprn else did
+    else:
+        # asset_id is a cable_id → show cable + to_node
+        cable_layer = project.get_layer("cables")
+        if cable_layer:
+            for cf in cable_layer.getFeatures():
+                cid = str(cf["cable_id"] or "")
+                to_node = str(cf["to_node"] or "")
+                label_map[cid] = f"{cid} → {to_node}"
+
+    # ── Build UI ──────────────────────────────────────────────────────────
+    fl.addWidget(_divider())
+
+    port_title = QLabel("PORT ASSIGNMENTS")
+    port_title.setStyleSheet(SECTION_STYLE)
+    fl.addWidget(port_title)
+
+    note = QLabel("Port assignments are set by Auto-Assign Fibres and shown here for reference.")
+    note.setStyleSheet(f"font-size:10px; color:{MID}; padding:2px 0 6px 0;")
+    note.setWordWrap(True)
+    fl.addWidget(note)
+
+    grid_widget = QWidget()
+    grid = QGridLayout(grid_widget)
+    grid.setSpacing(6)
+    grid.setContentsMargins(0, 0, 0, 0)
+
+    PORT_ACTIVE   = f"background:#E8F5E9; border:1px solid #81C784; border-radius:4px; padding:4px 8px; font-size:11px;"
+    PORT_SPARE    = f"background:#F5F5F5; border:1px solid #BDBDBD; border-radius:4px; padding:4px 8px; font-size:11px; color:{MID};"
+    PORT_PILL     = f"background:{NAVY}; color:{WHITE}; border-radius:3px; padding:2px 7px; font-size:10px; font-weight:bold; min-width:36px;"
+
+    half = (n_ports + 1) // 2
+
+    for port_idx in range(n_ports):
+        col = (port_idx // half) * 2
+        row = port_idx % half
+
+        pill = QLabel(f"PO{port_idx + 1}")
+        pill.setStyleSheet(PORT_PILL)
+        pill.setAlignment(Qt.AlignCenter)
+        pill.setFixedWidth(42)
+
+        asset_id = port_map.get(port_idx, "")
+        if asset_id:
+            display = label_map.get(asset_id, asset_id)
+            # Truncate long addresses
+            if len(display) > 45:
+                display = display[:43] + "…"
+            val_lbl = QLabel(display)
+            val_lbl.setStyleSheet(PORT_ACTIVE)
+        else:
+            val_lbl = QLabel("Spare — unassigned")
+            val_lbl.setStyleSheet(PORT_SPARE)
+
+        val_lbl.setMinimumWidth(180)
+        grid.addWidget(pill,    row, col,     Qt.AlignVCenter)
+        grid.addWidget(val_lbl, row, col + 1, Qt.AlignVCenter)
+
+    fl.addWidget(grid_widget)
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # EDIT JOINT
 # ═══════════════════════════════════════════════════════════════════════════
 
-def _edit_joint_dialog(feat):
+def _edit_joint_dialog(feat, project=None):
     jid = _fv(feat, "joint_id")
     dlg, root = _base_dialog("Edit Joint", jid,
         f"Chamber: {_fv(feat,'chamber_id')}")
@@ -411,6 +555,15 @@ def _edit_joint_dialog(feat):
         widgets['cascade_type'] = _combo(_ct_items, _ct_val if _ct_val else "— none —")
         f2.addRow(_lbl("Cascade Type"), widgets['cascade_type'])
         fl.addLayout(f2)
+
+        # Port panel — only shown when splitter is configured and assignments exist
+        _build_port_panel(
+            fl,
+            joint_id=jid,
+            split_ratio=_fv(feat, "split_ratio"),
+            joint_type=_fv(feat, "joint_type"),
+            project=project,
+        )
 
         fl.addWidget(_divider())
         fl.addWidget(_section("NOTES"))
@@ -687,7 +840,27 @@ class EditAssetMapTool(QgsMapTool):
         _, dialog_fn, id_field = EDIT_LAYER_MAP[layer_name]
         asset_id = str(feat[id_field])
 
-        dlg, get_attrs = dialog_fn(feat)
+        # Pass project to joint dialog so port panel can query fibre_assignments
+        if layer_name == "joints":
+            dlg, get_attrs = dialog_fn(feat, project=self._project)
+        else:
+            dlg, get_attrs = dialog_fn(feat)
+
+        # Force joint dialog to open at full size when splitter port panel is present
+        if layer_name == "joints":
+            try:
+                has_sp = bool(feat["has_splitter"])
+            except Exception:
+                has_sp = False
+            if has_sp:
+                try:
+                    n_ports = int(str(feat["split_ratio"]).split(":")[1])
+                except Exception:
+                    n_ports = 8
+                half = (n_ports + 1) // 2
+                h = min(380 + half * 58 + 120, 900)
+                dlg.resize(660, h)
+
         if dlg.exec_() != QDialog.Accepted:
             return
 

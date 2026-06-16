@@ -151,13 +151,15 @@ def _apply_symbology(layer):
 # ── LABELLING ──────────────────────────────────────────────────────────────────────────────
 
 def _apply_labels(layer):
-    from qgis.core import QgsPalLayerSettings, QgsVectorLayerSimpleLabeling, QgsTextFormat
+    from qgis.core import (
+        QgsPalLayerSettings, QgsVectorLayerSimpleLabeling,
+        QgsTextFormat, QgsTextBufferSettings, QgsUnitTypes,
+    )
     from qgis.PyQt.QtGui import QFont, QColor
 
     name     = layer.name()
     internal = next((k for k, v in LAYER_DISPLAY_NAMES.items() if v == name), name)
 
-    # Build label expression for line layers with length
     def length_expr(id_field):
         return id_field + " || '  ' || round(\"length_m\", 1) || 'm'"
 
@@ -165,24 +167,37 @@ def _apply_labels(layer):
     POINT = QgsPalLayerSettings.AroundPoint
 
     config = {
-        "exchange_pops": ("pop_id",                  False, "#1A3A5C", 8, POINT),
-        "chambers":      ("chamber_id",              False, "#1A3A5C", 8, POINT),
-        "joints":        ("joint_id",                False, "#1D7A6E", 8, POINT),
-        "ducts":         (length_expr("\"duct_id\""),  True,  "#555555", 7, LINE),
-        "drop_ducts":    (length_expr("\"ddct_id\""),  True,  "#8B4513", 7, LINE),
-        "build_areas":   ("area_id",                 False, "#1A3A5C", 9, POINT),
+        "exchange_pops": ("pop_id",                   False, "#1A3A5C", 9, POINT, True,  True),
+        "chambers":      ("chamber_id",               False, "#1A3A5C", 9, POINT, True,  True),
+        "joints":        ("joint_id",                 False, "#1D7A6E", 9, POINT, True,  True, QgsPalLayerSettings.QuadrantAboveRight),
+        "poles":         ("pole_id",                  False, "#1A3A5C", 9, POINT, True,  True),
+        "ducts":         (length_expr("\"duct_id\""),   True,  "#555555", 7, LINE,  False, False),
+        "drop_ducts":    (length_expr("\"ddct_id\""),   True,  "#8B4513", 7, LINE,  False, False),
+        "build_areas":   ("area_id",                  False, "#1A3A5C", 9, POINT, False, False),
     }
 
     spec = config.get(internal)
     if not spec:
         return
 
-    field, is_expr, colour, size, placement = spec
+    field, is_expr, colour, size, placement, bold, use_buffer, *rest = spec
+    quad = rest[0] if rest else QgsPalLayerSettings.QuadrantAboveLeft
+
+    font = QFont("Arial", size)
+    font.setBold(bold)
 
     text_format = QgsTextFormat()
-    text_format.setFont(QFont("Arial", size))
+    text_format.setFont(font)
     text_format.setSize(size)
     text_format.setColor(QColor(colour))
+
+    if use_buffer:
+        buf = QgsTextBufferSettings()
+        buf.setEnabled(True)
+        buf.setSize(1.0)
+        buf.setSizeUnit(QgsUnitTypes.RenderMillimeters)
+        buf.setColor(QColor(255, 255, 255))
+        text_format.setBuffer(buf)
 
     settings = QgsPalLayerSettings()
     settings.fieldName    = field
@@ -190,6 +205,11 @@ def _apply_labels(layer):
     settings.enabled      = True
     settings.placement    = placement
     settings.setFormat(text_format)
+
+    if placement == POINT:
+        settings.quadOffset = quad
+        settings.dist       = 2.0
+        settings.distUnits  = QgsUnitTypes.RenderMillimeters
 
     layer.setLabeling(QgsVectorLayerSimpleLabeling(settings))
     layer.setLabelsEnabled(True)
@@ -214,6 +234,20 @@ class ConductorProject:
 
         existing = root.findGroup(f"Conductor — {self.project_name}")
         if existing:
+            # Remove all map layers registered under this group from the
+            # project registry before removing the group node — otherwise
+            # they remain as orphaned duplicates in the registry.
+            def _collect_layer_ids(node):
+                ids = []
+                from qgis.core import QgsLayerTree
+                if QgsLayerTree.isLayer(node):
+                    ids.append(node.layerId())
+                for child in node.children():
+                    ids.extend(_collect_layer_ids(child))
+                return ids
+            stale_ids = _collect_layer_ids(existing)
+            if stale_ids:
+                QgsProject.instance().removeMapLayers(stale_ids)
             root.removeChildNode(existing)
 
         top = root.insertGroup(0, f"Conductor — {self.project_name}")

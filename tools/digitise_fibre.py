@@ -84,6 +84,20 @@ def _snap_to_fibre_node(canvas, project, canvas_pos, radius_px=14):
                 best_id   = feat[id_field]
                 best_type = node_type
 
+    # Poles live in chambers layer with chamber_type=PIA_POLE
+    chambers = project.get_layer("chambers")
+    if chambers:
+        for feat in chambers.getFeatures(QgsFeatureRequest().setFilterRect(rect)):
+            if feat["chamber_type"] != "PIA_POLE":
+                continue
+            fp   = feat.geometry().asPoint()
+            dist = math.sqrt((fp.x()-pt_27700.x())**2+(fp.y()-pt_27700.y())**2)
+            if dist < best_dist:
+                best_dist = dist
+                best_pt   = fp
+                best_id   = feat["chamber_id"]
+                best_type = "POLE"
+
     return best_pt, best_id, best_type
 
 
@@ -117,6 +131,45 @@ def _find_duct_for_nodes(project, from_id, to_id):
 
     return None
 
+
+
+def _snap_to_duct_vertex(canvas, project, canvas_pos, radius_px=14):
+    """Snap to any vertex of any duct line — allows fibre to mirror duct route exactly."""
+    canvas_crs = canvas.mapSettings().destinationCrs()
+    target_crs = QgsCoordinateReferenceSystem("EPSG:27700")
+    canvas_pt  = canvas.getCoordinateTransform().toMapCoordinates(canvas_pos)
+    if canvas_crs != target_crs:
+        xform = QgsCoordinateTransform(canvas_crs, target_crs, QgsProject.instance())
+        pt_27700 = xform.transform(canvas_pt)
+    else:
+        pt_27700 = canvas_pt
+
+    radius = canvas.mapUnitsPerPixel() * radius_px
+    rect   = QgsRectangle(
+        pt_27700.x()-radius, pt_27700.y()-radius,
+        pt_27700.x()+radius, pt_27700.y()+radius,
+    )
+
+    duct_layer = project.get_layer("ducts")
+    if not duct_layer:
+        return None
+
+    best_dist = radius
+    best_pt   = None
+
+    for feat in duct_layer.getFeatures(QgsFeatureRequest().setFilterRect(rect)):
+        geom = feat.geometry()
+        if geom is None:
+            continue
+        # Check every vertex of this linestring
+        for v in geom.vertices():
+            vx, vy = v.x(), v.y()
+            dist = math.sqrt((vx - pt_27700.x())**2 + (vy - pt_27700.y())**2)
+            if dist < best_dist:
+                best_dist = dist
+                best_pt   = QgsPointXY(vx, vy)
+
+    return best_pt
 
 # ═══════════════════════════════════════════════════════════════════════════
 # FIBRE CABLE FORM
@@ -290,6 +343,11 @@ class DigitiseFibreMapTool(QgsMapTool):
         self._rubber.setColor(QColor(29, 122, 110, 200))
         self._rubber.setWidth(2)
 
+        # Floating segment — lighter preview to cursor
+        self._float_rubber = QgsRubberBand(self._canvas, QgsWkbTypes.LineGeometry)
+        self._float_rubber.setColor(QColor(29, 122, 110, 100))
+        self._float_rubber.setWidth(1)
+
         self._snap_rubber = QgsRubberBand(self._canvas, QgsWkbTypes.PointGeometry)
         self._snap_rubber.setColor(QColor(200, 90, 0, 220))
         self._snap_rubber.setIconSize(10)
@@ -313,10 +371,24 @@ class DigitiseFibreMapTool(QgsMapTool):
         return xform.transform(pt_27700)
 
     def canvasMoveEvent(self, event):
+        # Primary snap: joints/pops
         snapped_pt, _, _ = _snap_to_fibre_node(self._canvas, self._project, event.pos())
+
+        # Secondary snap: duct vertices (only when not snapping to a node)
+        if snapped_pt is None and self._points:
+            snapped_pt = _snap_to_duct_vertex(self._canvas, self._project, event.pos())
+
         self._snap_rubber.reset(QgsWkbTypes.PointGeometry)
         if snapped_pt:
             self._snap_rubber.addPoint(self._to_canvas(snapped_pt), True)
+
+        # Floating segment from last committed vertex to cursor
+        self._float_rubber.reset(QgsWkbTypes.LineGeometry)
+        if self._points:
+            cursor_canvas = self.toMapCoordinates(event.pos())
+            cursor_27700  = snapped_pt if snapped_pt else self._to_27700(cursor_canvas)
+            self._float_rubber.addPoint(self._to_canvas(self._points[-1]))
+            self._float_rubber.addPoint(self._to_canvas(cursor_27700), True)
 
     def canvasPressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -327,7 +399,12 @@ class DigitiseFibreMapTool(QgsMapTool):
                 pt_27700 = snapped_pt
                 nid, ntype = node_id, node_type
             else:
-                pt_27700 = self._to_27700(self.toMapCoordinates(event.pos()))
+                # Try duct-vertex snap as fallback
+                duct_pt = _snap_to_duct_vertex(self._canvas, self._project, event.pos())
+                if duct_pt:
+                    pt_27700 = duct_pt
+                else:
+                    pt_27700 = self._to_27700(self.toMapCoordinates(event.pos()))
                 nid, ntype = None, None
 
             self._points.append(pt_27700)
@@ -379,6 +456,16 @@ class DigitiseFibreMapTool(QgsMapTool):
         from_type  = self._node_types[0] or "UNKNOWN"
         to_node    = self._node_ids[-1]  or "unknown"
         to_type    = self._node_types[-1]or "UNKNOWN"
+
+        # Guard: cables must flow cabinet-outward. Ending on a POP means the
+        # user drew the cable backwards — reject and ask them to redraw.
+        if to_type == "POP":
+            QMessageBox.warning(None, "Conductor — Wrong Direction",
+                "Fibre cables must be drawn cabinet → outward.\n\n"
+                "You appear to have drawn this cable ending at the cabinet.\n"
+                "Please start from the cabinet (or a joint) and draw outward.")
+            self._reset()
+            return
 
         # Try to find matching duct
         duct_feat = None
@@ -440,20 +527,16 @@ class DigitiseFibreMapTool(QgsMapTool):
 
     def _reset(self):
         self._points=[]; self._node_ids=[]; self._node_types=[]
-        self._rubber.reset(); self._snap_rubber.reset()
+        self._rubber.reset(); self._float_rubber.reset(); self._snap_rubber.reset()
 
     def deactivate(self):
         """Clean up rubber bands when tool is deactivated."""
-        try:
-            self._rubber.reset()
-            self._canvas.scene().removeItem(self._rubber)
-        except Exception:
-            pass
-        try:
-            self._snap_rubber.reset()
-            self._canvas.scene().removeItem(self._snap_rubber)
-        except Exception:
-            pass
+        for rb in (self._rubber, self._float_rubber, self._snap_rubber):
+            try:
+                rb.reset()
+                self._canvas.scene().removeItem(rb)
+            except Exception:
+                pass
         self._canvas.refresh()
         super().deactivate()
 

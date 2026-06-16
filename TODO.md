@@ -138,3 +138,15 @@ ALTER TABLE ducts ADD COLUMN sleeve_length_m REAL;
 - [ ] Network coverage heatmap (homes passed vs premises layer)
 - [ ] Take-up tracker (demand_tier + registered vs connected)
 - [ ] Export to KMZ for sharing with non-GIS stakeholders
+## Design Decisions
+
+### Splitter fibre consumption (fibre_assign.py)
+Splitters consume fibres as follows:
+- **F1** = splitter input (the single incoming fibre)
+- **F2 onwards** = splitter port outputs (one per port)
+- A **1:4** consumes 5 fibres total (F1 input + F2–F5 ports)
+- A **1:8** consumes 9 fibres total (F1 input + F2–F9 ports)
+- Onward through-splices start at the next fibre after the last port
+
+This matches physical splitter behaviour where input and outputs are distinct fibre positions.
+

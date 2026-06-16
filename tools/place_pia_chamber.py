@@ -106,6 +106,16 @@ class PlacePIAChamberDialog(QDialog):
         fl.addWidget(self._section("PHYSICAL"))
         f2 = QFormLayout(); f2.setSpacing(8); f2.setLabelAlignment(Qt.AlignRight)
 
+        self.pia_chamber_type = QComboBox()
+        self.pia_chamber_type.addItems([
+            "FW1",  "FW2",  "FW3",  "FW4",  "FW5",  "FW6",  "FW7",
+            "FW8",  "FW9",  "FW10", "FW11", "FW12", "FW13", "FW14",
+            "CW1",  "CW2",  "CW3",
+            "MH",
+        ])
+        self.pia_chamber_type.setStyleSheet(INPUT_STYLE)
+        f2.addRow(self._lbl("PIA Chamber Type"), self.pia_chamber_type)
+
         self.surface_type = QComboBox()
         self.surface_type.addItems(["— not set —", "FOOTWAY", "VERGE", "CARRIAGEWAY", "PRIVATE"])
         self.surface_type.setStyleSheet(INPUT_STYLE)
@@ -134,7 +144,8 @@ class PlacePIAChamberDialog(QDialog):
         st = self.surface_type.currentText()
         return {
             "chamber_id":    self._chamber_id,
-            "chamber_type":  "PIA_UG_CHAMBER",
+            "chamber_type":     "PIA_UG_CHAMBER",
+            "pia_chamber_type": self.pia_chamber_type.currentText(),
             "area_id":       self._area_id,
             "pop_id":        self._pop_id,
             "openreach_ref": self.openreach_ref.text().strip() or None,

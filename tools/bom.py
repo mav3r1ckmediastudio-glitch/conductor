@@ -41,46 +41,86 @@ from ..conductor_utils import get_layer, fld, val, LayerEditContext, NAVY, TEAL,
 # ── Default unit costs (£) ────────────────────────────────────────────────────
 # Sourced from Gigaloch material costs sheet (2022 — update as needed)
 DEFAULT_COSTS = {
-    "shotgun_duct_m":       1.05,
-    "duct_16mm_m":          0.37,
-    "duct_7mm_m":           0.17,
-    "cable_spine_m":        0.66,   # 48F micro-blown
-    "cable_7mm_m":          0.11,   # 7mm fibre
-    "chamber_each":       175.10,
-    "joint_each":         139.99,
-    "splitter_1x8_each":   61.75,
-    "splitter_1x4_each":  149.81,
-    "splitter_1x2_each":   20.00,   # estimate
-    "splitter_1x16_each":  80.00,   # estimate
-    "splitter_1x32_each": 120.00,   # estimate
-    "bundle_m":             0.11,   # same as 7mm fibre
-    "drop_duct_m":          0.17,
-    "ont_each":            36.75,
-    "road_crossing_each": 1500.00,
-    "pole_each":           250.00,   # estimate
-    "cbt_each":            180.00,   # estimate
-    "aerial_cable_m":        0.85,   # aerial self-support
-    "aerial_drop_m":         0.22,   # aerial drop wire
-    "stream_crossing_each":  800.00,  # estimate — directional drill/bore under watercourse
-    "scaffold_bar_m":          8.50,  # estimate — galvanised scaffold tube sleeve, per metre
+    # ── Fibre cable — per metre by core count ─────────────────────────────
+    "cable_12f_m":          0.47,
+    "cable_24f_m":          0.54,
+    "cable_48f_m":          0.62,
+    "cable_72f_m":          0.65,
+    "cable_96f_m":          0.99,
+    "cable_aerial_48f_m":   0.59,   # 48F aerial HDPE G657A1
+    "cable_aerial_24f_m":   0.54,   # 24F aerial drop cable
+    "cable_7mm_m":          0.11,   # 7mm fibre bundle
 
-    # Cabinet active equipment (Cabinet Cost Calculator)
-    # — from Gigaloch Cabinet Calculator spreadsheet
-    "dux_shelf_each":        900.00,  # DU-X Rectifier Shelf (Known)
-    "inverter_each":         140.00,  # Inverter — 1 per DU-X shelf
-    "mgmt_switch_each":      350.00,  # Management/OOB Switch (Known) — 1 per cabinet
-    "calix_shelf_each":      400.00,  # Calix E7-2 Shelf (Approx)
-    "gpon_card_each":       4200.00,  # Calix GPON Card (Approx)
-    "gpon_optic_each":       110.00,  # Calix GPON Optic (Approx)
-    "battery_set_each":      190.00,  # Battery Set (Known)
-    "patch_panel_each":       60.00,  # Patch Panel (Assumption)
-    "aggreg_router_each":   8000.00,  # Aggregation Router (Approx)
-    "sundries_each":         150.00,  # Sundries (wiring, PDUs etc) — 1 per cabinet
-    # Cabinet build (only applies when pop_type == CABINET)
-    "cabinet_enclosure_each":1500.00, # Cabinet inc 2x fans (Assumption)
-    "groundworks_each":     1000.00,  # Groundworks (Assumption)
-    "electrical_hookup_each":500.00,  # Electrical Hookup
-    "backhaul_install_each": 950.00,  # Backhaul Install
+    # ── Duct — per metre ──────────────────────────────────────────────────
+    "shotgun_duct_m":       1.33,
+    "flexi_duct_m":         1.17,
+    "duct_16mm_m":          0.44,
+    "duct_16mm_connector":  5.66,   # per join
+    "duct_16mm_end_stop":   2.21,   # per end
+    "duct_7mm_m":           0.14,
+    "duct_7mm_end_stop":    0.67,   # per drop
+    "drop_duct_m":          0.14,
+
+    # ── Chambers (own — includes lid) ────────────────────────────────────
+    "chamber_small_each":  175.10,
+    "chamber_large_each":  301.49,
+
+    # ── Joint closures ────────────────────────────────────────────────────
+    "joint_cmj_each":       66.81,  # Prysmian CMJ
+    "joint_fdnir_each":    122.38,  # FDNIR-AXBCWX
+    "joint_fsttb_a_each":   49.55,  # FSTTB-AXBTA11
+    "joint_fsttb_b_each":   46.57,  # FSTTB-AXXTA31
+    "joint_gland_each":     10.28,  # Prysmian circular port entry gland (per joint)
+
+    # ── Splitter modules (fitted into joint) ─────────────────────────────
+    "splitter_1x2_each":   20.00,
+    "splitter_1x4_each":    8.06,
+    "splitter_1x8_each":    8.62,
+    "splitter_1x16_each":  80.00,
+    "splitter_1x32_each": 120.00,
+
+    # ── PIA aerial ────────────────────────────────────────────────────────
+    "pole_each":           250.00,
+    "cbt_8port_each":      101.80,  # Evolv Multiport Pushlok 8-port 300m (standard)
+    "cbt_4port_each":       92.16,  # Corning OptiSheath 4-port
+    "cbt_12port_250m_each": 219.00, # Corning OptiSheath 12-port 250m
+    "cbt_12port_350m_each": 316.03, # Corning OptiSheath 12-port 350m
+    "cbt_pole_bracket":     29.19,  # 2-way ROC CBT pole bracket hinge (per CBT)
+    "cbt_anti_creeper":      6.40,  # Mills external fibre locking mechanism (per CBT)
+    "aerial_dead_end":       2.17,  # PLP dead end per aerial span end
+
+    # ── Home installation ─────────────────────────────────────────────────
+    "ont_each":             33.36,
+    "ont_base_plate_each":   4.62,
+    "toby_box_each":         4.15,
+    "home_entry_kit_each":  27.79,
+    "router_each":          45.53,
+
+    # ── Network equipment (cabinet active) ───────────────────────────────
+    "cabinet_each":       4039.72,
+    "aggreg_router_each": 8000.00,
+    "dux_shelf_each":      900.00,
+    "eaton_apr48_each":    202.00,
+    "mgmt_switch_each":    200.00,
+    "calix_shelf_each":    556.63,
+    "gpon_card_each":     4200.00,
+    "gpon_optic_each":     110.00,
+    "battery_each":        145.00,  # Yuasa NP65-12l
+    "battery_shelf_each":   40.00,
+    "patch_panel_each":     60.00,
+    "pdu_13a_each":         45.00,
+    "pdu_iec_each":         35.00,
+    "rack_shelf_each":      20.00,
+    "lc_upc_1gb_each":       9.00,
+    "lc_upc_duplex_each":    5.00,
+    "electrical_hookup_each": 24.96,
+    "armoured_cable_m":      3.50,
+
+    # ── Crossings ─────────────────────────────────────────────────────────
+    "road_crossing_each": 1500.00,
+    "stream_crossing_each": 800.00,
+    "scaffold_bar_each":    34.62,
+
 }
 
 
@@ -123,307 +163,429 @@ def _area_features(layer, area_id=None):
 
 def build_bom(costs=None, project=None, area_id=None):
     """Build a BoM dict. If area_id is given, restrict to features whose
-    area_id matches (used by the Cabinet Cost Calculator for per-cabinet
-    rollups); otherwise covers the whole project."""
+    area_id matches; otherwise covers the whole project."""
     if costs is None:
         costs = load_costs()
 
     bom = {
-        "Summary":       [],
-        "Fibre Cable":   [],
-        "Drop & Bundle": [],
-        "Joints":        [],
-        "Duct":          [],
-        "PIA":           [],
+        "Summary":        [],
+        "Fibre Cable":    [],
+        "Drop & Bundle":  [],
+        "Joints":         [],
+        "Duct":           [],
+        "PIA":            [],
+        "Home Install":   [],
+        "Network Equip":  [],
     }
 
-    # ── Cables ────────────────────────────────────────────────────────────────
+    # ── Cable cost lookup by fibre count ─────────────────────────────────
+    CABLE_COST_MAP = {
+        12:  costs.get("cable_12f_m",        0.47),
+        24:  costs.get("cable_24f_m",        0.54),
+        48:  costs.get("cable_48f_m",        0.62),
+        72:  costs.get("cable_72f_m",        0.65),
+        96:  costs.get("cable_96f_m",        0.99),
+    }
+
+    # ── Joint cost lookup by closure_type ────────────────────────────────
+    JOINT_COST_MAP = {
+        "Prysmian CMJ":    costs.get("joint_cmj_each",    66.81),
+        "FDNIR-AXBCWX":   costs.get("joint_fdnir_each",  122.38),
+        "FSTTB-AXBTA11":  costs.get("joint_fsttb_a_each", 49.55),
+        "FSTTB-AXXTA31":  costs.get("joint_fsttb_b_each", 46.57),
+    }
+
+    # ── CBT cost lookup by model ──────────────────────────────────────────
+    CBT_COST_MAP = {
+        "Evolv Multiport Pushlok 8-port 300m (Corning)": costs.get("cbt_8port_each",       101.80),
+        "Corning OptiSheath 4-port":                     costs.get("cbt_4port_each",         92.16),
+        "Corning OptiSheath 12-port 250m drop":          costs.get("cbt_12port_250m_each",  219.00),
+        "Corning OptiSheath 12-port 350m drop":          costs.get("cbt_12port_350m_each",  316.03),
+    }
+
+    # ── Cables ────────────────────────────────────────────────────────────
     cable_layer = get_layer("Cables", project)
     if cable_layer:
-        cable_groups = {}
+        groups = {}
         for feat in _area_features(cable_layer, area_id):
-            fc     = int(feat["fibre_count"]) if feat["fibre_count"] and feat["fibre_count"] != NULL else 0
-            ft     = _str(feat["fibre_type"]) or "Unknown"
             ct     = _str(feat["cable_type"]) or "FEEDER"
-            key    = (fc, ft, ct)
+            fc     = int(feat["fibre_count"]) if feat["fibre_count"] and feat["fibre_count"] != NULL else 48
+            ft     = _str(feat["fibre_type"]) or "G.652D"
             length = _round2(feat["length_m"])
-            if key not in cable_groups:
-                cable_groups[key] = {"count": 0, "length_m": 0.0}
-            cable_groups[key]["count"]    += 1
-            cable_groups[key]["length_m"] += length
+            is_aerial = ct.upper() in ("AERIAL",)
+            is_tail   = ct.upper() == "CBT_TAIL"
+            key = (fc, ft, ct, is_aerial, is_tail)
+            if key not in groups:
+                groups[key] = {"count": 0, "length_m": 0.0}
+            groups[key]["count"]    += 1
+            groups[key]["length_m"] += length
 
-        for (fc, ft, ct), vals in sorted(cable_groups.items()):
-            unit_cost = costs.get("cable_spine_m", 0.66)
-            qty       = round(vals["length_m"], 1)
-            bom["Fibre Cable"].append({
-                "description": f"{fc}F {ft} Cable ({ct})",
-                "unit":        "m",
-                "qty":         qty,
-                "unit_cost":   unit_cost,
-                "total":       _cost(qty, unit_cost),
-                "notes":       f"{vals['count']} cable(s)",
+        for (fc, ft, ct, is_aerial, is_tail), vals in sorted(groups.items()):
+            qty = round(vals["length_m"], 1)
+            if is_aerial:
+                unit_cost = costs.get("cable_aerial_48f_m", 0.59) if fc >= 48 else costs.get("cable_aerial_24f_m", 0.54)
+                desc = f"{fc}F Aerial Cable G657A1 ({ct})"
+                tab  = "PIA"
+            elif is_tail:
+                unit_cost = CABLE_COST_MAP.get(fc, costs.get("cable_48f_m", 0.62))
+                desc = f"{fc}F CBT Tail Cable"
+                tab  = "PIA"
+            else:
+                unit_cost = CABLE_COST_MAP.get(fc, costs.get("cable_48f_m", 0.62))
+                desc = f"{fc}F {ft} Cable ({ct})"
+                tab  = "Fibre Cable"
+            bom[tab].append({
+                "description": desc,
+                "unit": "m", "qty": qty,
+                "unit_cost": unit_cost, "total": _cost(qty, unit_cost),
+                "notes": f"{vals['count']} cable(s)",
             })
 
-    # ── Bundles ───────────────────────────────────────────────────────────────
+    # ── Bundles ───────────────────────────────────────────────────────────
     bundle_layer = get_layer("Bundles", project)
     if bundle_layer:
-        bundle_groups = {}
+        bgroups = {}
         for feat in _area_features(bundle_layer, area_id):
             fc     = int(feat["fibre_count"]) if feat["fibre_count"] and feat["fibre_count"] != NULL else 1
             length = _round2(feat["length_m"])
-            if fc not in bundle_groups:
-                bundle_groups[fc] = {"count": 0, "length_m": 0.0}
-            bundle_groups[fc]["count"]    += 1
-            bundle_groups[fc]["length_m"] += length
-
-        for fc, vals in sorted(bundle_groups.items()):
-            unit_cost = costs.get("bundle_m", 0.11)
-            qty       = round(vals["length_m"], 1)
+            bgroups[fc] = bgroups.get(fc, {"count": 0, "length_m": 0.0})
+            bgroups[fc]["count"]    += 1
+            bgroups[fc]["length_m"] += length
+        for fc, vals in sorted(bgroups.items()):
+            unit_cost = costs.get("cable_7mm_m", 0.11)
+            qty = round(vals["length_m"], 1)
             bom["Drop & Bundle"].append({
-                "description": f"{fc}F Bundle (premises drop)",
-                "unit":        "m",
-                "qty":         qty,
-                "unit_cost":   unit_cost,
-                "total":       _cost(qty, unit_cost),
-                "notes":       f"{vals['count']} bundle(s)",
+                "description": f"{fc}F Fibre Bundle (drop)",
+                "unit": "m", "qty": qty,
+                "unit_cost": unit_cost, "total": _cost(qty, unit_cost),
+                "notes": f"{vals['count']} bundle(s)",
             })
 
-    # ── Drop Ducts ────────────────────────────────────────────────────────────
+    # ── Drop Ducts ────────────────────────────────────────────────────────
     ddct_layer = get_layer("Drop Ducts", project)
+    ddct_count  = 0
+    aerial_drop_len   = 0.0
+    aerial_drop_count = 0
     if ddct_layer:
-        total_len   = 0.0
-        total_count = 0
+        total_len = 0.0
         for feat in _area_features(ddct_layer, area_id):
-            total_len   += _round2(feat["length_m"])
-            total_count += 1
-        if total_count:
-            unit_cost = costs.get("drop_duct_m", 0.17)
-            qty       = round(total_len, 1)
-            bom["Duct"].append({
+            dt = _str(feat["drop_type"]).upper()
+            if dt == "PIA_AERIAL_DROP":
+                aerial_drop_len   += _round2(feat["length_m"])
+                aerial_drop_count += 1
+            else:
+                total_len  += _round2(feat["length_m"])
+                ddct_count += 1
+        if ddct_count:
+            unit_cost = costs.get("drop_duct_m", 0.14)
+            qty = round(total_len, 1)
+            bom["Drop & Bundle"].append({
                 "description": "7mm Speedpipe Drop Duct",
-                "unit":        "m",
-                "qty":         qty,
-                "unit_cost":   unit_cost,
-                "total":       _cost(qty, unit_cost),
-                "notes":       f"{total_count} drop(s)",
+                "unit": "m", "qty": qty,
+                "unit_cost": unit_cost, "total": _cost(qty, unit_cost),
+                "notes": f"{ddct_count} drop(s)",
+            })
+            # 7mm end stop — 1 per drop
+            uc_es = costs.get("duct_7mm_end_stop", 0.67)
+            bom["Drop & Bundle"].append({
+                "description": "7mm Duct End Stop",
+                "unit": "each", "qty": ddct_count,
+                "unit_cost": uc_es, "total": _cost(ddct_count, uc_es),
+                "notes": "1 per drop",
             })
 
-    # ── Joints ────────────────────────────────────────────────────────────────
+    # ── Joints ────────────────────────────────────────────────────────────
     joint_layer = get_layer("Joints", project)
+    joint_count = 0
+    cbt_groups  = {}
     if joint_layer:
         joint_groups    = {}
         splitter_groups = {}
         for feat in _area_features(joint_layer, area_id):
-            jt  = _str(feat["joint_type"]) or "SPLICE"
-            ct  = _str(feat["closure_type"]) or "Standard"
+            jt = _str(feat["joint_type"]) or "SPLICE"
+            ct = _str(feat["closure_type"]) or "Prysmian CMJ"
+            if jt == "CBT":
+                model = _str(feat["cbt_model"]) or "Evolv Multiport Pushlok 8-port 300m (Corning)"
+                cbt_groups[model] = cbt_groups.get(model, 0) + 1
+                continue
             key = (jt, ct)
             joint_groups[key] = joint_groups.get(key, 0) + 1
+            joint_count += 1
             if feat["has_splitter"] and feat["has_splitter"] != NULL and feat["has_splitter"]:
                 sr = _str(feat["split_ratio"]) or "Unknown"
                 splitter_groups[sr] = splitter_groups.get(sr, 0) + 1
 
         for (jt, ct), count in sorted(joint_groups.items()):
-            unit_cost = costs.get("joint_each", 139.99)
+            unit_cost = JOINT_COST_MAP.get(ct, costs.get("joint_cmj_each", 66.81))
             bom["Joints"].append({
-                "description": f"Joint Closure — {jt.replace('_',' ').title()}",
-                "unit":        "each",
-                "qty":         count,
-                "unit_cost":   unit_cost,
-                "total":       _cost(count, unit_cost),
-                "notes":       ct or "Standard",
+                "description": f"Joint Closure — {ct}",
+                "unit": "each", "qty": count,
+                "unit_cost": unit_cost, "total": _cost(count, unit_cost),
+                "notes": jt.replace("_", " ").title(),
+            })
+
+        # Port entry gland — 1 per joint
+        if joint_count:
+            uc_g = costs.get("joint_gland_each", 10.28)
+            bom["Joints"].append({
+                "description": "Prysmian Port Entry Gland",
+                "unit": "each", "qty": joint_count,
+                "unit_cost": uc_g, "total": _cost(joint_count, uc_g),
+                "notes": "1 per joint closure",
             })
 
         for sr, count in sorted(splitter_groups.items()):
-            # Pick cost by ratio
             ratio_map = {
                 "1:2": "splitter_1x2_each", "1:4": "splitter_1x4_each",
                 "1:8": "splitter_1x8_each", "1:16": "splitter_1x16_each",
                 "1:32": "splitter_1x32_each",
             }
-            cost_key  = ratio_map.get(sr, "splitter_1x8_each")
-            unit_cost = costs.get(cost_key, 61.75)
+            unit_cost = costs.get(ratio_map.get(sr, "splitter_1x8_each"), 8.62)
             bom["Joints"].append({
-                "description": f"Splitter {sr}",
-                "unit":        "each",
-                "qty":         count,
-                "unit_cost":   unit_cost,
-                "total":       _cost(count, unit_cost),
-                "notes":       "Passive optical splitter",
+                "description": f"Splitter Module {sr}",
+                "unit": "each", "qty": count,
+                "unit_cost": unit_cost, "total": _cost(count, unit_cost),
+                "notes": "Passive optical splitter, fitted into joint",
             })
 
-    # ── Ducts ─────────────────────────────────────────────────────────────────
+    # ── Ducts ─────────────────────────────────────────────────────────────
     duct_layer = get_layer("Ducts", project)
     if duct_layer:
-        duct_groups = {}
-        road_crossing_count = 0
+        duct_fields           = [f.name() for f in duct_layer.fields()]
+        duct_groups           = {}
+        road_crossing_count   = 0
         stream_crossing_count = 0
-        scaffold_bar_length_m = 0.0
+        scaffold_bar_count    = 0
         for feat in _area_features(duct_layer, area_id):
             dt     = _str(feat["duct_type"]) or "STANDARD"
             st     = _str(feat["surface_type"]) or "Unknown"
-            key    = (dt, st)
             length = _round2(feat["length_m"])
+            key    = (dt, st)
             if key not in duct_groups:
                 duct_groups[key] = {"count": 0, "length_m": 0.0}
             duct_groups[key]["count"]    += 1
             duct_groups[key]["length_m"] += length
-
             if st.upper() == "ROAD":
                 road_crossing_count += 1
             elif st.upper() == "WATERCOURSE":
                 stream_crossing_count += 1
-
-            if _str(feat["sleeve_type"]).upper() == "SCAFFOLD_BAR":
-                sleeve_len = feat["sleeve_length_m"]
-                if sleeve_len:
-                    scaffold_bar_length_m += _round2(sleeve_len)
+            if "sleeve_type" in duct_fields and _str(feat["sleeve_type"]).upper() == "SCAFFOLD_BAR":
+                scaffold_bar_count += 1
 
         for (dt, st), vals in sorted(duct_groups.items()):
             if "SHOTGUN" in dt.upper():
-                unit_cost = costs.get("shotgun_duct_m", 1.05)
+                unit_cost = costs.get("shotgun_duct_m", 1.33)
+            elif "FLEXI" in dt.upper():
+                unit_cost = costs.get("flexi_duct_m", 1.17)
             elif "7MM" in dt.upper():
-                unit_cost = costs.get("duct_7mm_m", 0.17)
+                unit_cost = costs.get("duct_7mm_m", 0.14)
             else:
-                unit_cost = costs.get("duct_16mm_m", 0.37)
+                unit_cost = costs.get("duct_16mm_m", 0.44)
             qty = round(vals["length_m"], 1)
             bom["Duct"].append({
                 "description": f"{dt.replace('_',' ').title()} Duct ({st.replace('_',' ').title()})",
-                "unit":        "m",
-                "qty":         qty,
-                "unit_cost":   unit_cost,
-                "total":       _cost(qty, unit_cost),
-                "notes":       f"{vals['count']} run(s)",
+                "unit": "m", "qty": qty,
+                "unit_cost": unit_cost, "total": _cost(qty, unit_cost),
+                "notes": f"{vals['count']} run(s)",
             })
 
         if road_crossing_count:
-            unit_cost = costs.get("road_crossing_each", 1500.00)
+            uc = costs.get("road_crossing_each", 1500.00)
             bom["Duct"].append({
                 "description": "Road Crossing (works/permit allowance)",
-                "unit":        "each",
-                "qty":         road_crossing_count,
-                "unit_cost":   unit_cost,
-                "total":       _cost(road_crossing_count, unit_cost),
-                "notes":       "",
+                "unit": "each", "qty": road_crossing_count,
+                "unit_cost": uc, "total": _cost(road_crossing_count, uc), "notes": "",
             })
-
         if stream_crossing_count:
-            unit_cost = costs.get("stream_crossing_each", 800.00)
+            uc = costs.get("stream_crossing_each", 800.00)
             bom["Duct"].append({
-                "description": "Stream Crossing (works/consent allowance)",
-                "unit":        "each",
-                "qty":         stream_crossing_count,
-                "unit_cost":   unit_cost,
-                "total":       _cost(stream_crossing_count, unit_cost),
-                "notes":       "",
+                "description": "Stream Crossing (consent allowance)",
+                "unit": "each", "qty": stream_crossing_count,
+                "unit_cost": uc, "total": _cost(stream_crossing_count, uc), "notes": "",
+            })
+        if scaffold_bar_count:
+            uc = costs.get("scaffold_bar_each", 34.62)
+            bom["Duct"].append({
+                "description": "Scaff Bar (duct sleeve)",
+                "unit": "each", "qty": scaffold_bar_count,
+                "unit_cost": uc, "total": _cost(scaffold_bar_count, uc), "notes": "",
             })
 
-        if scaffold_bar_length_m:
-            unit_cost = costs.get("scaffold_bar_m", 8.50)
-            qty = round(scaffold_bar_length_m, 1)
-            bom["Duct"].append({
-                "description": "Scaffold Bar (duct sleeve)",
-                "unit":        "m",
-                "qty":         qty,
-                "unit_cost":   unit_cost,
-                "total":       _cost(qty, unit_cost),
-                "notes":       "Protective sleeve at stream/road crossings",
-            })
-
-
-    # ── PIA (Poles, CBTs, Aerial Cable, Aerial Drops) ─────────────────────────
+    # ── Chambers (own — self-build, costed) ──────────────────────────────
     chamber_layer = get_layer("Chambers", project)
     if chamber_layer:
-        pole_count = 0
+        fields      = [f.name() for f in chamber_layer.fields()]
+        small_count = 0
+        large_count = 0
+        pole_count  = 0
         for feat in _area_features(chamber_layer, area_id):
-            pt = _str(feat["pole_type"]) if "pole_type" in [f.name() for f in feat.fields()] else ""
-            if pt:
+            ct = _str(feat["chamber_type"])
+            if ct == "PIA_POLE":
                 pole_count += 1
+                continue
+            if ct == "PIA_UG_CHAMBER":
+                continue  # PIA — not costed
+            size = _str(feat["chamber_size"]) if "chamber_size" in fields else "SMALL"
+            if size == "LARGE":
+                large_count += 1
+            else:
+                small_count += 1
+
+        if small_count:
+            uc = costs.get("chamber_small_each", 175.10)
+            bom["Duct"].append({
+                "description": "Chamber — Small (inc. lid)",
+                "unit": "each", "qty": small_count,
+                "unit_cost": uc, "total": _cost(small_count, uc), "notes": "",
+            })
+        if large_count:
+            uc = costs.get("chamber_large_each", 301.49)
+            bom["Duct"].append({
+                "description": "Chamber — Large (inc. lid)",
+                "unit": "each", "qty": large_count,
+                "unit_cost": uc, "total": _cost(large_count, uc), "notes": "",
+            })
         if pole_count:
-            unit_cost = costs.get("pole_each", 250.00)
+            uc = costs.get("pole_each", 250.00)
             bom["PIA"].append({
-                "description": "PIA Pole",
-                "unit":        "each",
-                "qty":         pole_count,
-                "unit_cost":   unit_cost,
-                "total":       _cost(pole_count, unit_cost),
-                "notes":       "Openreach PIA pole attachment",
+                "description": "PIA Pole Attachment",
+                "unit": "each", "qty": pole_count,
+                "unit_cost": uc, "total": _cost(pole_count, uc),
+                "notes": "Openreach PIA pole",
             })
 
-    joint_layer2 = get_layer("Joints", project)
-    if joint_layer2:
-        cbt_count = sum(1 for f in _area_features(joint_layer2, area_id) if _str(f["joint_type"]) == "CBT")
-        if cbt_count:
-            unit_cost = costs.get("cbt_each", 180.00)
-            bom["PIA"].append({
-                "description": "CBT (Connectorised Block Terminal)",
-                "unit":        "each",
-                "qty":         cbt_count,
-                "unit_cost":   unit_cost,
-                "total":       _cost(cbt_count, unit_cost),
-                "notes":       "Pole-mounted terminal box",
-            })
+    # ── CBTs ──────────────────────────────────────────────────────────────
+    total_cbt_count = sum(cbt_groups.values())
+    for model, count in sorted(cbt_groups.items()):
+        unit_cost = CBT_COST_MAP.get(model, costs.get("cbt_8port_each", 101.80))
+        bom["PIA"].append({
+            "description": f"CBT — {model}",
+            "unit": "each", "qty": count,
+            "unit_cost": unit_cost, "total": _cost(count, unit_cost),
+            "notes": "Pole-mounted terminal",
+        })
+    if total_cbt_count:
+        uc_b = costs.get("cbt_pole_bracket", 29.19)
+        bom["PIA"].append({
+            "description": "CBT Pole Bracket Hinge (2-way ROC)",
+            "unit": "each", "qty": total_cbt_count,
+            "unit_cost": uc_b, "total": _cost(total_cbt_count, uc_b),
+            "notes": "1 per CBT",
+        })
+        uc_ac = costs.get("cbt_anti_creeper", 6.40)
+        bom["PIA"].append({
+            "description": "Anti-Creeper (Mills external locking)",
+            "unit": "each", "qty": total_cbt_count,
+            "unit_cost": uc_ac, "total": _cost(total_cbt_count, uc_ac),
+            "notes": "1 per CBT",
+        })
 
+    # ── Aerial spans — dead ends ──────────────────────────────────────────
     cable_layer2 = get_layer("Cables", project)
     if cable_layer2:
-        aerial_groups = {}
-        for feat in _area_features(cable_layer2, area_id):
-            if _str(feat["cable_type"]).upper() != "AERIAL":
-                continue
-            fc  = int(feat["fibre_count"]) if feat["fibre_count"] and feat["fibre_count"] != NULL else 0
-            key = fc
-            length = _round2(feat["length_m"])
-            if key not in aerial_groups:
-                aerial_groups[key] = {"count": 0, "length_m": 0.0}
-            aerial_groups[key]["count"]    += 1
-            aerial_groups[key]["length_m"] += length
-        for fc, vals in sorted(aerial_groups.items()):
-            unit_cost = costs.get("aerial_cable_m", 0.85)
-            qty = round(vals["length_m"], 1)
+        aerial_span_count = sum(
+            1 for f in _area_features(cable_layer2, area_id)
+            if _str(f["cable_type"]).upper() == "AERIAL"
+        )
+        if aerial_span_count:
+            dead_end_qty = aerial_span_count * 2  # one at each end
+            uc_de = costs.get("aerial_dead_end", 2.17)
             bom["PIA"].append({
-                "description": f"{fc}F Aerial Self-Support Cable",
-                "unit":        "m",
-                "qty":         qty,
-                "unit_cost":   unit_cost,
-                "total":       _cost(qty, unit_cost),
-                "notes":       f"{vals['count']} span(s)",
+                "description": "PLP Dead End (aerial cable)",
+                "unit": "each", "qty": dead_end_qty,
+                "unit_cost": uc_de, "total": _cost(dead_end_qty, uc_de),
+                "notes": f"2 per span × {aerial_span_count} span(s)",
             })
 
-    ddct_layer2 = get_layer("Drop Ducts", project)
-    if ddct_layer2:
-        aerial_drop_len   = 0.0
-        aerial_drop_count = 0
-        for feat in _area_features(ddct_layer2, area_id):
-            if _str(feat["drop_type"]).upper() == "PIA_AERIAL_DROP":
-                aerial_drop_len   += _round2(feat["length_m"])
-                aerial_drop_count += 1
-        if aerial_drop_count:
-            unit_cost = costs.get("aerial_drop_m", 0.22)
-            qty = round(aerial_drop_len, 1)
-            bom["PIA"].append({
-                "description": "PIA Aerial Drop Wire",
-                "unit":        "m",
-                "qty":         qty,
-                "unit_cost":   unit_cost,
-                "total":       _cost(qty, unit_cost),
-                "notes":       f"{aerial_drop_count} drop(s)",
+    if aerial_drop_count:
+        uc = costs.get("cable_aerial_24f_m", 0.54)
+        qty = round(aerial_drop_len, 1)
+        bom["PIA"].append({
+            "description": "24F Aerial Drop Cable",
+            "unit": "m", "qty": qty,
+            "unit_cost": uc, "total": _cost(qty, uc),
+            "notes": f"{aerial_drop_count} drop(s)",
+        })
+
+    # ── Home installation — per routed customer ───────────────────────────
+    customer_layer = get_layer("Customers", project)
+    routed_count   = 0
+    if customer_layer:
+        fields = [f.name() for f in customer_layer.fields()]
+        for feat in _area_features(customer_layer, area_id):
+            status = _str(feat["status"]).upper() if "status" in fields else ""
+            if status in ("ROUTED", "LIVE", "INSTALLED"):
+                routed_count += 1
+
+    if not routed_count:
+        # Fall back to routed premises count
+        premises_layer = get_layer("Premises", project)
+        if premises_layer:
+            fields = [f.name() for f in premises_layer.fields()]
+            for feat in _area_features(premises_layer, area_id):
+                status = _str(feat["status"]).upper() if "status" in fields else ""
+                if status == "ROUTED":
+                    routed_count += 1
+
+    if routed_count:
+        for desc, key, default in [
+            ("ONT",                   "ont_each",             33.36),
+            ("ONT Base Plate",        "ont_base_plate_each",   4.62),
+            ("Toby Box",              "toby_box_each",         4.15),
+            ("Home Entry Kit",        "home_entry_kit_each",  27.79),
+        ]:
+            uc = costs.get(key, default)
+            bom["Home Install"].append({
+                "description": desc,
+                "unit": "each", "qty": routed_count,
+                "unit_cost": uc, "total": _cost(routed_count, uc),
+                "notes": f"{routed_count} routed premises",
             })
 
-    # ── Summary ───────────────────────────────────────────────────────────────
+    # ── Network equipment (per cabinet) ───────────────────────────────────
+    pop_layer = get_layer("exchange_pops", project)
+    if pop_layer:
+        for feat in _area_features(pop_layer, area_id):
+            cab_id = _str(feat["pop_id"])
+            for desc, key, default in [
+                ("Cabinet Enclosure",              "cabinet_each",        4039.72),
+                ("Aggregation Router",             "aggreg_router_each",  8000.00),
+                ("Eaton DU-X Rectifier Shelf",     "dux_shelf_each",       900.00),
+                ("Eaton APR48-ES",                 "eaton_apr48_each",     202.00),
+                ("Ubiquity Edgeswitch (mgmt)",     "mgmt_switch_each",     200.00),
+                ("Calix E7-2 Shelf + Install Kit", "calix_shelf_each",     556.63),
+                ("Calix E7-2 GPON-8 Card",         "gpon_card_each",      4200.00),
+                ("Calix GPON SFP",                 "gpon_optic_each",      110.00),
+                ("Yuasa NP65-12l Battery",         "battery_each",         145.00),
+                ("19in Battery Shelf",            "battery_shelf_each",    40.00),
+                ("Electrical Hookup",              "electrical_hookup_each", 24.96),
+            ]:
+                uc = costs.get(key, default)
+                bom["Network Equip"].append({
+                    "description": desc,
+                    "unit": "each", "qty": 1,
+                    "unit_cost": uc, "total": _cost(1, uc),
+                    "notes": cab_id,
+                })
+
+    # ── Summary ───────────────────────────────────────────────────────────
     def _total_cost(rows):
-        return round(sum(r["total"] for r in rows), 2)
+        return round(sum(r["total"] for r in rows if isinstance(r.get("total"), (int, float))), 2)
 
-    all_rows = (bom["Fibre Cable"] + bom["Drop & Bundle"] +
-                bom["Joints"] + bom["Duct"] + bom["PIA"])
-    grand_total = round(sum(r["total"] for r in all_rows), 2)
+    all_rows = (bom["Fibre Cable"] + bom["Drop & Bundle"] + bom["Joints"] +
+                bom["Duct"] + bom["PIA"] + bom["Home Install"] + bom["Network Equip"])
+    grand_total = round(sum(r["total"] for r in all_rows if isinstance(r.get("total"), (int, float))), 2)
 
     bom["Summary"] = [
-        {"description": "Fibre Cable",    "unit": "",     "qty": "", "unit_cost": "", "total": _total_cost(bom["Fibre Cable"]),   "notes": f"{len(bom['Fibre Cable'])} line(s)"},
-        {"description": "Drop & Bundle",  "unit": "",     "qty": "", "unit_cost": "", "total": _total_cost(bom["Drop & Bundle"]), "notes": f"{len(bom['Drop & Bundle'])} line(s)"},
-        {"description": "Joints",         "unit": "",     "qty": "", "unit_cost": "", "total": _total_cost(bom["Joints"]),        "notes": f"{len(bom['Joints'])} line(s)"},
-        {"description": "Duct",           "unit": "",     "qty": "", "unit_cost": "", "total": _total_cost(bom["Duct"]),          "notes": f"{len(bom['Duct'])} line(s)"},
-        {"description": "PIA",            "unit": "",     "qty": "", "unit_cost": "", "total": _total_cost(bom["PIA"]),           "notes": f"{len(bom['PIA'])} line(s)"},
-        {"description": "",               "unit": "",     "qty": "", "unit_cost": "", "total": "",                                "notes": ""},
-        {"description": "TOTAL",          "unit": "",     "qty": "", "unit_cost": "", "total": grand_total,                       "notes": "ex. VAT"},
+        {"description": "Fibre Cable",   "unit": "", "qty": "", "unit_cost": "", "total": _total_cost(bom["Fibre Cable"]),   "notes": f"{len(bom['Fibre Cable'])} line(s)"},
+        {"description": "Drop & Bundle", "unit": "", "qty": "", "unit_cost": "", "total": _total_cost(bom["Drop & Bundle"]), "notes": f"{len(bom['Drop & Bundle'])} line(s)"},
+        {"description": "Joints",        "unit": "", "qty": "", "unit_cost": "", "total": _total_cost(bom["Joints"]),        "notes": f"{len(bom['Joints'])} line(s)"},
+        {"description": "Duct",          "unit": "", "qty": "", "unit_cost": "", "total": _total_cost(bom["Duct"]),          "notes": f"{len(bom['Duct'])} line(s)"},
+        {"description": "PIA",           "unit": "", "qty": "", "unit_cost": "", "total": _total_cost(bom["PIA"]),           "notes": f"{len(bom['PIA'])} line(s)"},
+        {"description": "Home Install",  "unit": "", "qty": "", "unit_cost": "", "total": _total_cost(bom["Home Install"]),  "notes": f"{len(bom['Home Install'])} line(s)"},
+        {"description": "Network Equip", "unit": "", "qty": "", "unit_cost": "", "total": _total_cost(bom["Network Equip"]), "notes": f"{len(bom['Network Equip'])} line(s)"},
+        {"description": "",              "unit": "", "qty": "", "unit_cost": "", "total": "",          "notes": ""},
+        {"description": "TOTAL",         "unit": "", "qty": "", "unit_cost": "", "total": grand_total, "notes": "ex. VAT"},
     ]
 
     return bom
@@ -448,42 +610,71 @@ def edit_costs_dialog(parent, on_saved=None):
     fw = QWidget(); fl = QFormLayout(fw); fl.setSpacing(6)
 
     LABELS = {
-        "shotgun_duct_m":    "Shotgun duct (per m)",
-        "duct_16mm_m":       "16mm duct (per m)",
-        "duct_7mm_m":        "7mm duct (per m)",
-        "cable_spine_m":     "Spine cable (per m)",
-        "cable_7mm_m":       "7mm fibre cable (per m)",
-        "chamber_each":      "Chamber (each)",
-        "joint_each":        "Joint closure (each)",
-        "splitter_1x2_each": "Splitter 1:2 (each)",
-        "splitter_1x4_each": "Splitter 1:4 (each)",
-        "splitter_1x8_each": "Splitter 1:8 (each)",
-        "splitter_1x16_each":"Splitter 1:16 (each)",
-        "splitter_1x32_each":"Splitter 1:32 (each)",
-        "bundle_m":          "Bundle (per m)",
-        "drop_duct_m":       "Drop duct (per m)",
-        "ont_each":          "ONT (each)",
-        "road_crossing_each":"Road crossing (each)",
-        "stream_crossing_each":"Stream crossing (each)",
-        "scaffold_bar_m":    "Scaffold bar sleeve (per m)",
-        "pole_each":         "Pole (each)",
-        "cbt_each":          "CBT (each)",
-        "aerial_cable_m":    "Aerial cable (per m)",
-        "aerial_drop_m":     "Aerial drop wire (per m)",
-        "dux_shelf_each":     "DU-X Rectifier Shelf (each)",
-        "inverter_each":      "Inverter (each, 1 per DU-X)",
-        "mgmt_switch_each":   "Management/OOB Switch (per cabinet)",
-        "calix_shelf_each":   "Calix E7-2 Shelf (each)",
-        "gpon_card_each":     "Calix GPON Card (each)",
-        "gpon_optic_each":    "Calix GPON Optic (each)",
-        "battery_set_each":   "Battery Set (each)",
-        "patch_panel_each":   "Patch Panel (each)",
-        "aggreg_router_each": "Aggregation Router (each)",
-        "sundries_each":      "Sundries — wiring/PDUs (per cabinet)",
-        "cabinet_enclosure_each": "Cabinet enclosure inc. fans (per cabinet)",
-        "groundworks_each":   "Cabinet groundworks (per cabinet)",
-        "electrical_hookup_each": "Electrical hookup (per cabinet)",
-        "backhaul_install_each":  "Backhaul install (per cabinet)",
+        # Fibre cable
+        "cable_12f_m":           "12F fibre cable (per m)",
+        "cable_24f_m":           "24F fibre cable (per m)",
+        "cable_48f_m":           "48F fibre cable (per m)",
+        "cable_72f_m":           "72F fibre cable (per m)",
+        "cable_96f_m":           "96F fibre cable (per m)",
+        "cable_aerial_48f_m":    "48F aerial cable G657A1 (per m)",
+        "cable_aerial_24f_m":    "24F aerial drop cable (per m)",
+        "cable_7mm_m":           "7mm fibre bundle (per m)",
+        # Duct
+        "shotgun_duct_m":        "Shotgun duct (per m)",
+        "flexi_duct_m":          "Flexi-duct (per m)",
+        "duct_16mm_m":           "16mm duct (per m)",
+        "duct_16mm_connector":   "16mm duct connector (each)",
+        "duct_16mm_end_stop":    "16mm duct end stop (each)",
+        "duct_7mm_m":            "7mm duct (per m)",
+        "duct_7mm_end_stop":     "7mm duct end stop (each)",
+        "drop_duct_m":           "Drop duct 7mm (per m)",
+        # Chambers
+        "chamber_small_each":    "Chamber — Small inc. lid (each)",
+        "chamber_large_each":    "Chamber — Large inc. lid (each)",
+        # Joints
+        "joint_cmj_each":        "Joint — Prysmian CMJ (each)",
+        "joint_fdnir_each":      "Joint — FDNIR-AXBCWX (each)",
+        "joint_fsttb_a_each":    "Joint — FSTTB-AXBTA11 (each)",
+        "joint_fsttb_b_each":    "Joint — FSTTB-AXXTA31 (each)",
+        "joint_gland_each":      "Port entry gland (per joint)",
+        # Splitters
+        "splitter_1x2_each":     "Splitter module 1:2 (each)",
+        "splitter_1x4_each":     "Splitter module 1:4 (each)",
+        "splitter_1x8_each":     "Splitter module 1:8 (each)",
+        "splitter_1x16_each":    "Splitter module 1:16 (each)",
+        "splitter_1x32_each":    "Splitter module 1:32 (each)",
+        # PIA aerial
+        "pole_each":             "PIA pole attachment (each)",
+        "cbt_8port_each":        "CBT 8-port Evolv 300m (each)",
+        "cbt_4port_each":        "CBT 4-port Corning (each)",
+        "cbt_12port_250m_each":  "CBT 12-port Corning 250m (each)",
+        "cbt_12port_350m_each":  "CBT 12-port Corning 350m (each)",
+        "cbt_pole_bracket":      "CBT pole bracket hinge (each)",
+        "cbt_anti_creeper":      "Anti-creeper locking mechanism (each)",
+        "aerial_dead_end":       "PLP dead end per span end (each)",
+        # Home install
+        "ont_each":              "ONT (each)",
+        "ont_base_plate_each":   "ONT base plate (each)",
+        "toby_box_each":         "Toby box (each)",
+        "home_entry_kit_each":   "Home entry kit (each)",
+        "router_each":           "Router (each)",
+        # Network equipment
+        "cabinet_each":          "Cabinet enclosure (each)",
+        "aggreg_router_each":    "Aggregation router (each)",
+        "dux_shelf_each":        "Eaton DU-X rectifier shelf (each)",
+        "eaton_apr48_each":      "Eaton APR48-ES (each)",
+        "mgmt_switch_each":      "Ubiquity Edgeswitch mgmt (each)",
+        "calix_shelf_each":      "Calix E7-2 shelf + install kit (each)",
+        "gpon_card_each":        "Calix GPON-8 card (each)",
+        "gpon_optic_each":       "Calix GPON SFP (each)",
+        "battery_each":          "Yuasa NP65-12l battery (each)",
+        "battery_shelf_each":    "19in battery shelf (each)",
+        "electrical_hookup_each": "Electrical hookup (each)",
+        "armoured_cable_m":      "3-core armoured cable (per m)",
+        # Crossings
+        "road_crossing_each":    "Road crossing allowance (each)",
+        "stream_crossing_each":  "Stream crossing allowance (each)",
+        "scaffold_bar_each":     "Scaff bar (each)",
     }
 
     spinboxes = {}
@@ -603,12 +794,14 @@ class BomDialog(QDialog):
         self._tabs.clear()
 
         tab_colours = {
-            "Summary":       NAVY,
-            "Fibre Cable":   "#6A0080",
-            "Drop & Bundle": ORANGE,
-            "Joints":        TEAL,
-            "Duct":          "#444444",
-            "PIA":           "#8B4513",
+            "Summary":        NAVY,
+            "Fibre Cable":    "#6A0080",
+            "Drop & Bundle":  ORANGE,
+            "Joints":         TEAL,
+            "Duct":           "#444444",
+            "PIA":            "#8B4513",
+            "Home Install":   "#2E7D32",
+            "Network Equip":  "#1565C0",
         }
 
         for tab_name, rows in self.bom.items():

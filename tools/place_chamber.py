@@ -206,6 +206,11 @@ class PlaceChamberDialog(QDialog):
         self.chamber_type.setStyleSheet(INPUT_STYLE)
         f1.addRow(self._lbl("Chamber Function"), self.chamber_type)
 
+        self.chamber_size = QComboBox()
+        self.chamber_size.addItems(["SMALL", "LARGE"])
+        self.chamber_size.setStyleSheet(INPUT_STYLE)
+        f1.addRow(self._lbl("Chamber Size"), self.chamber_size)
+
         self.ring_count = QSpinBox()
         self.ring_count.setMinimum(0); self.ring_count.setMaximum(10)
         self.ring_count.setValue(4)
@@ -282,6 +287,7 @@ class PlaceChamberDialog(QDialog):
             "pop_id":       self._pop_id,
             "area_id":      self._area_id,
             "chamber_type": self.chamber_type.currentText(),
+            "chamber_size": self.chamber_size.currentText(),
             "ring_count":   self.ring_count.value() if self.ring_count.value() > 0 else None,
             "owner":        self.owner.text().strip(),
             "pia_ref":      self.pia_ref.text().strip(),

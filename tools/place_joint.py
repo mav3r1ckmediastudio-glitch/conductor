@@ -144,8 +144,13 @@ class PlaceJointDialog(QDialog):
         self.joint_type.currentTextChanged.connect(self._on_joint_type_changed)
         f1.addRow(self._lbl("Joint Type *"), self.joint_type)
 
-        self.closure_type = QLineEdit()
-        self.closure_type.setPlaceholderText("e.g. Commscope ADP-FS4 (optional)")
+        self.closure_type = QComboBox()
+        self.closure_type.addItems([
+            "Prysmian CMJ",
+            "FDNIR-AXBCWX",
+            "FSTTB-AXBTA11",
+            "FSTTB-AXXTA31",
+        ])
         self.closure_type.setStyleSheet(INPUT_STYLE)
         f1.addRow(self._lbl("Closure Model"), self.closure_type)
 
@@ -249,7 +254,7 @@ class PlaceJointDialog(QDialog):
             "split_ratio":   ratio   if not ratio.startswith("—")  else None,
             "cascade_level": int(level[0]) if not level.startswith("—") else None,
             "cascade_type":  ctype   if not ctype.startswith("—")  else None,
-            "closure_type":  self.closure_type.text().strip(),
+            "closure_type":  self.closure_type.currentText(),
             "fibre_in":      self.fibre_in.value()  if self.fibre_in.value()  > 0 else None,
             "fibre_out":     self.fibre_out.value() if self.fibre_out.value() > 0 else None,
             "status":        self.status.currentText(),

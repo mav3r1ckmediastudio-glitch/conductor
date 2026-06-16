@@ -375,6 +375,11 @@ class DigitiseDuctMapTool(QgsMapTool):
         self._rubber.setColor(QColor(26, 58, 92, 200))
         self._rubber.setWidth(2)
 
+        # Floating segment — lighter preview
+        self._float_rubber = QgsRubberBand(self._canvas, QgsWkbTypes.LineGeometry)
+        self._float_rubber.setColor(QColor(26, 58, 92, 100))
+        self._float_rubber.setWidth(1)
+
         # Snap indicator — small orange circle
         self._snap_rubber = QgsRubberBand(self._canvas, QgsWkbTypes.PointGeometry)
         self._snap_rubber.setColor(QColor(200, 90, 0, 220))
@@ -399,12 +404,20 @@ class DigitiseDuctMapTool(QgsMapTool):
         return xform.transform(pt_27700)
 
     def canvasMoveEvent(self, event):
-        """Show snap indicator when hovering near a node."""
+        """Show snap indicator and floating segment to cursor."""
         snapped_pt, _, _ = _snap_to_node(self._canvas, self._project, event.pos())
         self._snap_rubber.reset(QgsWkbTypes.PointGeometry)
         if snapped_pt:
             canvas_pt = self._to_canvas(snapped_pt)
             self._snap_rubber.addPoint(canvas_pt, True)
+
+        # Floating segment from last committed vertex to cursor
+        self._float_rubber.reset(QgsWkbTypes.LineGeometry)
+        if self._points:
+            cursor_canvas = self.toMapCoordinates(event.pos())
+            cursor_27700  = snapped_pt if snapped_pt else self._to_27700(cursor_canvas)
+            self._float_rubber.addPoint(self._to_canvas(self._points[-1]))
+            self._float_rubber.addPoint(self._to_canvas(cursor_27700), True)
 
     def canvasPressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -542,20 +555,17 @@ class DigitiseDuctMapTool(QgsMapTool):
         self._node_ids   = []
         self._node_types = []
         self._rubber.reset()
+        self._float_rubber.reset()
         self._snap_rubber.reset()
 
     def deactivate(self):
         """Clean up canvas graphics when tool deactivates."""
-        try:
-            self._rubber.reset()
-            self._canvas.scene().removeItem(self._rubber)
-        except Exception:
-            pass
-        try:
-            self._snap_rubber.reset()
-            self._canvas.scene().removeItem(self._snap_rubber)
-        except Exception:
-            pass
+        for rb in (self._rubber, self._float_rubber, self._snap_rubber):
+            try:
+                rb.reset()
+                self._canvas.scene().removeItem(rb)
+            except Exception:
+                pass
         self._canvas.refresh()
         super().deactivate()
 

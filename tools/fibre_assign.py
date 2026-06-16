@@ -81,7 +81,7 @@ def build_graph():
             if fc and dt == "PIA_AERIAL_DROP":
                 cbt_drops.setdefault(str(fc), []).append(feat)
 
-    # Find all cabinets (cables whose from_node_type = POP)
+    # Find all cabinets — cables must be digitised cabinet->outward (from_node_type=POP)
     cabinets = []
     for feat in cable_layer.getFeatures():
         if val(feat["from_node_type"]) == "POP":
@@ -213,7 +213,23 @@ def assign_fibres(log_fn=None):
                 f"F{pos_in_tube(fibre_cursor)} ({fibre_colour(pos_in_tube(fibre_cursor))})")
             fibre_cursor += 1
 
-            joint_bundles = local_bundles
+            # Port consumers depend on splitter role:
+            # - CBT (joint_type=CBT): ports serve aerial drops / UG bundles directly
+            # - Feeder splitter (outbound cables): ports serve outbound distribution cables
+            port_consumers = []
+            is_cbt = (joint_type == "CBT")
+
+            if is_cbt:
+                # CBT: ports → aerial drops then UG bundles
+                for d in local_drops:
+                    port_consumers.append(("DROP", str(fld(d, "ddct_id") or "")))
+                for b in local_bundles:
+                    port_consumers.append(("BUNDLE", str(b["bundle_id"])))
+            else:
+                # Feeder splitter: ports → outbound cables
+                for out_cable in outbound:
+                    port_consumers.append(("CABLE", str(fld(out_cable, "cable_id") or "")))
+
             try:
                 n_outputs = int(split_ratio.split(":")[1])
             except Exception:
@@ -221,12 +237,11 @@ def assign_fibres(log_fn=None):
 
             for port_idx in range(n_outputs):
                 port_label = "PO" + str(port_idx + 1)
-                if port_idx < len(joint_bundles):
-                    bun    = joint_bundles[port_idx]
-                    bun_id = str(bun["bundle_id"])
+                if port_idx < len(port_consumers):
+                    kind, asset_id = port_consumers[port_idx]
                     make_assign(in_cable_id, fibre_cursor, "SPLITTER_OUTPUT",
-                                joint_id=node_id, bundle_id=bun_id, splitter_id=splitter_id)
-                    log(f"    {port_label} -> {bun_id} T{tube_for_fibre(fibre_cursor)} "
+                                joint_id=node_id, bundle_id=asset_id, splitter_id=splitter_id)
+                    log(f"    {port_label} -> {asset_id} T{tube_for_fibre(fibre_cursor)} "
                         f"F{pos_in_tube(fibre_cursor)} ({fibre_colour(pos_in_tube(fibre_cursor))})")
                 else:
                     make_assign(in_cable_id, fibre_cursor, "SPLITTER_OUTPUT_SPARE",
@@ -415,7 +430,10 @@ class FibreAssignDialog(QDialog):
         root.addWidget(header)
 
         sub = QLabel("Walks the network from cabinet outward, assigning tube and fibre numbers. "
-                     "Handles underground splitters, through-splices, and aerial drops.")
+                     "Handles underground splitters, through-splices, and aerial drops.\n\n"
+                     "Splitter fibre usage: F1 = input, F2 onwards = port outputs. "
+                     "A 1:4 uses 5 fibres (F1–F5); a 1:8 uses 9 fibres (F1–F9). "
+                     "Onward splices begin at the next fibre after the last port.")
         sub.setWordWrap(True)
         sub.setStyleSheet("font-size:11px; color:#555; margin-bottom:4px;")
         root.addWidget(sub)

@@ -7,7 +7,7 @@ Snaps to the nearest PIA_POLE within 14px. The CBT shares the pole coordinates.
 
 import math
 from qgis.PyQt.QtCore import Qt, pyqtSignal
-from qgis.PyQt.QtGui import QCursor
+from qgis.PyQt.QtGui import QCursor, QColor
 from qgis.PyQt.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
     QLabel, QLineEdit, QComboBox, QCheckBox,
@@ -16,9 +16,9 @@ from qgis.PyQt.QtWidgets import (
 from qgis.core import (
     QgsFeature, QgsGeometry, QgsPointXY, QgsProject,
     QgsCoordinateTransform, QgsCoordinateReferenceSystem,
-    QgsFeatureRequest, QgsRectangle,
+    QgsFeatureRequest, QgsRectangle, QgsWkbTypes,
 )
-from qgis.gui import QgsMapToolEmitPoint
+from qgis.gui import QgsMapTool, QgsRubberBand
 from ..conductor_utils import get_layer, fld, val, LayerEditContext, NAVY, TEAL, ORANGE, LIGHT, WHITE, MID, BTN_PRIMARY, BTN_SECONDARY, INPUT_STYLE, LABEL_STYLE, SECTION_STYLE, MONO_STYLE
 
 WARN_STYLE    = f"border:1px solid #E0A000; border-radius:3px; padding:5px 8px; background:#FFFBE6; font-size:11px; color:#7A5000;"
@@ -143,8 +143,13 @@ class PlaceCBTDialog(QDialog):
         pole_disp.setStyleSheet(MONO_STYLE)
         f1.addRow(self._lbl("Parent Pole"), pole_disp)
 
-        self.cbt_model = QLineEdit()
-        self.cbt_model.setPlaceholderText("e.g. Clarus CBT-16 (optional)")
+        self.cbt_model = QComboBox()
+        self.cbt_model.addItems([
+            "Evolv Multiport Pushlok 8-port 300m (Corning)",
+            "Corning OptiSheath 4-port",
+            "Corning OptiSheath 12-port 250m drop",
+            "Corning OptiSheath 12-port 350m drop",
+        ])
         self.cbt_model.setStyleSheet(INPUT_STYLE)
         f1.addRow(self._lbl("CBT Model"), self.cbt_model)
 
@@ -228,7 +233,7 @@ class PlaceCBTDialog(QDialog):
             "chamber_id":    self._pole_id,   # FK — CBT lives on the pole
             "area_id":       self._area_id,
             "pop_id":        self._pop_id,
-            "cbt_model":     self.cbt_model.text().strip() or None,
+            "cbt_model":     self.cbt_model.currentText(),
             "has_splitter":  self.has_splitter.isChecked(),
             "split_ratio":   ratio if not ratio.startswith("—") else None,
             "cascade_level": int(level[0]) if not level.startswith("—") else None,
@@ -242,7 +247,7 @@ class PlaceCBTDialog(QDialog):
 # MAP TOOL
 # ═══════════════════════════════════════════════════════════════════════════
 
-class PlaceCBTMapTool(QgsMapToolEmitPoint):
+class PlaceCBTMapTool(QgsMapTool):
     """Click on or near a PIA_POLE to place a CBT on it."""
 
     placed = pyqtSignal(str)  # emits cbt_id
@@ -253,7 +258,36 @@ class PlaceCBTMapTool(QgsMapToolEmitPoint):
         self._project = project
         self.setCursor(QCursor(Qt.CrossCursor))
 
-    def canvasReleaseEvent(self, event):
+        self._snap_rubber = QgsRubberBand(canvas, QgsWkbTypes.PointGeometry)
+        self._snap_rubber.setColor(QColor(0, 170, 255, 220))
+        self._snap_rubber.setIconSize(10)
+
+    def canvasMoveEvent(self, event):
+        self._snap_rubber.reset(QgsWkbTypes.PointGeometry)
+        pole_feat, _ = _find_nearest_pole(self._canvas, self._project, event.pos())
+        if pole_feat:
+            fp = pole_feat.geometry().asPoint()
+            canvas_pt = self._to_canvas(fp)
+            self._snap_rubber.addPoint(canvas_pt, True)
+
+    def _to_canvas(self, pt_27700):
+        from qgis.core import QgsCoordinateTransform, QgsCoordinateReferenceSystem
+        src_crs = QgsCoordinateReferenceSystem("EPSG:27700")
+        dst_crs = self._canvas.mapSettings().destinationCrs()
+        if src_crs == dst_crs:
+            return pt_27700
+        return QgsCoordinateTransform(src_crs, dst_crs, QgsProject.instance()).transform(pt_27700)
+
+    def deactivate(self):
+        try:
+            self._snap_rubber.reset()
+            self._canvas.scene().removeItem(self._snap_rubber)
+        except Exception:
+            pass
+        self._canvas.refresh()
+        super().deactivate()
+
+    def canvasPressEvent(self, event):
         if event.button() != Qt.LeftButton:
             return
 

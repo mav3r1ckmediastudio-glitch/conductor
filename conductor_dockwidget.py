@@ -605,6 +605,7 @@ class ConductorDockWidget(QDockWidget):
         optical_items = []
         for label, slot, icon in [
             ("Place CBT",               self._on_place_cbt,            "place_cbt.svg"),
+            ("Draw CBT Tail",           self._on_digitise_cbt_tail,    "digitise_cbt_tail.svg"),
             ("Digitise Aerial Drop",    self._on_digitise_aerial_drop, "digitise_aerial_drop.svg"),
             ("Digitise PIA UG Drop",    self._on_digitise_pia_ug_drop, "digitise_pia_ug_drop.svg"),
         ]:
@@ -830,6 +831,25 @@ class ConductorDockWidget(QDockWidget):
             self.iface.mapCanvas().mapToolSet.connect(self._on_map_tool_set)
         except Exception:
             pass
+
+        # Auto-refresh summary 2.5s after any commit to key layers
+        from qgis.PyQt.QtCore import QTimer
+        if not hasattr(self, '_summary_timer'):
+            self._summary_timer = QTimer(self)
+            self._summary_timer.setSingleShot(True)
+            self._summary_timer.timeout.connect(self._on_refresh_summary)
+
+        def _schedule_refresh(*args):
+            self._summary_timer.start(2500)
+
+        for layer_name in ("bundles", "drop_ducts", "cables", "joints", "premises"):
+            layer = conductor_project.get_layer(layer_name)
+            if layer:
+                try:
+                    layer.afterCommitChanges.connect(_schedule_refresh)
+                except Exception:
+                    pass
+
         self._on_refresh_summary()
 
     def _on_map_tool_set(self, new_tool, old_tool):
@@ -842,7 +862,7 @@ class ConductorDockWidget(QDockWidget):
             "EditAssetMapTool", "DeleteAssetMapTool", "MoveAssetMapTool",
             # PIA tools
             "PlacePoleMapTool", "PlaceCBTMapTool", "PlacePIAChamberMapTool",
-            "DigitiseAerialSpanMapTool", "DigitisePIAUGDuctMapTool",
+            "DigitiseAerialSpanMapTool", "DigitisePIAUGDuctMapTool", "DigitiseCBTTailMapTool",
             "DigitiseAerialDropMapTool", "DigitisePIAUGDropMapTool",
         )
         if new_tool is None or type(new_tool).__name__ not in conductor_tool_types:
@@ -1007,8 +1027,14 @@ class ConductorDockWidget(QDockWidget):
     def _on_place_cbt(self):
         self._run_map_tool(
             self._on_place_cbt, 'place_cbt', 'PlaceCBTMapTool', 'placed',
-            lambda cid: self.iface.messageBar().pushSuccess( "Conductor", f"CBT {cid} placed." ),
+            lambda cid: self.iface.messageBar().pushSuccess("Conductor", f"CBT {cid} placed."),
             'Click on a pole to place a CBT. Press Esc to cancel.')
+
+    def _on_digitise_cbt_tail(self):
+        self._run_map_tool(
+            self._on_digitise_cbt_tail, 'digitise_cbt_tail', 'DigitiseCBTTailMapTool', 'placed',
+            lambda tid: self.iface.messageBar().pushSuccess("Conductor", f"CBT Tail {tid} saved."),
+            'Click a CBT to start the tail. Trace back to the UG joint. Right-click to finish. Esc to cancel.')
 
     def _on_digitise_aerial_drop(self):
         self._run_map_tool(
@@ -1070,6 +1096,8 @@ class ConductorDockWidget(QDockWidget):
             return
         from .tools.fibre_assign import open_fibre_assign_dialog
         self._assign_dlg = open_fibre_assign_dialog(self.iface, self, project=self._project)
+        if self._assign_dlg:
+            self._assign_dlg.finished.connect(lambda _: self._on_refresh_summary())
 
     def _on_fibre_trace(self):
         if not self._project:
@@ -1125,6 +1153,8 @@ class ConductorDockWidget(QDockWidget):
             return
         from .tools.validate_routes import open_validate_routes_dialog
         self._validate_dlg = open_validate_routes_dialog(self.iface, self, project=self._project)
+        if self._validate_dlg:
+            self._validate_dlg.finished.connect(lambda _: self._on_refresh_summary())
 
     def _on_digitise_road_crossing(self):
         self._run_map_tool(
