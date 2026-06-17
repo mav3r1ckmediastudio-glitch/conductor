@@ -266,6 +266,44 @@ class PlaceJointDialog(QDialog):
 # MAP TOOL
 # ═══════════════════════════════════════════════════════════════════════════
 
+
+def _check_splitter_intent(project, joint_id, has_splitter):
+    """After placing a joint, check if it looks like it should have a splitter.
+    
+    We can't know the designer's intent at place-time (no downstream connections
+    exist yet), so this is a no-op at place time. It's called at EDIT time when
+    downstream connections may already exist.
+    """
+    if has_splitter:
+        return  # splitter declared — nothing to warn about
+
+    bundle_layer = project.get_layer("bundles")
+    ddct_layer   = project.get_layer("drop_ducts")
+
+    downstream = 0
+    if bundle_layer:
+        for f in bundle_layer.getFeatures():
+            if str(f["from_joint"] or "") == str(joint_id):
+                downstream += 1
+    if ddct_layer:
+        for f in ddct_layer.getFeatures():
+            if str(f["from_chamber"] or "") == str(joint_id):
+                downstream += 1
+
+    if downstream > 1:
+        from qgis.PyQt.QtWidgets import QMessageBox
+        QMessageBox.warning(
+            None,
+            "Splitter not declared",
+            f"Joint {joint_id} has {downstream} downstream connections "
+            f"(bundles/drops) but is not marked as containing a splitter.\n\n"
+            f"If this joint distributes signal to multiple customers via a "
+            f"passive splitter, edit the joint and tick 'This joint contains "
+            f"a passive optical splitter'.\n\n"
+            f"If this is intentional (e.g. a blowing point with multiple "
+            f"pre-blown tubes), you can ignore this warning."
+        )
+
 class PlaceJointMapTool(QgsMapToolEmitPoint):
     """Click inside or near a chamber to place a joint inside it."""
 
@@ -353,6 +391,9 @@ class PlaceJointMapTool(QgsMapToolEmitPoint):
                 tree_layer.setItemVisibilityChecked(True)
 
             self.placed.emit(joint_id)
+            # Warn if joint has multiple downstream connections but no splitter declared
+            # (at place-time there are rarely any, but catches immediate re-edits)
+            _check_splitter_intent(self._project, joint_id, attrs.get("has_splitter", False))
         else:
             joint_layer.rollBack()
             QMessageBox.critical(None, "Error", "Failed to write joint feature.")

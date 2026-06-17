@@ -446,6 +446,37 @@ class ValidateWorker(QThread):
             self.finished.emit(results, {"error": traceback.format_exc()})
             return
 
+        # ── Splitter integrity scan ───────────────────────────────────────
+        # Find joints that have >1 downstream bundle/drop but has_splitter=False/NULL
+        splitter_warnings = []
+        try:
+            if joint_layer and bundle_layer:
+                # Build downstream count per joint
+                downstream_counts = {}
+                for feat in bundle_layer.getFeatures():
+                    jid = str(feat["from_joint"] or "")
+                    if jid:
+                        downstream_counts[jid] = downstream_counts.get(jid, 0) + 1
+                if ddct_layer:
+                    for feat in ddct_layer.getFeatures():
+                        jid = str(feat["from_chamber"] or "")
+                        if jid:
+                            downstream_counts[jid] = downstream_counts.get(jid, 0) + 1
+                for feat in joint_layer.getFeatures():
+                    jid = str(feat["joint_id"] or "")
+                    count = downstream_counts.get(jid, 0)
+                    if count > 1:
+                        has_sp = feat["has_splitter"] if "has_splitter" in feat.fields().names() else None
+                        if not has_sp or has_sp == NULL:
+                            splitter_warnings.append({
+                                "joint_id": jid,
+                                "downstream": count,
+                                "chamber_id": str(feat["chamber_id"] or ""),
+                            })
+        except Exception:
+            pass
+
+        summary["splitter_warnings"] = splitter_warnings
         self.finished.emit(results, summary)
 
 
@@ -732,6 +763,20 @@ class ValidateRoutesDialog(QDialog):
         if results:
             self._btn_export.setEnabled(True)
         self._table.sortItems(0)
+
+        # Surface splitter integrity warnings
+        splitter_warnings = summary.get("splitter_warnings", [])
+        if splitter_warnings:
+            lines = ["⚠  Splitter integrity warnings", ""]
+            lines.append(f"{len(splitter_warnings)} joint(s) have multiple downstream connections but no splitter declared:")
+            lines.append("")
+            for w in splitter_warnings:
+                lines.append(f"  • {w['joint_id']}  (chamber: {w['chamber_id']},  {w['downstream']} downstream connections)")
+            lines.append("")
+            lines.append("If any of these joints distribute signal via a passive splitter,")
+            lines.append("edit the joint and tick 'This joint contains a passive optical splitter'.")
+            lines.append("Optical budget calculations will be wrong until this is corrected.")
+            self._detail.setPlainText("\n".join(lines))
 
     def _on_row_selected(self):
         rows = self._table.selectedItems()

@@ -867,6 +867,14 @@ class EditAssetMapTool(QgsMapTool):
         attrs = get_attrs()
         if _save_attrs(layer, feat, attrs):
             self.edited.emit(layer_name, asset_id)
+            # Splitter integrity check after editing a joint
+            if layer_name == "joints":
+                from .place_joint import _check_splitter_intent
+                _check_splitter_intent(
+                    self._project,
+                    asset_id,
+                    attrs.get("has_splitter", False)
+                )
         else:
             QMessageBox.critical(None, "Error", f"Failed to save changes to {asset_id}.")
 
