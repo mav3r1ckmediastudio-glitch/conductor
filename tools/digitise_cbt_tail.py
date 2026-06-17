@@ -372,6 +372,24 @@ class DigitiseCBTTailMapTool(QgsMapTool):
         tail_id  = _next_tail_id(cable_layer, self._project.area_id)
         length_m = round(line_length_m(self._points), 1)
 
+        # Warn if tail exceeds 500m — not a hard stop but designer should be aware
+        if length_m > 500:
+            rounded = round(length_m / 50) * 50
+            reply = QMessageBox.warning(
+                None,
+                "CBT Tail — Length Warning",
+                f"This CBT tail is {length_m:.0f}m (~{rounded:.0f}m rounded to nearest 50m), "
+                f"which exceeds the recommended maximum of 500m.\n\n"
+                f"Check your design — a tail this long may indicate the CBT position "
+                f"or underground joint location needs reviewing.\n\n"
+                f"Do you want to save it anyway?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+            if reply == QMessageBox.No:
+                self._reset()
+                return
+
         dlg = DigitiseCBTTailDialog(
             tail_id      = tail_id,
             cbt_id       = self._cbt_id,
