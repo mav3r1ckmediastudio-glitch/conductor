@@ -271,7 +271,7 @@ def generate_html(joint_id, output_path, project=None):
         '.spare-bar-bg{height:10px;background:#D3D1C7;border-radius:5px;}'
         '.spare-stats{display:flex;justify-content:space-between;font-size:10px;color:var(--gray);margin-top:4px;}'
         '.footer{margin-top:16px;padding-top:10px;border-top:1px solid var(--mid);display:flex;justify-content:space-between;font-size:10px;color:var(--gray);}'
-        '@media print{body{background:white;}.page{padding:8px;}.section-wrap{break-inside:avoid;}.splitter-section{break-inside:avoid;}}'
+        '@media print{body{background:white;}.page{padding:8px;max-width:100%;}.print-btn{display:none!important;}.section-wrap{break-inside:avoid;}.splitter-section{break-inside:avoid;}*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important;}}'
     )
 
     # Build HTML
@@ -434,7 +434,7 @@ def generate_html(joint_id, output_path, project=None):
     # Footer
     H.append('<div class="footer">')
     H.append('<span>' + joint_id + ' &middot; Splice Plan &middot; Gigaloch</span>')
-    H.append('<span>Print: Ctrl+P &middot; Works offline &middot; ' + joint_id + '.html</span>')
+    H.append('<span style="display:flex;align-items:center;gap:12px;"><button class="print-btn" onclick="window.print()" style="background:#1A3A5C;color:white;border:none;border-radius:4px;padding:5px 14px;font-size:11px;font-weight:600;cursor:pointer;">&#x1F5A8; Print / Save PDF</button><span style="color:#888;font-size:10px;">or Ctrl+P &middot; ' + joint_id + '.html</span></span>')
     H.append('</div>')
     H.append('</div></body></html>')
 

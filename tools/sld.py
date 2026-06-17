@@ -100,12 +100,24 @@ def build_network(project=None):
     if ddct_layer:
         for feat in ddct_layer.getFeatures():
             fc = val(feat['from_chamber'])
-            dt = str(val(feat['drop_type']) or '')
-            if fc and dt == 'PIA_AERIAL_DROP':
-                uprn    = str(val(feat['uprn']) or '')
-                ddct_id = str(val(feat['ddct_id']) or '')
-                length  = round(float(val(feat['length_m']) or 0), 1)
-                aerial_drops.setdefault(str(fc), []).append({
+            if not fc:
+                continue
+            fc_str  = str(fc)
+            dt      = str(val(feat['drop_type']) or '')
+            pole    = val(feat['from_pole'])
+            uprn    = str(val(feat['uprn']) or '')
+            ddct_id = str(val(feat['ddct_id']) or '')
+            length  = round(float(val(feat['length_m']) or 0), 1)
+            # Treat as aerial drop if: drop_type says so, from_pole is set,
+            # or the from_chamber joint_id contains 'CBT' (pole-mounted box).
+            # Fall back: any drop_duct not already captured as a UG bundle.
+            is_aerial = (
+                'AERIAL' in dt.upper()
+                or bool(pole and pole != NULL)
+                or 'CBT' in fc_str.upper()
+            )
+            if is_aerial:
+                aerial_drops.setdefault(fc_str, []).append({
                     'ddct_id': ddct_id,
                     'uprn':    uprn,
                     'address': premises_map.get(uprn, uprn or 'Unknown'),
@@ -151,6 +163,36 @@ def render_node(node_id, cables, joints, bundles, aerial_drops, from_node, visit
     joint    = joints.get(node_id)
     jbundles = bundles.get(node_id, [])
     jdrops   = aerial_drops.get(node_id, [])
+
+    # Pole/pass-through node — no joint record but has onward cables
+    if not joint and outbound:
+        is_pole = 'POL' in node_id.upper()
+        box_cls = 'node-joint node-pole' if is_pole else 'node-joint'
+        icon    = '&#x1F4F6; ' if is_pole else ''
+        H.append('<div class="tree-node">')
+        H.append('<div class="' + box_cls + '">')
+        H.append('<div class="node-id">' + icon + node_id + '</div>')
+        H.append('<div class="node-meta">' + ('Pole — aerial span' if is_pole else 'Pass-through') + '</div>')
+        H.append('</div>')
+        H.append('<div class="children">')
+        for cid in outbound:
+            cable = cables.get(cid)
+            if not cable: continue
+            to_node = cable['to_node']
+            ctype   = cable['cable_type']
+            fibre_c = cable['fibre_count']
+            length  = cable['length_m']
+            col     = CABLE_COLOURS.get(ctype, NAVY)
+            is_aerial = (ctype == 'AERIAL')
+            line_style = 'border-left:3px ' + ('dashed' if is_aerial else 'solid') + ' ' + col + ';'
+            H.append('<div class="cable-branch">')
+            H.append('<div class="cable-line" style="' + line_style + '"></div>')
+            H.append('<div class="cable-label" style="color:' + col + ';">' + cid + ' &middot; ' + str(fibre_c) + 'F &middot; ' + str(length) + 'm' + (' &#x1F4F6;' if is_aerial else '') + '</div>')
+            H.append(render_node(to_node, cables, joints, bundles, aerial_drops, from_node, visited, depth+1))
+            H.append('</div>')
+        H.append('</div>')
+        H.append('</div>')
+        return '\n'.join(H)
 
     if joint:
         has_sp  = joint['has_splitter']
@@ -298,6 +340,7 @@ def generate_sld(output_path, project=None):
         '.node-splitter{border-color:var(--teal);}'
         '.node-eol{border-color:#888;background:#f5f5f5;}'
         '.node-cbt{border-color:var(--aerial);background:#F0F8FF;}'
+        '.node-pole{border-color:var(--aerial);background:#F5FBFF;}'
         '.node-id{font-size:12px;font-weight:bold;color:var(--navy);}'
         '.node-meta{font-size:10px;color:var(--teal);font-weight:600;margin-top:2px;}'
         '.node-cbt .node-meta{color:var(--aerial);}'

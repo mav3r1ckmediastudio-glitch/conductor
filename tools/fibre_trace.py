@@ -612,11 +612,17 @@ class FibreTraceMapTool(QgsMapTool):
         for hop in path:
             hop_str = str(hop)
             if "JNT-" in hop_str or "CBT-" in hop_str:
+                # Underground joint or CBT (pole-mounted splitter box)
                 geom = _geom_for_joint(joint_layer, hop_str)
                 self._add_point_band(geom, CLR_JOINT, size=15)
-            elif "CBL-" in hop_str:
+            elif "CBL-" in hop_str or "TAIL-" in hop_str:
+                # Any cable segment — feeder, aerial span, or CBT tail
                 geom = _geom_for_cable(cable_layer, hop_str)
                 self._add_line_band(geom, CLR_CABLE, width=5)
+            elif "POL-" in hop_str:
+                # Pole node — no geometry in joints layer, skip point band
+                # (the aerial span cable bands either side cover it visually)
+                pass
             elif "CAB-" in hop_str or "POP-" in hop_str:
                 # Cabinet — find in exchange_pops or chambers
                 pop_layer = get_layer("exchange_pops", self._project)

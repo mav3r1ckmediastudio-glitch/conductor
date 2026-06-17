@@ -25,8 +25,8 @@ from ..conductor_utils import get_layer, fld, val, NAVY, TEAL, ORANGE, LIGHT, WH
 # Standard fibre counts available in the market
 STANDARD_FIBRE_COUNTS = [2, 4, 6, 8, 12, 24, 48, 96, 144, 288]
 
-# Fibres needed per premises (1 working + 1 spare = 2)
-FIBRES_PER_PREMISES = 2
+# Fibres needed per premises (1 per premises — splitter handles sharing)
+FIBRES_PER_PREMISES = 1
 
 # RAG colours
 GREEN  = QColor(22, 163,  74)   # sufficient
@@ -270,11 +270,14 @@ class FibreCountDialog(QDialog):
 
         for cid, (feat, parent, child) in sorted(cable_info.items()):
             premises    = cable_downstream.get(cid, 0)
-            required    = premises * FIBRES_PER_PREMISES
+            cable_type  = str(feat["cable_type"]) if feat["cable_type"] and feat["cable_type"] != NULL else ""
+            # CBT_TAIL carries 1 fibre into the CBT splitter regardless of premises count
+            if cable_type == "CBT_TAIL":
+                required = 1
+            else:
+                required = premises * FIBRES_PER_PREMISES
             recommended = _next_standard_size(required) if required > 0 else 0
             actual      = installed.get(cid, 0)
-            cable_type  = str(feat["cable_type"]) if feat["cable_type"] and feat["cable_type"] != NULL else ""
-
             if actual == 0:
                 rag = GREY
             elif actual < required:

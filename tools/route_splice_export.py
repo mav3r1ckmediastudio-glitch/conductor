@@ -232,7 +232,7 @@ table.dt tr:last-child td{border-bottom:none;}
 .prem-addr{font-size:12px;font-weight:bold;color:var(--navy);}
 .prem-uprn{font-size:9px;color:#888;}
 .footer{margin-top:16px;padding-top:10px;border-top:1px solid var(--mid);display:flex;justify-content:space-between;font-size:10px;color:var(--gray);}
-@media print{body{background:white;}.page{padding:8px;}.joint-card{break-inside:avoid;page-break-after:auto;}.route-header{break-inside:avoid;}}
+@media print{body{background:white;}.page{padding:8px;max-width:100%;}.print-btn{display:none!important;}.joint-card{break-inside:avoid;page-break-after:auto;}.route-header{break-inside:avoid;}.drops-section{break-inside:avoid;}*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important;}}
 """
 
 def _tube_pill_html(t):
@@ -477,7 +477,7 @@ def _generate_route_html(joints_in_order, route_label, output_path, project=None
 
     # Footer
     H.append(f'<div class="footer"><span>{route_label} &middot; Route Splice Plan &middot; Gigaloch</span>')
-    H.append('<span>Print: Ctrl+P &middot; Works offline</span></div>')
+    H.append('<span style="display:flex;align-items:center;gap:12px;"><button class="print-btn" onclick="window.print()" style="background:#1A3A5C;color:white;border:none;border-radius:4px;padding:5px 14px;font-size:11px;font-weight:600;cursor:pointer;">&#x1F5A8; Print / Save PDF</button><span style="color:#888;font-size:10px;">or Ctrl+P</span></span></div>')
     H.append('</div></body></html>')
 
     html = '\n'.join(H)
