@@ -859,6 +859,9 @@ class ConductorDockWidget(QDockWidget):
         # Clear undo stack on project change
         self._undo_stack.clear()
         self._update_undo_buttons()
+        # Set up keyboard shortcuts if not already done
+        if not hasattr(self, "_shortcut_undo"):
+            self._setup_shortcuts()
         try:
             self.iface.mapCanvas().mapToolSet.connect(self._on_map_tool_set)
         except Exception:
@@ -990,6 +993,24 @@ class ConductorDockWidget(QDockWidget):
                 event.accept()
                 return
         super().keyPressEvent(event)
+
+    def _setup_shortcuts(self):
+        """Set up application-level shortcuts for undo/redo.
+        QShortcut on the main window fires regardless of which widget has focus,
+        unlike keyPressEvent on the dock which QGIS intercepts first."""
+        from qgis.PyQt.QtWidgets import QShortcut
+        from qgis.PyQt.QtGui import QKeySequence
+        from qgis.PyQt.QtCore import Qt
+
+        undo_sc = QShortcut(QKeySequence("Ctrl+Z"), self.iface.mainWindow())
+        undo_sc.setContext(Qt.ApplicationShortcut)
+        undo_sc.activated.connect(self._on_undo)
+        self._shortcut_undo = undo_sc  # keep reference
+
+        redo_sc = QShortcut(QKeySequence("Ctrl+Shift+Z"), self.iface.mainWindow())
+        redo_sc.setContext(Qt.ApplicationShortcut)
+        redo_sc.activated.connect(self._on_redo)
+        self._shortcut_redo = redo_sc  # keep reference
 
     def _on_new_project(self):
         from .new_project_dialog import NewProjectDialog
