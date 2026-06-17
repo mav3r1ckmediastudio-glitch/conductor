@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Conductor v1.0.0 · Field Manual</title>
+<title>Conductor v1.1.0 · Field Manual</title>
 <style>
   :root {
     --navy:   #1A3A5C;
@@ -188,7 +188,7 @@
 <nav class="sidebar">
   <div class="sidebar-logo">
     <div class="wordmark">CONDUCTOR</div>
-    <div class="version">FTTP DESIGN PLUGIN · v1.1.0</div>
+    <div class="version">FTTP DESIGN PLUGIN · v1.0.2</div>
   </div>
 
   <div class="nav-section">Getting Started</div>
@@ -205,12 +205,15 @@
 
   <div class="nav-section">Analysis</div>
   <div class="nav-item" onclick="show('validate')"><span class="icon">✅</span> Route Validator</div>
+  <div class="nav-item" onclick="show('optical')"><span class="icon">⚙️</span> Optical Power Budget</div>
   <div class="nav-item" onclick="show('assign')"><span class="icon">🔢</span> Fibre Assignment</div>
   <div class="nav-item" onclick="show('trace')"><span class="icon">🔍</span> Fibre Trace</div>
   <div class="nav-item" onclick="show('fibrecount')"><span class="icon">🧮</span> Fibre Count Calculator</div>
   <div class="nav-item" onclick="show('splice')"><span class="icon">📄</span> Splice Plans</div>
   <div class="nav-item" onclick="show('routesplice')"><span class="icon">🗺</span> Route Splice Export</div>
   <div class="nav-item" onclick="show('bom')"><span class="icon">📦</span> Bill of Materials</div>
+  <div class="nav-item" onclick="show('cabinetcost')"><span class="icon">💰</span> Cabinet Cost Calculator</div>
+  <div class="nav-item" onclick="show('sld')"><span class="icon">🧬</span> Single Line Diagram</div>
 
   <div class="nav-section">Reference</div>
   <div class="nav-item" onclick="show('symbology')"><span class="icon">🎨</span> Symbology</div>
@@ -241,7 +244,7 @@
 
     <div class="callout info"><strong>Designed for Gigaloch's build standard.</strong> All naming conventions, splitter cascades, and cable types reflect Gigaloch's real-world network design practices. The 1:4 + 1:8 cascade gives an effective 1:32 split per GPON port on the Calix E7-2 cabinet.</div>
 
-    <h2>What's in v1.1.0</h2>
+    <h2>What's in v1.0.2</h2>
     <div class="card-grid">
       <div class="card teal">
         <div class="card-icon">🔩</div>
@@ -254,9 +257,19 @@
         <div class="card-desc">Place joints and splitters, digitise spine cables, distribution cables, and customer bundles.</div>
       </div>
       <div class="card">
+        <div class="card-icon">📊</div>
+        <div class="card-title">Project Summary Panel</div>
+        <div class="card-desc">Persistent at-a-glance status band above the Design/PIA tabs — premises validation counts, fibre/duct lengths, and estimated materials cost, refreshed on demand.</div>
+      </div>
+      <div class="card">
         <div class="card-icon">🪶</div>
         <div class="card-title">PIA &amp; Aerial</div>
-        <div class="card-desc">Place poles and aerial CBT closures, digitise PIA aerial and subduct routes.</div>
+        <div class="card-desc">Place poles, CBTs and PIA UG chambers. Digitise aerial spans/drops and PIA UG ducts/drops as thin wrappers around the standard fibre and drop tools.</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">🌉</div>
+        <div class="card-title">Crossings</div>
+        <div class="card-desc">Digitise Road Crossing and Digitise Stream Crossing — thin duct wrappers with surface_type locked to ROAD/WATERCOURSE, plus optional scaffold-bar sleeve protection where ducts can't be ploughed through.</div>
       </div>
       <div class="card">
         <div class="card-icon">🏠</div>
@@ -297,6 +310,11 @@
         <div class="card-icon">📦</div>
         <div class="card-title">Bill of Materials</div>
         <div class="card-desc">Aggregates quantities and costs from all layers. Exports to tabbed Excel.</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">💰</div>
+        <div class="card-title">Cabinet Cost Calculator</div>
+        <div class="card-desc">Per cabinet: active equipment cost from its DUX/Calix/GPON/battery counts using Gigaloch's real unit prices, plus the civils/cable BoM for that area — total build cost and £/premises, with a project grand total.</div>
       </div>
       <div class="card">
         <div class="card-icon">🔍</div>
@@ -382,6 +400,27 @@
     </div>
     <p>On the map, civil routes are drawn wider (0.7mm navy for spine duct) and fibre routes sit visually inside them as thinner contrasting lines (0.35mm neon pink for cable).</p>
 
+    <h2>Staged tool unlock</h2>
+    <p>When a new project is created, Conductor locks all design tools except <strong>Import Premises</strong>. Tools become available progressively as you complete each setup step:</p>
+    <table>
+      <tr><th>Step completed</th><th>Tools unlocked</th></tr>
+      <tr><td>Project created</td><td>Import Premises only</td></tr>
+      <tr><td>Premises imported</td><td>+ Draw Build Area</td></tr>
+      <tr><td>Build area drawn</td><td>+ Place Cabinet / POP</td></tr>
+      <tr><td>Cabinet placed</td><td>All remaining tools</td></tr>
+    </table>
+    <p>The unlock state is <strong>derived from the GeoPackage</strong> — Conductor checks whether the premises, build_areas, and exchange_pops layers contain features. This means the state is always correct, even after a crash or if you return to a project later. Existing projects with all three elements open fully unlocked.</p>
+
+    <h2>Dock panel layout: list vs grid view</h2>
+    <p>The <strong>Design</strong> and <strong>PIA</strong> tabs in the Conductor dock can each be switched between two layouts:</p>
+    <table>
+      <tr><th>View</th><th>Description</th></tr>
+      <tr><td>List view</td><td>Default. Each tool is a labelled button with its name and an (i) help icon, grouped under section headers.</td></tr>
+      <tr><td>Grid view</td><td>A compact icon-only grid (4 columns). Section headers are kept, but each tool becomes a larger icon button with its name shown only as a tooltip on hover. The (i) help buttons are hidden in this view.</td></tr>
+    </table>
+    <div class="callout warning"><strong>Where's the toggle?</strong> Look in the top-right corner of the tab bar, next to the PIA tab — a button labelled <strong>▦ Grid view</strong>. It applies to whichever tab (Design or PIA) is currently active, and stays put as you switch between them. Click it to switch the active tab between list and grid; each tab remembers its own choice independently (saved via QGIS settings), so Design and PIA can be set differently — the button's checked state updates automatically when you switch tabs to reflect that tab's current view.</div>
+    <div class="callout info">In grid view, the active tool is still highlighted (e.g. while mid-way through Digitise Cable), and enabled/disabled state is preserved exactly as in list view — switching views mid-tool is safe.</div>
+
     <h2>Network topology</h2>
     <div class="net-diagram">
 Cabinet (Calix E7-2)
@@ -432,6 +471,23 @@ Calix E7-2 (1 card, 8 ports): 256 customers theoretical max
     <h1>Projects</h1>
     <p class="page-subtitle">Creating and opening Conductor projects.</p>
 
+    <h2>Project summary panel</h2>
+    <p>A status band sits permanently above the Design/PIA tabs, between the postcode search bar and the tab row. It stays visible regardless of which tab is active, giving an at-a-glance read on the overall build. The panel <strong>auto-refreshes</strong> on project open, when the Validate or Auto-Assign dialogs close, and 2.5s after any layer commit to bundles, drop ducts, cables, joints, or premises.</p>
+    <table>
+      <tr><th>Stat</th><th>Source</th></tr>
+      <tr><td>Premises</td><td>Total feature count in the Premises layer</td></tr>
+      <tr><td><span class="badge working">Routed</span></td><td>Premises with a complete validated path to the cabinet</td></tr>
+      <tr><td><span class="badge partial">Partial</span></td><td>Premises where the route validator found a break — see <a onclick="show('validate')" style="cursor:pointer;color:var(--teal);">Route Validator</a></td></tr>
+      <tr><td><span class="badge" style="background:#fdecea;color:#c0392b;">Unserved</span></td><td>Premises with no bundle/drop traced yet (also covers any ERROR-status premises)</td></tr>
+      <tr><td>Fibre</td><td>Combined length of the Cables and Bundles layers, in km</td></tr>
+      <tr><td>Duct</td><td>Combined length of the Ducts and Drop Ducts layers, in km</td></tr>
+      <tr><td>Est. materials</td><td>Grand total from the Bill of Materials calculation</td></tr>
+    </table>
+
+    <div class="callout info"><strong>Refresh on demand.</strong> Click the ↻ button (top-right of the panel) to recompute everything. This runs the full route validator synchronously — for Gigaloch's typical build sizes (≤500 premises) this completes in well under a second, so it's deliberately a one-click refresh rather than a continuously-live display. The panel also auto-refreshes once whenever a project is created or opened.</div>
+
+    <div class="callout tip"><strong>Reading the placeholders.</strong> A new project shows <code>--</code> in every field until the first refresh — this means "not yet calculated", not zero. Once refreshed, a genuine result of zero (e.g. 0 routed on a freshly-imported premises layer) is shown as <code>0</code>. The "Project summary · updated HH:MM" label shows when the figures were last computed; if the cost estimate or validation step hits an error, it's flagged as "(partial)" with the error available as a tooltip.</div>
+
     <h2>New Project</h2>
     <p>Click <strong>＋ New Project</strong> in the PROJECT section of the Conductor panel. Fill in the form:</p>
     <table>
@@ -450,51 +506,73 @@ Calix E7-2 (1 card, 8 ports): 256 customers theoretical max
     <div class="callout tip"><strong>One GeoPackage per build area.</strong> If Gigaloch has multiple active deployments, each gets its own <code>.gpkg</code> file. They can be open in QGIS simultaneously.</div>
 
     <h2>Recommended workflow</h2>
+
+    <div class="callout info"><strong>Staged tool unlock.</strong> When you create a new project, Conductor locks all design tools except Import Premises. Tools unlock progressively as you complete each mandatory setup step. This prevents errors caused by designing without address data, a defined build boundary, or a serving cabinet.</div>
+
     <div class="steps">
       <div class="step">
-        <div class="step-num"></div>
+        <div class="step-num">1</div>
         <div class="step-body">
-          <div class="step-title">Create project &amp; draw build area</div>
-          <div class="step-desc">Define the coverage polygon. All subsequent tools filter to this boundary.</div>
+          <div class="step-title">Create project</div>
+          <div class="step-desc">Click <strong>＋ New Project</strong>. Fill in project name, country code, build code, designer and project manager. Conductor creates the GeoPackage and loads all 14 layers. Only <strong>Import Premises</strong> is active at this point.</div>
         </div>
       </div>
       <div class="step">
-        <div class="step-num"></div>
+        <div class="step-num">2</div>
         <div class="step-body">
-          <div class="step-title">Import premises</div>
-          <div class="step-desc">Load OS AddressBase CSV. Conductor auto-filters to the build area and maps columns automatically.</div>
+          <div class="step-title">Import Premises (AddressBase)</div>
+          <div class="step-desc">Import your AddressBase CSV or Shapefile. All premises in the source file are loaded as points. Use the distribution of points on the map to inform where you draw your build area boundary. Once at least one premises record is imported, <strong>Draw Build Area</strong> unlocks.</div>
         </div>
       </div>
       <div class="step">
-        <div class="step-num"></div>
+        <div class="step-num">3</div>
         <div class="step-body">
-          <div class="step-title">Place cabinet &amp; design civil network</div>
-          <div class="step-desc">Place the Calix E7-2 cabinet, then digitise ducts and chambers outward to all premises clusters.</div>
+          <div class="step-title">Draw Build Area</div>
+          <div class="step-desc">Digitise the build area polygon around your premises points. Left-click to add vertices, right-click to close and confirm. Conductor automatically <strong>clips premises to the polygon</strong> — any address points outside the boundary are removed. Once the build area is saved, <strong>Place Cabinet / POP</strong> unlocks.</div>
         </div>
       </div>
       <div class="step">
-        <div class="step-num"></div>
+        <div class="step-num">4</div>
         <div class="step-body">
-          <div class="step-title">Design fibre network</div>
-          <div class="step-desc">Place joints inside chambers, digitise cables, draw bundles from joints to premises.</div>
+          <div class="step-title">Place Cabinet / POP</div>
+          <div class="step-desc">Click the map to place the serving cabinet. Fill in the cabinet details and save. Once the cabinet is placed, <strong>all remaining design tools unlock</strong> and you can proceed with chambers, ducts, cables, joints and drops.</div>
         </div>
       </div>
       <div class="step">
-        <div class="step-num"></div>
+        <div class="step-num">5</div>
         <div class="step-body">
-          <div class="step-title">Validate, assign fibres, generate outputs</div>
-          <div class="step-desc">Run the route validator, auto-assign fibre numbers, generate splice plans and BoM.</div>
+          <div class="step-title">Design the network</div>
+          <div class="step-desc">With all tools active, design the civil and fibre layers in any order. Typical sequence: place chambers → digitise ducts → place joints → digitise cables → digitise drop ducts → digitise bundles → assign fibre roles → validate routes.</div>
         </div>
       </div>
     </div>
+
+    <div class="callout tip"><strong>Opening an existing project.</strong> When you open an existing project, Conductor checks what already exists in the GeoPackage (premises, build area, cabinet) and unlocks tools accordingly. A project with all three will open fully unlocked — identical to the previous behaviour. This also means if QGIS crashes mid-setup, you pick up exactly where you left off.</div>
+
   </div>
 </div>
 
-<!-- ═══════════════════════════════ CIVIL ══════════════════════════════════ -->
-<div id="page-civil" class="page">
+<div id="page-civil"<div id="page-civil" class="page">
   <div style="padding: 40px 48px;">
     <h1>Civil Layer</h1>
     <p class="page-subtitle">Drawing the physical duct and chamber infrastructure.</p>
+
+    <h2>Import Premises (AddressBase)</h2>
+    <p>The first step in any new project. Click <strong>Import Premises</strong> and select your AddressBase CSV or Shapefile. Map the required columns (UPRN, Easting, Northing for CSV; the tool auto-detects columns for Shapefiles) and click Import.</p>
+    <p>Premises are loaded as point features in EPSG:27700. Each point carries the UPRN, address, classification (residential/business), and postcode. Use the distribution of points on the map to plan where to draw your build area boundary.</p>
+    <div class="callout tip"><strong>Import everything first.</strong> Import all premises in your source file — don't worry about filtering. The cookie-cutter clip happens automatically when you draw the build area, removing any points outside the polygon.</div>
+
+    <h2>Draw Build Area</h2>
+    <p>Digitise a polygon defining the extent of this build area. Left-click to place vertices, right-click to close the polygon and open the Build Area dialog.</p>
+    <table>
+      <tr><th>Field</th><th>Notes</th></tr>
+      <tr><td>Area Name</td><td>Human-readable name, e.g. "Dunning Village Phase 1"</td></tr>
+      <tr><td>Phase</td><td>Build phase number (integer)</td></tr>
+      <tr><td>Status</td><td>PLANNED / HLD / MLD / LLD / BUILD / LIVE</td></tr>
+      <tr><td>Notes</td><td>Free text</td></tr>
+    </table>
+    <p>On confirmation, Conductor <strong>automatically clips the premises layer</strong> — any address points outside the build area polygon are deleted. This is irreversible within the session, so ensure your polygon is correct before confirming.</p>
+    <div class="callout warning"><strong>Cookie-cutter is permanent.</strong> Premises outside the polygon are deleted from the GeoPackage. If you need to adjust the boundary, re-import premises and redraw the build area.</div>
 
     <h2>Place Cabinet / POP</h2>
     <p>Click <strong>Place Cabinet / POP</strong> then click on the map where the Calix E7-2 cabinet will be located. Fill in the form — postcode auto-fills from the coordinates. The cabinet gets the ID <code>SCOT-222-CAB-001</code>.</p>
@@ -524,8 +602,20 @@ Calix E7-2 (1 card, 8 ports): 256 customers theoretical max
     <h2>Digitise Drop Duct</h2>
     <p>Click <strong>Digitise Drop Duct</strong>. First click snaps to a chamber or joint; second click snaps to a premises point. Right-click saves. Drop ducts are always 7mm speedpipe.</p>
 
-    <h2>Edit &amp; Delete</h2>
-    <p><strong>Edit Asset</strong> — click any asset to open its attribute form pre-filled. <strong>Delete Asset</strong> — click any asset, confirm the dialog. <strong>Move Asset</strong> — click an asset, then click its new location.</p>
+    <h3 id="sleeve">Duct sleeve (scaffold bar)</h3>
+    <p>On any duct, the <strong>Sleeve</strong> field can be set to <code>SCAFFOLD_BAR</code> when either end is embedded in a stream bank (or otherwise protected) instead of ploughing through or boring under — enter the <strong>Sleeve Length</strong> too. This feeds a dedicated "Scaffold Bar (duct sleeve)" line into the Bill of Materials.</p>
+
+    <h2 id="crossings">Crossings</h2>
+    <p>Two thin wrappers around Digitise Duct, found in the CROSSINGS section of the Design tab:</p>
+    <table>
+      <tr><th>Tool</th><th>Behaviour</th></tr>
+      <tr><td>Digitise Road Crossing</td><td>Same as Digitise Duct, but <code>Surface Type</code> is pre-set to <code>ROAD</code> and locked. Permit Ref placeholder hints at S50 road-opening licences.</td></tr>
+      <tr><td>Digitise Stream Crossing</td><td>Same as Digitise Duct, but <code>Surface Type</code> is pre-set to <code>WATERCOURSE</code> and locked. Permit Ref placeholder hints at land drainage / watercourse consent.</td></tr>
+    </table>
+    <div class="callout info">Crossings are ordinary <code>ducts</code> rows — they slot into the existing chamber-to-chamber duct/cable chain like any other duct segment, so the Route Validator, Fibre Count Calculator, and Fibre Trace need no special handling. Only the Bill of Materials reads <code>surface_type</code>, where each adds its own "Road Crossing" / "Stream Crossing" works-allowance line item.</div>
+
+    <h2>Edit, Delete &amp; Move</h2>
+    <p><strong>Edit Asset</strong> is a single unified tool (<code>edit_assets.py</code>) covering Cabinets/POPs, Chambers, Ducts, Joints, Cables, Drop Ducts, and Bundles — click any asset of any of these types to open its attribute form pre-filled. For a Cabinet/POP this opens the same form as Place/Edit Cabinet/POP, including the Calix equipment counts used by the Cabinet Cost Calculator. <strong>Delete Asset</strong> — click any asset, confirm the dialog. <strong>Move Asset</strong> — click an asset, then click its new location; moving a Chamber automatically re-runs the compass-based renumbering.</p>
   </div>
 </div>
 
@@ -583,25 +673,42 @@ Calix E7-2 (1 card, 8 ports): 256 customers theoretical max
     <p>Click <strong>Place CBT</strong> then click on or near a pole. The closure snaps to the nearest pole within 14px and records the pole reference. CBTs are aerial joints — they behave like underground joints for fibre assignment and splicing, but their <code>joint_type</code> is <code>CBT</code> and <code>closure_type</code> is typically <code>BBUS</code>.</p>
     <div class="callout info"><strong>CBTs are joints.</strong> Auto-Assign Fibres, Validate Routes, Fibre Trace, and Route Splice Export all treat CBTs identically to underground joints — they appear in the same <code>joints</code> layer and participate in the same BFS traversal.</div>
 
-    <h2>Digitise PIA Aerial Route</h2>
-    <p>Click <strong>Digitise PIA Aerial Route</strong>. Click each pole in sequence to draw the aerial cable span. The cable's <code>cable_type</code> is set to <code>AERIAL</code>, which Fibre Count Calculator and Route Splice Export use to render the route with a dashed teal connector instead of a solid navy one.</p>
+    <h2>Place PIA UG Chamber</h2>
+    <p>Click <strong>Place PIA UG Chamber</strong> then click on the map to place an Openreach underground chamber. This writes a normal chamber record with <code>chamber_type = PIA_UG_CHAMBER</code>, and gets its own <code>SCOT-222-PIAC-NNNN</code> ID series so it's never confused with a Gigaloch-built chamber. Also captures <code>surface_type</code> (Footway / Verge / Carriageway / Private) for Openreach reporting and dig-permit planning.</p>
 
-    <h2>Digitise PIA Subduct Route</h2>
-    <p>Click <strong>Digitise PIA Subduct Route</strong> to draw a cable running through Openreach's underground subduct alongside their existing infrastructure. Functionally equivalent to a normal duct but tagged for PIA reporting.</p>
+    <h2>Digitise PIA Aerial Span</h2>
+    <p>Click <strong>Digitise PIA Aerial Span</strong>. This is a thin wrapper around Digitise Cable — click each pole/CBT in sequence to draw the aerial span, exactly as you would a normal fibre cable, but the cable's <code>cable_type</code> is automatically set to <code>AERIAL</code>. Fibre Count Calculator and Route Splice Export use this to render the span with a dashed light-blue connector instead of a solid navy one. Because it's the same underlying tool as Digitise Cable, it snaps to the same node types (joints/CBTs and cabinet) and writes the same FK fields — no separate traversal logic is needed anywhere downstream.</p>
 
-    <h2>Aerial drops</h2>
-    <p>Drop ducts from a CBT to a premises are tagged <code>drop_type = PIA_AERIAL_DROP</code>. These appear in Fibre Trace and Route Splice Export drop tables labelled <strong>Aerial</strong> rather than <strong>Bundle</strong>.</p>
+    <h2>Digitise PIA UG Duct</h2>
+    <p>Click <strong>Digitise PIA UG Duct</strong> to draw a duct running through Openreach's underground infrastructure — typically connecting a Place PIA UG Chamber to a pole or to your own civil network. Snaps to PIA UG Chambers and poles. Writes to the <code>ducts</code> layer with <code>duct_type = PIA_SUBDUCT</code> (the same enum value as the Subduct option in the main Digitise Duct tool), so Edit Asset's duct type dropdown recognises and round-trips it correctly.</p>
+
+    <h2>Digitise PIA Aerial Drop</h2>
+    <p>Click <strong>Digitise PIA Aerial Drop</strong>. Identical two-click workflow to Digitise Drop Duct (first click on the CBT, second click on the premises), shown with a light-blue rubber band. <code>drop_type = PIA_AERIAL_DROP</code> is set automatically when the start node is a CBT — no extra configuration needed.</p>
+
+    <h2>Digitise PIA UG Drop</h2>
+    <p>Click <strong>Digitise PIA UG Drop</strong> for a drop running from a Place PIA UG Chamber out to a premises. Same two-click workflow (chamber, then premises), written to <code>drop_ducts</code> with <code>drop_type = PIA_UG_DROP</code>.</p>
+
+    <h2>Aerial &amp; PIA drop types</h2>
+    <p>Drops are distinguished by their <code>drop_type</code>, which controls how they're labelled in Fibre Trace and Route Splice Export drop tables:</p>
+    <table>
+      <tr><th>drop_type</th><th>From</th><th>Label in drop tables</th></tr>
+      <tr><td>BUNDLE</td><td>Joint</td><td>Bundle</td></tr>
+      <tr><td>PIA_AERIAL_DROP</td><td>CBT</td><td>Aerial</td></tr>
+      <tr><td>PIA_UG_DROP</td><td>PIA UG Chamber</td><td>PIA UG</td></tr>
+    </table>
 
     <h2>Chamber PIA fields</h2>
-    <p>Chambers carry three PIA-specific attributes used for Openreach reporting and the Cabinet Cost Calculator:</p>
+    <p>Chambers carry PIA-specific attributes used for Openreach reporting and the future Cabinet Cost Calculator:</p>
     <table>
       <tr><th>Field</th><th>Description</th></tr>
       <tr><td>openreach_ref</td><td>Openreach's reference for this pole or chamber under the PIA agreement</td></tr>
       <tr><td>pole_type</td><td>Wood / concrete / steel — informs costing and survey</td></tr>
       <tr><td>attachment_height_m</td><td>Height of the lowest attachment point, for clearance checks</td></tr>
+      <tr><td>surface_type</td><td>Footway / Verge / Carriageway / Private — set on PIA UG Chambers (added v1.0.1)</td></tr>
     </table>
 
-    <div class="callout tip"><strong>Aerial chains in practice.</strong> A typical aerial leg looks like: underground joint → CBL (AERIAL) → CBT-001 → CBL (AERIAL) → CBT-002 → ... → final CBT with aerial drops to premises. Each CBT passes fibres through to the next, with only the final CBT(s) in the chain actually dropping to customers.</div>
+    <div class="callout tip"><strong>Aerial chains in practice.</strong> A typical aerial leg looks like: underground joint → cable (AERIAL) → CBT-001 → cable (AERIAL) → CBT-002 → ... → final CBT with aerial drops to premises. Each CBT passes fibres through to the next, with only the final CBT(s) in the chain actually dropping to customers.</div>
+    <div class="callout info"><strong>Architecture note.</strong> Earlier drafts of this plugin gave aerial spans and drops their own layers and custom BFS traversal logic. That was scrapped — aerial spans and drops are now thin wrappers around the existing Digitise Cable and Digitise Drop tools, just with different default attributes and rubber-band colours. This means the route validator, fibre assignment engine, and trace tools need no PIA-specific code at all; everything just works because it's the same cables/drop_ducts tables and FK chain as the underground network.</div>
   </div>
 </div>
 
@@ -686,8 +793,99 @@ premises.uprn
       <div class="accordion-body"><p>The cable traversal reached a joint with no further cables toward the cabinet. Check the cable topology near this joint — a cable segment may be missing or pointing the wrong direction.</p></div>
     </div>
 
+    <h2>Optical power budget columns</h2>
+    <p>Alongside Status, Address and Reason, the results table includes <strong>Loss (dB)</strong> and <strong>Margin (dB)</strong> columns for every premises that traced through to the cabinet (status ROUTED). Margin is shown in green when the route passes the configured link budget and in bold red when it fails — letting you spot over-length or over-split routes at a glance across the whole project, not just one premises at a time as in Fibre Trace.</p>
+    <p>Click <strong>⚙ Power Budget Settings</strong> in the validator panel to open the same optical power budget settings used everywhere else in Conductor (also reachable from the header gear icon — see <a href="#" onclick="show('optical'); return false;">Optical Power Budget</a>). Saving the dialog automatically re-runs validation so the Loss/Margin columns reflect the new settings immediately.</p>
+
     <h2>Export results</h2>
-    <p>Click <strong>↓ Export CSV</strong> to save the full results table. Columns: UPRN, Address, Status, Reason, Path (full asset chain).</p>
+    <p>Click <strong>↓ Export CSV</strong> to save the full results table. Columns: UPRN, Address, Status, Loss (dB), Margin (dB), Link, Reason, Path (full asset chain).</p>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ OPTICAL BUDGET ═══════════════════════════ -->
+<div id="page-optical" class="page">
+  <div style="padding: 40px 48px;">
+    <h1>Optical Power Budget</h1>
+    <p class="page-subtitle">Shared settings behind the loss/margin figures in the Route Validator, Fibre Trace, and the SLD.</p>
+
+    <h2>Where the settings live</h2>
+    <p>The optical power budget settings are now a single shared settings dialog, opened from either of two places:</p>
+    <ul>
+      <li>The <strong>⚙ gear icon</strong> in the Conductor panel header (top-right, next to the FTTP Design subtitle) — the primary way in.</li>
+      <li>The <strong>⚙ Power Budget Settings</strong> button inside the Route Validator panel, which also re-runs validation on save.</li>
+    </ul>
+    <div class="callout info">This replaces the old standalone Optical Budget Calculator tool. There's nothing to run and no separate results window — the settings dialog just configures the numbers that the Route Validator, Fibre Trace, and Single Line Diagram all use when they calculate loss and margin.</div>
+
+    <h2>How the link budget is calculated</h2>
+    <p>For a traced route from premises to cabinet, the total loss is the sum of:</p>
+    <ul>
+      <li><strong>Fibre attenuation</strong> — route length (km) × attenuation per km</li>
+      <li><strong>Splice loss</strong> — per-fusion-splice loss × number of through-splices on the route</li>
+      <li><strong>Splitter insertion loss</strong> — looked up from the split ratio(s) encountered (e.g. 1:8)</li>
+      <li><strong>Connector loss</strong> — a flat allowance covering the POP, CBT, and ONT terminations</li>
+    </ul>
+    <p>The usable budget is the configured <strong>link class</strong> figure (Tx min − Rx sensitivity) minus the <strong>safety margin</strong>. <strong>Margin = budget − total loss</strong>; the link <strong>PASS</strong>es when margin ≥ 0 dB.</p>
+
+    <h2>Default values (UK GPON/XGS-PON, G.652D fibre)</h2>
+    <table>
+      <tr><th>Setting</th><th>Default</th><th>Notes</th></tr>
+      <tr><td>Fibre attenuation</td><td>0.25 dB/km</td><td>G.652D @ 1310/1550nm</td></tr>
+      <tr><td>Splice loss</td><td>0.10 dB</td><td>Per fusion splice (through joint)</td></tr>
+      <tr><td>Connector loss</td><td>1.50 dB</td><td>Flat allowance for POP + CBT + ONT (3 × 0.5dB)</td></tr>
+      <tr><td>Safety margin</td><td>3.0 dB</td><td>Deducted from the link class budget</td></tr>
+      <tr><td>Link class</td><td>B+ (28.0 dB)</td><td>C+ (32.0 dB) also available</td></tr>
+    </table>
+
+    <h3>Splitter insertion loss</h3>
+    <table>
+      <tr><th>Split ratio</th><th>Default loss</th></tr>
+      <tr><td>1:2</td><td>3.5 dB</td></tr>
+      <tr><td>1:4</td><td>7.0 dB</td></tr>
+      <tr><td>1:8</td><td>10.5 dB</td></tr>
+      <tr><td>1:16</td><td>14.0 dB</td></tr>
+      <tr><td>1:32</td><td>17.5 dB</td></tr>
+    </table>
+    <div class="callout info">Ratios not in the table fall back to a theoretical estimate of <code>10 × log₁₀(N) + 1.5 dB</code> excess loss.</div>
+
+    <h2>Editing settings</h2>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num"></div>
+        <div class="step-body">
+          <div class="step-title">Open the dialog</div>
+          <div class="step-desc">Click the <strong>⚙</strong> gear icon in the Conductor panel header (or <strong>⚙ Power Budget Settings</strong> in the Route Validator).</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num"></div>
+        <div class="step-body">
+          <div class="step-title">Adjust values</div>
+          <div class="step-desc">Change fibre attenuation, splice loss, connector loss, safety margin, link class, and/or the per-ratio splitter losses.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num"></div>
+        <div class="step-body">
+          <div class="step-title">Reset to Defaults (optional)</div>
+          <div class="step-desc">Click <strong>Reset to Defaults</strong> to restore the UK GPON/XGS-PON values above.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num"></div>
+        <div class="step-body">
+          <div class="step-title">Save</div>
+          <div class="step-desc">Click OK. The new values are stored at project level and used immediately by Fibre Trace, the Route Validator (which re-runs automatically), and the next Single Line Diagram export.</div>
+        </div>
+      </div>
+    </div>
+
+    <h2>Where the results show up</h2>
+    <table>
+      <tr><th>Tool</th><th>What you see</th></tr>
+      <tr><td><a href="#" onclick="show('validate'); return false;">Route Validator</a></td><td>Loss (dB) and Margin (dB) columns for every ROUTED premises, margin colour-coded pass/fail</td></tr>
+      <tr><td><a href="#" onclick="show('trace'); return false;">Fibre Trace</a></td><td>Optical budget card — PASS/FAIL badge, total loss, margin, splitters, expandable breakdown</td></tr>
+      <tr><td><a href="#" onclick="show('sld'); return false;">Single Line Diagram</a></td><td>A small loss/margin badge on each premises and drop, colour-coded pass/fail</td></tr>
+    </table>
   </div>
 </div>
 
@@ -718,7 +916,7 @@ premises.uprn
         <div class="step-num"></div>
         <div class="step-body">
           <div class="step-title">At each joint with a splitter</div>
-          <div class="step-desc">Allocate one fibre as splitter input. Fan outputs to customer bundles. Spare ports marked SPLITTER_OUTPUT_SPARE.</div>
+          <div class="step-desc"><strong>Fibre consumption:</strong> F1 = splitter input; outputs start at F2. A 1:4 uses 5 fibres (F1–F5); a 1:8 uses 9 (F1–F9). Onward splices start after the last port.<br><strong>Port types:</strong> Feeder splitters assign ports to outbound distribution cables (one per leg). CBT closures assign ports to aerial drops keyed by from_chamber=CBT joint_id. Unassigned ports → SPLITTER_OUTPUT_SPARE.</div>
         </div>
       </div>
       <div class="step">
@@ -770,10 +968,10 @@ premises.uprn
 <div id="page-trace" class="page">
   <div style="padding: 40px 48px;">
     <h1>Fibre Trace</h1>
-    <p class="page-subtitle">Click any premises to highlight its full route back to the cabinet.</p>
+    <p class="page-subtitle">Click any premises to highlight its full route back to the cabinet — and see its optical power budget.</p>
 
     <h2>How it works</h2>
-    <p>Fibre Trace runs the same BFS traversal as the Route Validator, but instead of producing a results table it draws the route directly on the map canvas — every drop, cable, and joint between the clicked premises and the cabinet, lit up in a single highlight colour.</p>
+    <p>Fibre Trace runs the same BFS traversal as the Route Validator, but instead of producing a results table it draws the route directly on the map canvas — every drop, cable, and joint between the clicked premises and the cabinet, lit up in a single highlight colour. For routes that complete (status ROUTED), the panel also calculates the optical power budget for that exact path, using the same engine and settings as the Route Validator and Single Line Diagram.</p>
 
     <h2>Running a trace</h2>
     <div class="steps">
@@ -795,7 +993,14 @@ premises.uprn
         <div class="step-num"></div>
         <div class="step-body">
           <div class="step-title">Review the highlighted route</div>
-          <div class="step-desc">Every drop, cable, and joint on the path back to the cabinet is highlighted in semi-transparent yellow. The panel shows the address, UPRN, status (ROUTED / PARTIAL), and the full hop-by-hop path.</div>
+          <div class="step-desc">Every drop, cable, and joint on the path back to the cabinet is highlighted in semi-transparent yellow. The status bar at the top of the panel shows the address and status (ROUTED / PARTIAL / UNSERVED), and the detail box below lists the UPRN, reason, and the full hop-by-hop path.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num"></div>
+        <div class="step-body">
+          <div class="step-title">Check the Optical budget card</div>
+          <div class="step-desc">For any ROUTED premises, an <strong>Optical budget</strong> card appears below the detail box, with a PASS/FAIL badge and three metric tiles — <strong>Total loss</strong>, <strong>Margin</strong>, and <strong>Splitters</strong> on the route. Click <strong>Show breakdown</strong> to expand a per-element table (fibre attenuation, splices, splitters, connectors) that sums to the total loss figure. PARTIAL and UNSERVED routes have no loss figure, so the card stays hidden.</div>
         </div>
       </div>
       <div class="step">
@@ -807,7 +1012,19 @@ premises.uprn
       </div>
     </div>
 
-    <div class="callout tip"><strong>Diagnosing faults.</strong> If a customer reports a break, click their premises and follow the highlighted route on the map to identify exactly which cable run or joint to investigate in the field. A PARTIAL status shows the route as far as it could be traced before the break.</div>
+    <h2>Reading the Optical budget card</h2>
+    <table>
+      <tr><th>Element</th><th>Meaning</th></tr>
+      <tr><td>Badge (PASS / FAIL)</td><td>Green PASS when the route's margin is ≥ 0 dB against the configured link class; red FAIL when the loss exceeds the available budget.</td></tr>
+      <tr><td>Total loss</td><td>Sum of fibre attenuation, splice loss, splitter insertion loss, and the flat connector allowance across the whole traced route.</td></tr>
+      <tr><td>Margin</td><td>Link class budget (minus safety margin) less the total loss. Shown in green when positive, red when negative.</td></tr>
+      <tr><td>Splitters</td><td>The split ratio(s) encountered on the route (e.g. <code>1:8</code>), or "none" if the route has no splitter.</td></tr>
+      <tr><td>Show breakdown</td><td>Expands a table of every contributing loss element with its dB value, ending in the total — the same figures used for the badge and metric tiles.</td></tr>
+    </table>
+
+    <div class="callout tip"><strong>Diagnosing faults.</strong> If a customer reports a break, click their premises and follow the highlighted route on the map to identify exactly which cable run or joint to investigate in the field. A PARTIAL status shows the route as far as it could be traced before the break — and won't show an optical budget, since the loss can't be calculated for an incomplete path.</div>
+    <div class="callout tip"><strong>Diagnosing a FAIL.</strong> Click <strong>Show breakdown</strong> to see which element is driving the loss — usually fibre attenuation on a long run, or an oversized splitter. Compare against the Bill of Materials / SLD for that cabinet to spot routes that need a different split ratio.</div>
+    <div class="callout info">The optical power budget settings used here (fibre attenuation, splice/connector loss, link class, splitter losses) are shared across Fibre Trace, the Route Validator, and the Single Line Diagram. Open them via the <strong>⚙</strong> gear icon in the panel header — see <a href="#" onclick="show('optical'); return false;">Optical Power Budget</a>.</div>
     <div class="callout info">The highlight is drawn with QGIS rubber bands and is automatically cleared when the dock panel closes, when another Conductor tool is activated, or when the trace panel is closed.</div>
   </div>
 </div>
@@ -973,8 +1190,9 @@ premises.uprn
       <tr><td>Fibre Cable</td><td>Cable metres grouped by fibre count and type</td></tr>
       <tr><td>Drop &amp; Bundle</td><td>Bundle metres grouped by fibre count</td></tr>
       <tr><td>Joints</td><td>Closure count by type + splitter count by ratio</td></tr>
-      <tr><td>Duct</td><td>Duct metres by type and surface (incl. 7mm drop duct)</td></tr>
+      <tr><td>Duct</td><td>Duct metres by type and surface (incl. 7mm drop duct), plus Road/Stream Crossing works allowances and Scaffold Bar sleeve length where used</td></tr>
     </table>
+    <div class="callout info">Active equipment costs (Calix shelves, GPON cards/optics, batteries, etc.) are <strong>not</strong> in the BoM — see the <strong>Cabinet Cost Calculator</strong> for those, which combines them with this BoM's civils/cable total.</div>
 
     <h2>Unit costs</h2>
     <p>Costs are pre-loaded from Gigaloch's 2022 price sheet. Key values:</p>
@@ -996,9 +1214,87 @@ premises.uprn
   </div>
 </div>
 
+<!-- ═══════════════════════════════ CABINET COST ═══════════════════════════ -->
+<div id="page-cabinetcost" class="page">
+  <div style="padding: 40px 48px;">
+    <h1>Cabinet Cost Calculator</h1>
+    <p class="page-subtitle">Per-cabinet build cost: active equipment + civils/cable BoM.</p>
+
+    <h2>Opening the calculator</h2>
+    <p>Click <strong>Cabinet Cost Calculator</strong> in the TOOLS section. Every Exchange/POP (cabinet) in the project gets a row: Equipment cost, Civils/Cable cost (the BoM total for that cabinet's <code>area_id</code>), the combined Total, and £ per premises. A project grand total is shown underneath when there's more than one cabinet.</p>
+
+    <h2>Equipment cost</h2>
+    <p>Read directly from the cabinet's own attributes (set via Place/Edit Cabinet/POP), using Gigaloch's real Cabinet Calculator unit prices:</p>
+    <table>
+      <tr><th>Item</th><th>Source field</th><th>Unit cost</th></tr>
+      <tr><td>DU-X Rectifier Shelf</td><td><code>dux_shelves</code></td><td>£900.00 each</td></tr>
+      <tr><td>Inverter (1 per DU-X shelf)</td><td><code>dux_shelves</code></td><td>£140.00 each</td></tr>
+      <tr><td>Management / OOB Switch</td><td>fixed, 1 per cabinet</td><td>£350.00</td></tr>
+      <tr><td>Calix E7-2 Shelf</td><td><code>calix_shelves</code></td><td>£400.00 each</td></tr>
+      <tr><td>Calix GPON Card</td><td><code>gpon_cards</code></td><td>£4,200.00 each</td></tr>
+      <tr><td>Calix GPON Optic</td><td><code>gpon_optics</code></td><td>£110.00 each</td></tr>
+      <tr><td>Battery Set</td><td><code>battery_sets</code></td><td>£190.00 each</td></tr>
+      <tr><td>Patch Panel</td><td><code>patch_panels</code></td><td>£60.00 each</td></tr>
+      <tr><td>Aggregation Router</td><td><code>has_aggreg_router</code></td><td>£8,000.00 if fitted</td></tr>
+      <tr><td>Sundries (wiring, PDUs)</td><td>fixed, 1 per cabinet</td><td>£150.00</td></tr>
+    </table>
+
+    <h3>Cabinet build-out (pop_type = CABINET only)</h3>
+    <p>For a new street cabinet (as opposed to an existing exchange/datacentre/rooftop POP), four one-off costs are added:</p>
+    <table>
+      <tr><th>Item</th><th>Unit cost</th></tr>
+      <tr><td>Cabinet enclosure (inc. 2x fans)</td><td>£1,500.00</td></tr>
+      <tr><td>Groundworks</td><td>£1,000.00</td></tr>
+      <tr><td>Electrical hookup</td><td>£500.00</td></tr>
+      <tr><td>Backhaul install</td><td>£950.00</td></tr>
+    </table>
+    <div class="callout info">An "Empty Cabinet" (1× DU-X shelf, 1× battery set, everything else zero, pop_type=CABINET) costs <strong>£5,680</strong> — matching the Gigaloch Cabinet Calculator spreadsheet exactly.</div>
+
+    <h2>Editing costs</h2>
+    <p>The <strong>£ Edit Costs</strong> button is shared with the Bill of Materials — changes apply to both. If a cabinet's Equipment cost shows £0, its shelf/card/optic counts haven't been filled in yet; edit it via Edit Cabinet/POP (or click it with Edit Asset).</p>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ SLD ════════════════════════════════════ -->
+<div id="page-sld" class="page">
+  <div style="padding: 40px 48px;">
+    <h1>Single Line Diagram</h1>
+    <p class="page-subtitle">A self-contained HTML schematic of the whole network, from cabinet to every drop.</p>
+
+    <h2>How it works</h2>
+    <p>Click <strong>Single Line Diagram</strong> with a project open. Conductor walks the topology outward from the cabinet — joints, cables, bundles and aerial drops — and renders it as a tree, opening automatically in your browser as one self-contained HTML file (no internet connection required).</p>
+
+    <h2>Reading a node</h2>
+    <table>
+      <tr><th>Node type</th><th>Shown as</th></tr>
+      <tr><td>Pass-through joint</td><td>Joint ID, "Pass-through", chamber ID</td></tr>
+      <tr><td>Splitter joint</td><td>Joint ID, split ratio (e.g. "1:8 splitter"), chamber ID</td></tr>
+      <tr><td>CBT (aerial closure)</td><td>Joint ID, "CBT — Pole: &lt;pole id&gt;"</td></tr>
+      <tr><td>End of line</td><td>Joint ID, "End of line"</td></tr>
+    </table>
+    <p>Underground bundles hang off their joint in a green-dashed list (bundle ID, served address, fibre count and length); aerial drops hang off in a blue-dashed list (📶 drop ID, served address, length, "Aerial drop").</p>
+
+    <h2>Optical budget badges</h2>
+    <p>Every bundle and aerial drop row now carries a small badge showing its optical power budget — the same figures as Fibre Trace and the Route Validator, calculated once per premises and reused everywhere:</p>
+    <ul>
+      <li><strong>Green badge</strong> (<code>budget-pass</code>) — e.g. <code>14.2dB · +6.8dB margin</code> — the route passes the configured link budget.</li>
+      <li><strong>Red badge</strong> (<code>budget-fail</code>) — same format, margin shown as a negative figure — the route exceeds the budget and needs attention (shorter run, smaller splitter, or different link class).</li>
+      <li>No badge — the route to that premises isn't complete (PARTIAL/UNSERVED in the Route Validator), so there's no loss figure to show.</li>
+    </ul>
+    <div class="callout tip"><strong>Spotting problem drops at a glance.</strong> Because the badge is right next to the address on every bundle/drop row, you can scan a whole branch of the SLD and immediately see which premises are failing their optical budget — without running the Route Validator or clicking through each one in Fibre Trace.</div>
+    <div class="callout info">The badge values come from the same <a href="#" onclick="show('optical'); return false;">Optical Power Budget</a> settings used by Fibre Trace and the Route Validator. Change the settings via the ⚙ gear icon and re-run Single Line Diagram to refresh the badges.</div>
+
+    <h2>Navigating large diagrams</h2>
+    <p>On large networks the diagram can be long — use Ctrl+F in your browser to jump straight to a specific cabinet, chamber, joint, bundle, or drop ID.</p>
+  </div>
+</div>
+
 <!-- ═══════════════════════════════ SYMBOLOGY ══════════════════════════════ -->
 <div id="page-symbology" class="page">
   <div style="padding: 40px 48px;">
+    <h2>Splitter port panel</h2>
+    <p>When editing a joint or CBT with <code>has_splitter = true</code> after Auto-Assign has run, the Edit Joint dialog shows a port assignment panel. Ports display in a 2-column grid: CBT ports show UPRN and address; feeder splitter ports show outbound cable ID and destination joint. Unassigned ports show <em>Spare — unassigned</em>. Re-run Auto-Assign to update assignments.</p>
+
     <h1>Symbology</h1>
     <p class="page-subtitle">How layers are displayed on the map. Applied automatically when a project is loaded.</p>
 
@@ -1140,11 +1436,15 @@ SCOT-222-BDL-007</div>
       <tr><th>Tool</th><th>Snaps to</th></tr>
       <tr><td>Digitise Duct</td><td>Chambers, cabinet</td></tr>
       <tr><td>Digitise Cable</td><td>Joints, cabinet</td></tr>
-      <tr><td>Digitise Drop Duct</td><td>Joints, chambers (start) → premises (end)</td></tr>
-      <tr><td>Digitise Bundle</td><td>Joints (start) → premises (end)</td></tr>
+      <tr><td>Digitise Drop Duct</td><td>Joints/chambers (start); premises (end); free vertices; floating segment preview</td></tr>
+      <tr><td>Digitise Bundle</td><td>Joints (start); drop duct vertices (secondary); premises (end)</td></tr>
+      <tr><td>Digitise PIA Aerial Span</td><td>CBT joints (primary); PIA poles (secondary for chaining); free cursor</td></tr>
+      <tr><td>Digitise PIA Aerial Drop</td><td>CBT joints (start); premises (end); free vertices</td></tr>
+      <tr><td>Place CBT</td><td>PIA_POLE chambers — cyan snap indicator</td></tr>
       <tr><td>Place Joint</td><td>Chambers (within 14px radius)</td></tr>
     </table>
-    <p>Snap radius: <code>canvas.mapUnitsPerPixel() × 14–16 pixels</code></p>
+    <p>Snap radius: <code>canvas.mapUnitsPerPixel() × 14–16 pixels</code>. All multi-vertex line tools show a floating segment from the last vertex to the cursor.</p>
+    <div class="callout info"><strong>BoM accuracy:</strong> Use secondary vertex snapping (cable→duct, bundle→drop duct) to ensure fibre routes mirror civil infrastructure exactly. Drift compounds across a project.</div>
 
     <h2>Double-click phantom event</h2>
     <div class="callout info">QGIS fires <code>canvasReleaseEvent</code> twice on a fast double-click. All two-click tools (Drop Duct, Bundle) guard against this using a <code>_last_click_pos</code> check. If you digitise a drop duct and it saves immediately to the wrong location, slow down the two clicks slightly.</div>
@@ -1157,7 +1457,9 @@ SCOT-222-BDL-007</div>
     <h1>Roadmap</h1>
     <p class="page-subtitle">What's built, what's verified, and what's coming next.</p>
 
-    <h2>v1.1.0 — Current release</h2>
+    <h2>v1.0.2 — Current release</h2>
+    <p>Includes the v1.0.1 PIA schema-integrity fixes (surface_type migration, schema-contract test, Digitise Cable fix) — all verified against the schema-contract test below.</p>
+    <div class="callout info"><strong>Removed:</strong> Generate Job Pack and BDUK Export buttons (and their placeholder code/icons/help entries) have been removed — both are handled by other teams outside Conductor. Add Build Task has also been removed: build-stage tracking is already covered by the <code>status</code> field on every asset, editable via Edit Asset, so a separate tool/layer wasn't needed.</div>
     <table>
       <tr><th>Feature</th><th>Status</th></tr>
       <tr><td>New / Open Project</td><td><span class="badge working">Working</span></td></tr>
@@ -1169,7 +1471,7 @@ SCOT-222-BDL-007</div>
       <tr><td>Digitise Cable</td><td><span class="badge working">Working</span></td></tr>
       <tr><td>Digitise Drop Duct</td><td><span class="badge working">Working</span></td></tr>
       <tr><td>Digitise Bundle</td><td><span class="badge working">Working</span></td></tr>
-      <tr><td>Edit Asset</td><td><span class="badge partial">Needs end-to-end test</span></td></tr>
+      <tr><td>Edit Asset (unified: Chamber/Duct/Joint/Cable/Drop/Bundle)</td><td><span class="badge working">Working</span></td></tr>
       <tr><td>Delete / Move Asset</td><td><span class="badge working">Working</span></td></tr>
       <tr><td>Import Premises (AddressBase)</td><td><span class="badge working">Working</span></td></tr>
       <tr><td>Postcode Zoom</td><td><span class="badge working">Working</span></td></tr>
@@ -1177,16 +1479,30 @@ SCOT-222-BDL-007</div>
       <tr><td>Auto-Assign Fibres</td><td><span class="badge working">Working</span></td></tr>
       <tr><td>Splice Plan Export (HTML)</td><td><span class="badge working">Working</span></td></tr>
       <tr><td>Bill of Materials</td><td><span class="badge working">Working</span></td></tr>
-      <tr><td>Single Line Diagram (HTML)</td><td><span class="badge working">Working</span></td></tr>
+      <tr><td>Single Line Diagram (HTML, with per-drop optical budget badges)</td><td><span class="badge working">Working</span></td></tr>
       <tr><td>Map symbology + labels</td><td><span class="badge working">Working</span></td></tr>
-      <tr><td>Fibre Trace (interactive)</td><td><span class="badge working">Working</span></td></tr>
+      <tr><td>Fibre Trace (interactive, with Optical budget card)</td><td><span class="badge working">Working</span></td></tr>
+      <tr><td>Optical Power Budget settings (shared dialog, header gear icon)</td><td><span class="badge working">Working</span></td></tr>
       <tr><td>Fibre Count Calculator</td><td><span class="badge working">Working</span></td></tr>
-      <tr><td>Route Splice Export</td><td><span class="badge partial">New — under test</span></td></tr>
+      <tr><td>Route Splice Export</td><td><span class="badge partial">Working — branch indicators &amp; multi-cabinet testing pending</span></td></tr>
       <tr><td>Place Pole</td><td><span class="badge working">Working</span></td></tr>
       <tr><td>Place CBT (aerial closure)</td><td><span class="badge working">Working</span></td></tr>
-      <tr><td>Digitise PIA Aerial Route</td><td><span class="badge working">Working</span></td></tr>
-      <tr><td>Digitise PIA Subduct Route</td><td><span class="badge working">Working</span></td></tr>
+      <tr><td>Place PIA UG Chamber (incl. surface_type)</td><td><span class="badge working">Working</span></td></tr>
+      <tr><td>Digitise PIA Aerial Span (cable wrapper)</td><td><span class="badge working">Working</span></td></tr>
+      <tr><td>Digitise PIA UG Duct</td><td><span class="badge working">Working</span></td></tr>
+      <tr><td>Digitise PIA Aerial Drop (drop wrapper)</td><td><span class="badge working">Working</span></td></tr>
+      <tr><td>Digitise PIA UG Drop</td><td><span class="badge working">Working</span></td></tr>
+      <tr><td>Schema-contract test (tools vs LAYER_SCHEMA, v1.0.1)</td><td><span class="badge working">Working</span></td></tr>
+      <tr><td>Dock panel list / grid (dial pad) view toggle</td><td><span class="badge working">Working</span></td></tr>
       <tr><td>Snapping enforcement on digitise tools</td><td><span class="badge working">Working</span></td></tr>
+      <tr><td>Project Summary Panel</td><td><span class="badge working">Working</span></td></tr>
+      <tr><td>Digitise Road Crossing</td><td><span class="badge working">Working</span></td></tr>
+      <tr><td>Digitise Stream Crossing</td><td><span class="badge working">Working</span></td></tr>
+      <tr><td>Duct sleeve (scaffold bar) tracking + BoM line item</td><td><span class="badge working">Working</span></td></tr>
+      <tr><td>Cabinet Cost Calculator (equipment + civils/cable rollup)</td><td><span class="badge working">Working</span></td></tr>
+      <tr><td>Edit Asset extended to Cabinet/POP</td><td><span class="badge working">Working</span></td></tr>
+      <tr><td>Edit Cabinet/POP click-to-find (CRS + geometry bug fixes)</td><td><span class="badge working">Working</span></td></tr>
+      <tr><td>Route Validator: aerial drop (CBT-via-pole) resolution</td><td><span class="badge working">Working</span></td></tr>
     </table>
 
     <h2>Near term</h2>
@@ -1194,8 +1510,6 @@ SCOT-222-BDL-007</div>
       <tr><th>Feature</th><th>Notes</th></tr>
       <tr><td>Route Splice Export — branch indicators</td><td>Visually distinguish off-route branch joints (e.g. JNT-003 → JNT-005) from the main traced route</td></tr>
       <tr><td>Route Splice Export — multi-cabinet testing</td><td>Verify on a larger project with multiple cabinets and branches</td></tr>
-      <tr><td>Digitise Road Crossing</td><td>Civil tool for routing ducts under roads — UI wired, tool not yet implemented</td></tr>
-      <tr><td>Digitise Stream Crossing</td><td>Civil tool for routing ducts under watercourses — UI wired, tool not yet implemented</td></tr>
       <tr><td>Validate Relationships</td><td>FK checker across all layers — ducts connected to correct node types etc.</td></tr>
       <tr><td>Project Settings</td><td>Per-project uptake %, slack allowances, configurable unit costs</td></tr>
     </table>
@@ -1204,9 +1518,6 @@ SCOT-222-BDL-007</div>
     <table>
       <tr><th>Feature</th><th>Notes</th></tr>
       <tr><td>Materials Library</td><td>Spreadsheet-based cost import, then full catalogue with model/supplier/datasheet per item, with Select from Library on Place Joint/Chamber</td></tr>
-      <tr><td>Generate Job Pack</td><td>PPTX from Gigaloch spine job pack template</td></tr>
-      <tr><td>BDUK Export</td><td>Homes passed / connected report for voucher scheme reporting</td></tr>
-      <tr><td>Add Build Task</td><td>Construction task tracking per route segment</td></tr>
       <tr><td>Custom asset icons</td><td>SVG icons per asset type for cleaner map presentation</td></tr>
       <tr><td>Slack / order lengths</td><td>Add configurable slack per joint/cabinet/premises to BoM order quantities</td></tr>
       <tr><td>Undo / Redo manager</td><td>Ctrl+Z support for all placement tools via QgsProject undo stack</td></tr>
@@ -1229,13 +1540,46 @@ SCOT-222-BDL-007</div>
 </div><!-- /shell -->
 
 <script>
-function show(id) {
+// showPage(target) drives navigation without depending on a click event,
+// so it can be called on load from a URL hash (e.g. manual.html#cabinetcost
+// or manual.html#civil:crossings to also scroll to an element with that id).
+function showPage(target) {
+  const parts  = target.split(':');
+  const id     = parts[0];
+  const anchor = parts[1];
+  const page = document.getElementById('page-' + id);
+  if (!page) return false;
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  document.getElementById('page-' + id).classList.add('active');
-  event.currentTarget.classList.add('active');
+  page.classList.add('active');
+  const navItem = document.querySelector(".nav-item[onclick=\"show('" + id + "')\"]");
+  if (navItem) navItem.classList.add('active');
+  if (anchor) {
+    const el = document.getElementById(anchor);
+    if (el) { el.scrollIntoView(); return true; }
+  }
   document.querySelector('.main').scrollTop = 0;
+  return true;
 }
+
+function show(id) {
+  showPage(id);
+  if (history.replaceState) history.replaceState(null, '', '#' + id);
+}
+
+// Deep-link support: manual.html#cabinetcost or manual.html#civil:crossings
+window.addEventListener('DOMContentLoaded', function () {
+  const hash = window.location.hash.replace('#', '');
+  if (hash) showPage(hash);
+});
+
+// If the manual is already open in a tab and a new "Open Manual" click just
+// changes the #hash on that existing tab, DOMContentLoaded won't fire again
+// - but hashchange will, so handle that case too.
+window.addEventListener('hashchange', function () {
+  const hash = window.location.hash.replace('#', '');
+  if (hash) showPage(hash);
+});
 
 function toggle(header) {
   const acc = header.parentElement;

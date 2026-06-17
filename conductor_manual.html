@@ -400,6 +400,17 @@
     </div>
     <p>On the map, civil routes are drawn wider (0.7mm navy for spine duct) and fibre routes sit visually inside them as thinner contrasting lines (0.35mm neon pink for cable).</p>
 
+    <h2>Staged tool unlock</h2>
+    <p>When a new project is created, Conductor locks all design tools except <strong>Import Premises</strong>. Tools become available progressively as you complete each setup step:</p>
+    <table>
+      <tr><th>Step completed</th><th>Tools unlocked</th></tr>
+      <tr><td>Project created</td><td>Import Premises only</td></tr>
+      <tr><td>Premises imported</td><td>+ Draw Build Area</td></tr>
+      <tr><td>Build area drawn</td><td>+ Place Cabinet / POP</td></tr>
+      <tr><td>Cabinet placed</td><td>All remaining tools</td></tr>
+    </table>
+    <p>The unlock state is <strong>derived from the GeoPackage</strong> — Conductor checks whether the premises, build_areas, and exchange_pops layers contain features. This means the state is always correct, even after a crash or if you return to a project later. Existing projects with all three elements open fully unlocked.</p>
+
     <h2>Dock panel layout: list vs grid view</h2>
     <p>The <strong>Design</strong> and <strong>PIA</strong> tabs in the Conductor dock can each be switched between two layouts:</p>
     <table>
@@ -495,51 +506,73 @@ Calix E7-2 (1 card, 8 ports): 256 customers theoretical max
     <div class="callout tip"><strong>One GeoPackage per build area.</strong> If Gigaloch has multiple active deployments, each gets its own <code>.gpkg</code> file. They can be open in QGIS simultaneously.</div>
 
     <h2>Recommended workflow</h2>
+
+    <div class="callout info"><strong>Staged tool unlock.</strong> When you create a new project, Conductor locks all design tools except Import Premises. Tools unlock progressively as you complete each mandatory setup step. This prevents errors caused by designing without address data, a defined build boundary, or a serving cabinet.</div>
+
     <div class="steps">
       <div class="step">
-        <div class="step-num"></div>
+        <div class="step-num">1</div>
         <div class="step-body">
-          <div class="step-title">Create project &amp; draw build area</div>
-          <div class="step-desc">Define the coverage polygon. All subsequent tools filter to this boundary.</div>
+          <div class="step-title">Create project</div>
+          <div class="step-desc">Click <strong>＋ New Project</strong>. Fill in project name, country code, build code, designer and project manager. Conductor creates the GeoPackage and loads all 14 layers. Only <strong>Import Premises</strong> is active at this point.</div>
         </div>
       </div>
       <div class="step">
-        <div class="step-num"></div>
+        <div class="step-num">2</div>
         <div class="step-body">
-          <div class="step-title">Import premises</div>
-          <div class="step-desc">Load OS AddressBase CSV. Conductor auto-filters to the build area and maps columns automatically.</div>
+          <div class="step-title">Import Premises (AddressBase)</div>
+          <div class="step-desc">Import your AddressBase CSV or Shapefile. All premises in the source file are loaded as points. Use the distribution of points on the map to inform where you draw your build area boundary. Once at least one premises record is imported, <strong>Draw Build Area</strong> unlocks.</div>
         </div>
       </div>
       <div class="step">
-        <div class="step-num"></div>
+        <div class="step-num">3</div>
         <div class="step-body">
-          <div class="step-title">Place cabinet &amp; design civil network</div>
-          <div class="step-desc">Place the Calix E7-2 cabinet, then digitise ducts and chambers outward to all premises clusters.</div>
+          <div class="step-title">Draw Build Area</div>
+          <div class="step-desc">Digitise the build area polygon around your premises points. Left-click to add vertices, right-click to close and confirm. Conductor automatically <strong>clips premises to the polygon</strong> — any address points outside the boundary are removed. Once the build area is saved, <strong>Place Cabinet / POP</strong> unlocks.</div>
         </div>
       </div>
       <div class="step">
-        <div class="step-num"></div>
+        <div class="step-num">4</div>
         <div class="step-body">
-          <div class="step-title">Design fibre network</div>
-          <div class="step-desc">Place joints inside chambers, digitise cables, draw bundles from joints to premises.</div>
+          <div class="step-title">Place Cabinet / POP</div>
+          <div class="step-desc">Click the map to place the serving cabinet. Fill in the cabinet details and save. Once the cabinet is placed, <strong>all remaining design tools unlock</strong> and you can proceed with chambers, ducts, cables, joints and drops.</div>
         </div>
       </div>
       <div class="step">
-        <div class="step-num"></div>
+        <div class="step-num">5</div>
         <div class="step-body">
-          <div class="step-title">Validate, assign fibres, generate outputs</div>
-          <div class="step-desc">Run the route validator, auto-assign fibre numbers, generate splice plans and BoM.</div>
+          <div class="step-title">Design the network</div>
+          <div class="step-desc">With all tools active, design the civil and fibre layers in any order. Typical sequence: place chambers → digitise ducts → place joints → digitise cables → digitise drop ducts → digitise bundles → assign fibre roles → validate routes.</div>
         </div>
       </div>
     </div>
+
+    <div class="callout tip"><strong>Opening an existing project.</strong> When you open an existing project, Conductor checks what already exists in the GeoPackage (premises, build area, cabinet) and unlocks tools accordingly. A project with all three will open fully unlocked — identical to the previous behaviour. This also means if QGIS crashes mid-setup, you pick up exactly where you left off.</div>
+
   </div>
 </div>
 
-<!-- ═══════════════════════════════ CIVIL ══════════════════════════════════ -->
-<div id="page-civil" class="page">
+<div id="page-civil"<div id="page-civil" class="page">
   <div style="padding: 40px 48px;">
     <h1>Civil Layer</h1>
     <p class="page-subtitle">Drawing the physical duct and chamber infrastructure.</p>
+
+    <h2>Import Premises (AddressBase)</h2>
+    <p>The first step in any new project. Click <strong>Import Premises</strong> and select your AddressBase CSV or Shapefile. Map the required columns (UPRN, Easting, Northing for CSV; the tool auto-detects columns for Shapefiles) and click Import.</p>
+    <p>Premises are loaded as point features in EPSG:27700. Each point carries the UPRN, address, classification (residential/business), and postcode. Use the distribution of points on the map to plan where to draw your build area boundary.</p>
+    <div class="callout tip"><strong>Import everything first.</strong> Import all premises in your source file — don't worry about filtering. The cookie-cutter clip happens automatically when you draw the build area, removing any points outside the polygon.</div>
+
+    <h2>Draw Build Area</h2>
+    <p>Digitise a polygon defining the extent of this build area. Left-click to place vertices, right-click to close the polygon and open the Build Area dialog.</p>
+    <table>
+      <tr><th>Field</th><th>Notes</th></tr>
+      <tr><td>Area Name</td><td>Human-readable name, e.g. "Dunning Village Phase 1"</td></tr>
+      <tr><td>Phase</td><td>Build phase number (integer)</td></tr>
+      <tr><td>Status</td><td>PLANNED / HLD / MLD / LLD / BUILD / LIVE</td></tr>
+      <tr><td>Notes</td><td>Free text</td></tr>
+    </table>
+    <p>On confirmation, Conductor <strong>automatically clips the premises layer</strong> — any address points outside the build area polygon are deleted. This is irreversible within the session, so ensure your polygon is correct before confirming.</p>
+    <div class="callout warning"><strong>Cookie-cutter is permanent.</strong> Premises outside the polygon are deleted from the GeoPackage. If you need to adjust the boundary, re-import premises and redraw the build area.</div>
 
     <h2>Place Cabinet / POP</h2>
     <p>Click <strong>Place Cabinet / POP</strong> then click on the map where the Calix E7-2 cabinet will be located. Fill in the form — postcode auto-fills from the coordinates. The cabinet gets the ID <code>SCOT-222-CAB-001</code>.</p>
