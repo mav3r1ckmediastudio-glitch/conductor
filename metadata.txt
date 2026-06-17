@@ -2,7 +2,7 @@
 name=Conductor
 qgisMinimumVersion=3.22
 description=FTTP fibre network design, build, and inventory management for QGIS. Built for UK FTTP operators.
-version=1.0.1
+version=1.0.2
 author=Mav3r1ck Media Studio
 email=conductor@mav3r1ckmedia.studio
 about=Conductor is a full-lifecycle FTTP network design plugin for QGIS. It covers planning, passive infrastructure, fibre assignment, survey, wayleave, build progress, and customer connection — all stored in a portable GeoPackage. Built around UK operator conventions including the Gigaloch HLD labelling specification.

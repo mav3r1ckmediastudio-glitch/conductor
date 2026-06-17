@@ -754,10 +754,9 @@ class ConductorDockWidget(QDockWidget):
         return btn
 
     def _activate_tool(self, callback):
-        """Highlight the button for this callback and enable snapping. Call at the start of each tool handler."""
+        """Highlight the button for this callback. Call at the start of each tool handler."""
         btn = getattr(self, '_btn_map', {}).get(callback)
         self._set_active_button(btn)
-        self._enable_conductor_snapping()
 
     def _enable_conductor_snapping(self):
         """Enable vertex+segment snapping for digitise tools, saving previous config for restore."""
@@ -920,13 +919,27 @@ class ConductorDockWidget(QDockWidget):
         if not self._project:
             QMessageBox.warning(self, "No Project", "Please open a project first.")
             return
-        self._activate_tool(handler)
-        import importlib
-        mod = importlib.import_module(".tools." + module, __package__)
-        tool = getattr(mod, cls_name)(self.iface.mapCanvas(), self._project)
-        getattr(tool, signal).connect(on_success)
-        self.iface.mapCanvas().setMapTool(tool)
-        self.iface.messageBar().pushInfo("Conductor", info)
+        try:
+            self._activate_tool(handler)
+            import importlib
+            mod = importlib.import_module(".tools." + module, __package__)
+            tool = getattr(mod, cls_name)(self.iface.mapCanvas(), self._project)
+            getattr(tool, signal).connect(on_success)
+            # CRITICAL: keep a strong Python reference to the map tool, otherwise
+            # PyQt/SIP may garbage-collect the wrapper once this method returns,
+            # leaving a dead tool that shows no cursor and ignores clicks.
+            self._active_map_tool = tool
+            self.iface.mapCanvas().setMapTool(tool)
+            self.iface.mapCanvas().setFocus()
+            self._enable_conductor_snapping()
+            self.iface.messageBar().pushInfo("Conductor", info)
+        except Exception as e:
+            import traceback
+            tb = traceback.format_exc()
+            QMessageBox.critical(
+                self, "Conductor — Tool activation failed",
+                f"Could not start the tool '{cls_name}'.\n\n{e}\n\n{tb}"
+            )
 
     def _on_place_pop(self):
         self._run_map_tool(
