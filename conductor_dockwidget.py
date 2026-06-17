@@ -744,6 +744,7 @@ class ConductorDockWidget(QDockWidget):
             btn.setIconSize(QSize(28, 28))
         btn.setEnabled(False)
         btn.clicked.connect(callback)
+        btn._conductor_callback = callback  # strong ref for _refresh_tool_states
         self._tool_buttons.append(btn)
         if not hasattr(self, '_btn_map'):
             self._btn_map = {}
@@ -824,8 +825,8 @@ class ConductorDockWidget(QDockWidget):
         code = conductor_project.area_id
         self._status_label.setText(f"▸  {name}  ({code})")
         self._status_label.setStyleSheet(f"color:{TEAL}; font-size:11px; font-weight:bold; padding-bottom:4px;")
-        for btn in self._tool_buttons:
-            btn.setEnabled(True)
+        # Tool availability derived from project state
+        self._refresh_tool_states()
         try:
             self.iface.mapCanvas().mapToolSet.connect(self._on_map_tool_set)
         except Exception:
@@ -850,6 +851,47 @@ class ConductorDockWidget(QDockWidget):
                     pass
 
         self._on_refresh_summary()
+
+    def _refresh_tool_states(self):
+        """Enable/disable tools based on project state (ground-truth from gpkg).
+
+        Stage 0 — no project:        all tools disabled
+        Stage 1 — project created:   Import Premises only
+        Stage 2 — premises imported: + Draw Build Area
+        Stage 3 — build area drawn:  + Place Cabinet / POP
+        Stage 4 — cabinet placed:    + all remaining tools
+        """
+        if not self._project:
+            for btn in self._tool_buttons:
+                btn.setEnabled(False)
+            return
+
+        def _count(layer_name):
+            try:
+                layer = self._project.get_layer(layer_name)
+                return layer.featureCount() if layer and layer.isValid() else 0
+            except Exception:
+                return 0
+
+        has_premises   = _count("premises")      > 0
+        has_build_area = _count("build_areas")   > 0
+        has_cabinet    = _count("exchange_pops") > 0
+
+        always_on = {self._on_new_project, self._on_open_project}
+        enabled = set(always_on) | {self._on_import_premises}
+        if has_premises:
+            enabled |= {self._on_draw_build_area}
+        if has_premises and has_build_area:
+            enabled |= {self._on_place_pop}
+        if has_premises and has_build_area and has_cabinet:
+            enabled = None  # unlock everything
+
+        for btn in self._tool_buttons:
+            cb = getattr(btn, '_conductor_callback', None)
+            if enabled is None:
+                btn.setEnabled(True)
+            else:
+                btn.setEnabled(cb in enabled)
 
     def _on_map_tool_set(self, new_tool, old_tool):
         """Deactivate button highlight if the tool was cleared externally."""
@@ -944,7 +986,7 @@ class ConductorDockWidget(QDockWidget):
     def _on_place_pop(self):
         self._run_map_tool(
             self._on_place_pop, 'place_pop', 'PlacePOPMapTool', 'placed',
-            lambda pid: self.iface.messageBar().pushSuccess( "Conductor", f"Cabinet {pid} placed successfully." ),
+            lambda pid: [self.iface.messageBar().pushSuccess( "Conductor", f"Cabinet {pid} placed successfully." ), self._refresh_tool_states()],
             'Click on the map to place a Cabinet / POP. Press Esc to cancel.')
 
     def _on_edit_pop(self):
@@ -968,7 +1010,7 @@ class ConductorDockWidget(QDockWidget):
     def _on_draw_build_area(self):
         self._run_map_tool(
             self._on_draw_build_area, 'build_area', 'DrawBuildAreaMapTool', 'drawn',
-            lambda aid: self.iface.messageBar().pushSuccess( "Conductor", f"Build Area {aid} saved." ),
+            lambda aid: [self.iface.messageBar().pushSuccess( "Conductor", f"Build Area {aid} saved." ), self._refresh_tool_states()],
             'Left-click to add corners. Right-click to finish the polygon. Esc to cancel.')
 
     def _on_digitise_duct(self):
@@ -1073,6 +1115,7 @@ class ConductorDockWidget(QDockWidget):
         from .tools.import_premises import ImportPremisesDialog
         dlg = ImportPremisesDialog(self._project, parent=self)
         dlg.exec_()
+        self._refresh_tool_states()
 
 
     def _on_postcode_zoom(self):

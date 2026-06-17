@@ -118,6 +118,30 @@ class BuildAreaDialog(QDialog):
 # MAP TOOL — click points to build polygon, double-click to finish
 # ═══════════════════════════════════════════════════════════════════════════
 
+
+def _clip_premises_to_build_area(project, build_area_geom):
+    """Delete any premises features that fall outside the build area polygon."""
+    premises_layer = project.get_layer("premises")
+    if not premises_layer or not premises_layer.isValid():
+        return
+    if premises_layer.featureCount() == 0:
+        return
+
+    ids_to_delete = []
+    for feat in premises_layer.getFeatures():
+        geom = feat.geometry()
+        if geom.isEmpty() or not build_area_geom.contains(geom):
+            ids_to_delete.append(feat.id())
+
+    if not ids_to_delete:
+        return
+
+    premises_layer.startEditing()
+    premises_layer.deleteFeatures(ids_to_delete)
+    premises_layer.commitChanges()
+    premises_layer.triggerRepaint()
+
+
 class DrawBuildAreaMapTool(QgsMapTool):
 
     drawn = pyqtSignal(str)  # emits area_id
@@ -199,6 +223,9 @@ class DrawBuildAreaMapTool(QgsMapTool):
             tree_layer = QgsProject.instance().layerTreeRoot().findLayer(layer.id())
             if tree_layer:
                 tree_layer.setItemVisibilityChecked(True)
+
+            # Clip any already-imported premises to this build area
+            _clip_premises_to_build_area(self._project, geom)
 
             self.drawn.emit(attrs["area_id"])
         else:
