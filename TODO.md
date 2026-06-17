@@ -1,5 +1,5 @@
 # Conductor — Development To-Do List
-*Last updated: June 2026 (v1.2.0 session)*
+*Last updated: 18 June 2026 (v1.0.2 session)*
 
 ---
 
@@ -60,12 +60,25 @@
 
 ## 🏗️ ARCHITECTURE & QUALITY
 - [x] Schema-contract static test (tests/test_schema_contract.py, v1.0.1) — guards tool attribute dicts against LAYER_SCHEMA drift
-- [ ] Undo / Redo manager (Ctrl+Z for all placement tools)
+- [x] Undo / Redo manager (Ctrl+Z / Ctrl+Shift+Z, 5 levels, covers place/delete/move/edit) — conductor_utils.py UndoStack, conductor_dockwidget.py QShortcut
+- [x] Staged tool unlock — tools unlock progressively as premises/build area/cabinet are created. State derived from gpkg ground truth on every open (crash-resilient).
+- [x] Cookie-cutter clip — premises outside build area polygon automatically deleted when build area is drawn.
+- [x] Splitter integrity warning — edit-time and validation-time check for joints with >1 downstream connection but no splitter declared.
+- [x] 1:4 × 1:8 splitter chain enforcement — route validator checks every ROUTED premises has exactly a 1:8 (distribution) and 1:4 (spine) splitter in correct order.
+- [x] CBT tail 500m warning — non-blocking warning if tail exceeds 500m.
 - [ ] Optical schematic view (QGraphicsView fibre topology diagram)
 - [ ] Fibre slack tracking per chamber/joint
 - [ ] Refactor tools into manager classes (LayerManager, IDManager, SnappingManager)
 - [ ] Plugin Reloader compatibility (dev workflow)
 - [ ] Broader unit tests for ID generation and topology rules
+
+### Bug fixes (v1.0.2 session — 18 June 2026)
+- [x] PyQt/SIP GC bug — map tools created as local variables were garbage-collected immediately after _run_map_tool() returned, leaving a dead tool with no cursor. Fixed: self._active_map_tool = tool holds strong reference.
+- [x] Edit Joint dialog auto-sizing — three competing resize attempts fired before Qt laid out the scroll area. Fixed: single deferred resize via showEvent + QTimer.singleShot(0).
+- [x] Ctrl+Z not firing — keyPressEvent on dockwidget intercepted by QGIS. Fixed: QShortcut with Qt.ApplicationShortcut context.
+- [x] LAYER_ID_FIELDS → ID_FIELDS in select_delete.py undo push.
+- [x] from_chamber resolution in splitter integrity check — CBT aerial drops store joint_id directly in from_chamber; UG drops store chamber_id. Both cases now handled correctly.
+- [x] Build area accidentally deletable via delete tool — excluded from SEARCHABLE_LAYERS (covers both delete and move tools).
 
 ### Bug fixes (v1.2.0 session)
 - [x] validate_routes.py — `trace_premises()` didn't resolve PIA_AERIAL_DROP drop ducts (from_pole set, from_chamber empty); now finds the CBT joint mounted on that pole. Fixes "no drop_duct" PARTIAL errors for premises connected via aerial drops from CBTs.

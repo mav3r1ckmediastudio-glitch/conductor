@@ -411,6 +411,20 @@
     </table>
     <p>The unlock state is <strong>derived from the GeoPackage</strong> — Conductor checks whether the premises, build_areas, and exchange_pops layers contain features. This means the state is always correct, even after a crash or if you return to a project later. Existing projects with all three elements open fully unlocked.</p>
 
+    <h2>Undo / Redo</h2>
+    <p>Conductor supports 5 levels of undo and redo for single-asset operations. Press <strong>Ctrl+Z</strong> to undo the last action and <strong>Ctrl+Shift+Z</strong> to redo it. The <strong>↩ Undo</strong> and <strong>↪ Redo</strong> buttons in the PROJECT section of the dock show what will be undone/redone as a tooltip.</p>
+    <table>
+      <tr><th>Action</th><th>Undoable?</th></tr>
+      <tr><td>Place chamber, joint, cabinet, duct, cable, drop, bundle</td><td>✓ Yes</td></tr>
+      <tr><td>Delete asset</td><td>✓ Yes</td></tr>
+      <tr><td>Move asset</td><td>✓ Yes</td></tr>
+      <tr><td>Edit asset attributes</td><td>✓ Yes</td></tr>
+      <tr><td>Import premises</td><td>✗ No — too many features</td></tr>
+      <tr><td>Draw build area (cookie-cutter clip)</td><td>✗ No — re-import premises and redraw</td></tr>
+      <tr><td>Auto-assign fibres</td><td>✗ No — re-run assignment</td></tr>
+    </table>
+    <div class="callout info"><strong>Stack cleared on project change.</strong> Opening or creating a project clears the undo stack. The stack holds a maximum of 5 entries — older actions fall off when new ones are pushed.</div>
+
     <h2>Dock panel layout: list vs grid view</h2>
     <p>The <strong>Design</strong> and <strong>PIA</strong> tabs in the Conductor dock can each be switched between two layouts:</p>
     <table>
@@ -675,6 +689,11 @@ Calix E7-2 (1 card, 8 ports): 256 customers theoretical max
 
     <h2>Place PIA UG Chamber</h2>
     <p>Click <strong>Place PIA UG Chamber</strong> then click on the map to place an Openreach underground chamber. This writes a normal chamber record with <code>chamber_type = PIA_UG_CHAMBER</code>, and gets its own <code>SCOT-222-PIAC-NNNN</code> ID series so it's never confused with a Gigaloch-built chamber. Also captures <code>surface_type</code> (Footway / Verge / Carriageway / Private) for Openreach reporting and dig-permit planning.</p>
+
+    <h2>Draw CBT Tail</h2>
+    <p>Digitise the fibre tail from a CBT back to its parent underground joint. Left-click to add vertices, right-click to finish. The tail snaps to the nearest joint or chamber at the underground end.</p>
+    <div class="callout warning"><strong>500m maximum recommended.</strong> If the tail exceeds 500m, Conductor shows a warning dialog. You can override it, but tails longer than 500m should be reviewed — check the CBT position and underground joint location. The warning includes the actual length and the nearest 50m rounded figure.</div>
+    <div class="callout info"><strong>One tail per CBT.</strong> Each CBT must have its own dedicated fibre tail back to an underground joint. CBTs must never be daisy-chained optically — each needs a direct connection to the underground network.</div>
 
     <h2>Digitise PIA Aerial Span</h2>
     <p>Click <strong>Digitise PIA Aerial Span</strong>. This is a thin wrapper around Digitise Cable — click each pole/CBT in sequence to draw the aerial span, exactly as you would a normal fibre cable, but the cable's <code>cable_type</code> is automatically set to <code>AERIAL</code>. Fibre Count Calculator and Route Splice Export use this to render the span with a dashed light-blue connector instead of a solid navy one. Because it's the same underlying tool as Digitise Cable, it snaps to the same node types (joints/CBTs and cabinet) and writes the same FK fields — no separate traversal logic is needed anywhere downstream.</p>
