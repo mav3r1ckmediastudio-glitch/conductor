@@ -23,6 +23,28 @@ from qgis.gui import QgsMapTool, QgsRubberBand
 from ..conductor_utils import get_layer, fld, val, LayerEditContext
 from ..conductor_utils import line_length_m, snap_to_node, to_project_crs
 
+def _push_undo(project, layer_name, action, id_field, id_value, attrs, geom, description):
+    """Push an undo entry to the dockwidget's undo stack if available."""
+    try:
+        from qgis.utils import iface
+        from qgis.core import QgsGeometry
+        plugins = __import__('qgis.utils', fromlist=['plugins']).plugins
+        dw = plugins.get('conductor')
+        if dw and hasattr(dw, 'dockwidget') and dw.dockwidget:
+            dw.dockwidget.push_undo({
+                'description': description,
+                'layer_name':  layer_name,
+                'action':      action,
+                'feature_id':  None,
+                'attrs':       attrs,
+                'geometry':    QgsGeometry(geom) if geom else None,
+                'id_field':    id_field,
+                'id_value':    str(id_value),
+            })
+    except Exception:
+        pass  # undo is best-effort, never block the main action
+
+
 
 def _to_27700(canvas, canvas_pt):
     return to_project_crs(canvas, canvas_pt)
@@ -199,6 +221,13 @@ class DigitiseDropMapTool(QgsMapTool):
             tl = QgsProject.instance().layerTreeRoot().findLayer(layer.id())
             if tl: tl.setItemVisibilityChecked(True)
             self.placed.emit(drop_id)
+            _push_undo(
+                self._project, "drop_ducts", "ADD",
+                "ddct_id", drop_id,
+                {f: feat[f] for f in feat.fields().names()},
+                feat.geometry(),
+                "Digitise Drop Duct " + str(drop_id)
+            )
             self._reset()
             _info(f"{drop_id} saved ({length_m:.0f}m) - click to start next drop. Esc to exit.")
         else:

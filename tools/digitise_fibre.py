@@ -23,6 +23,28 @@ from qgis.gui import QgsMapTool, QgsRubberBand
 from ..conductor_utils import get_layer, fld, val, LayerEditContext, NAVY, TEAL, ORANGE, LIGHT, WHITE, MID, BTN_PRIMARY, BTN_SECONDARY, INPUT_STYLE, LABEL_STYLE, SECTION_STYLE, MONO_STYLE, CALC_STYLE
 from ..conductor_utils import line_length_m
 
+def _push_undo(project, layer_name, action, id_field, id_value, attrs, geom, description):
+    """Push an undo entry to the dockwidget's undo stack if available."""
+    try:
+        from qgis.utils import iface
+        from qgis.core import QgsGeometry
+        plugins = __import__('qgis.utils', fromlist=['plugins']).plugins
+        dw = plugins.get('conductor')
+        if dw and hasattr(dw, 'dockwidget') and dw.dockwidget:
+            dw.dockwidget.push_undo({
+                'description': description,
+                'layer_name':  layer_name,
+                'action':      action,
+                'feature_id':  None,
+                'attrs':       attrs,
+                'geometry':    QgsGeometry(geom) if geom else None,
+                'id_field':    id_field,
+                'id_value':    str(id_value),
+            })
+    except Exception:
+        pass  # undo is best-effort, never block the main action
+
+
 def _next_cable_id(layer, area_id):
     existing = set()
     prefix = f"{area_id}-CBL-"
@@ -518,6 +540,13 @@ class DigitiseFibreMapTool(QgsMapTool):
             if tree_layer:
                 tree_layer.setItemVisibilityChecked(True)
             self.placed.emit(attrs["cable_id"])
+            _push_undo(
+                self._project, "cables", "ADD",
+                "cable_id", attrs["cable_id"],
+                {f: feat[f] for f in feat.fields().names()},
+                feat.geometry(),
+                "Digitise Cable " + str(attrs["cable_id"])
+            )
             # Stay active — ready to draw next cable immediately
         else:
             cable_layer.rollBack()

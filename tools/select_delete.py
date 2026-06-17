@@ -17,6 +17,27 @@ from qgis.gui import QgsMapTool, QgsRubberBand
 from ..conductor_utils import get_layer, fld, val, LayerEditContext
 
 # Layers to search when clicking — in priority order
+
+def _push_undo_delete(project, layer_name, id_field, feat, description):
+    """Push a DELETE undo entry to the dockwidget's undo stack."""
+    try:
+        from qgis.core import QgsGeometry
+        from qgis.utils import plugins
+        dw = plugins.get('conductor')
+        if dw and hasattr(dw, 'dockwidget') and dw.dockwidget:
+            dw.dockwidget.push_undo({
+                'description': description,
+                'layer_name':  layer_name,
+                'action':      'DELETE',
+                'feature_id':  None,
+                'attrs':       {f: feat[f] for f in feat.fields().names()},
+                'geometry':    QgsGeometry(feat.geometry()),
+                'id_field':    id_field,
+                'id_value':    str(feat[id_field]) if id_field else None,
+            })
+    except Exception:
+        pass
+
 SEARCHABLE_LAYERS = [
     "exchange_pops",
     "chambers",
@@ -207,13 +228,20 @@ class DeleteAssetMapTool(QgsMapTool):
             "Delete Asset",
             f"Delete this {label}?\n\n"
             f"ID: {asset_id}{display_name}\n\n"
-            f"This cannot be undone.",
+            f"You can undo this with Ctrl+Z.",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )
 
         if reply != QMessageBox.Yes:
             return
+
+        # Snapshot before deleting for undo
+        id_field = LAYER_ID_FIELDS.get(layer_name)
+        _push_undo_delete(
+            self._project, layer_name, id_field, feat,
+            f"Delete {label} {asset_id}"
+        )
 
         layer.startEditing()
         if layer.deleteFeature(feat.id()):
@@ -344,6 +372,25 @@ class MoveAssetMapTool(QgsMapTool):
                 layer.triggerRepaint()
                 self._rubber.reset()
                 self.moved.emit(layer_name, asset_id)
+                # Push undo entry for move
+                try:
+                    from qgis.core import QgsGeometry
+                    from qgis.utils import plugins
+                    dw = plugins.get('conductor')
+                    if dw and hasattr(dw, 'dockwidget') and dw.dockwidget:
+                        id_field = LAYER_ID_FIELDS.get(layer_name)
+                        dw.dockwidget.push_undo({
+                            'description': f"Move {LAYER_LABELS.get(layer_name, layer_name)} {asset_id}",
+                            'layer_name':  layer_name,
+                            'action':      'MOVE',
+                            'feature_id':  self._selected_feat.id(),
+                            'attrs':       None,
+                            'geometry':    QgsGeometry(self._selected_feat.geometry()),
+                            'id_field':    id_field,
+                            'id_value':    asset_id,
+                        })
+                except Exception:
+                    pass
 
                 # If it was a cabinet, prompt to renumber chambers
                 if layer_name == "exchange_pops":

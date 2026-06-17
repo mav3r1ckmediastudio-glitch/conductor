@@ -183,6 +183,8 @@ class ConductorDockWidget(QDockWidget):
         self._tool_buttons = []       # buttons that need a project to be enabled
         self._active_tool_btn = None  # currently active tool button (highlighted)
         self._snapping_prev = None    # saved QgsSnappingConfig before Conductor enables snapping
+        from .conductor_utils import UndoStack
+        self._undo_stack = UndoStack()
 
         self.setObjectName("ConductorDockWidget")
         self.setMinimumWidth(280)
@@ -466,6 +468,33 @@ class ConductorDockWidget(QDockWidget):
         row = self._secondary_button("Open Project", self._on_open_project, icon="open_project.svg")
         cl.addWidget(row)
         project_items.append(self._dialpad_item(row, "open_project.svg"))
+
+        # Undo / Redo buttons
+        undo_row_widget = QWidget()
+        undo_row = QHBoxLayout(undo_row_widget)
+        undo_row.setSpacing(4)
+        undo_row.setContentsMargins(0, 2, 0, 2)
+        self._btn_undo = QPushButton("\u21a9  Undo")
+        self._btn_undo.setToolTip("Undo last action (Ctrl+Z)")
+        self._btn_undo.setEnabled(False)
+        self._btn_undo.setStyleSheet(
+            f"QPushButton {{ background:{LIGHT}; color:{NAVY}; border:1px solid {MID};"
+            f" border-radius:4px; padding:4px 8px; font-size:11px; }}"
+            f"QPushButton:hover {{ border-color:{TEAL}; color:{TEAL}; }}"
+            f"QPushButton:disabled {{ color:#aaa; border-color:#ddd; }}")
+        self._btn_undo.clicked.connect(self._on_undo)
+        self._btn_redo = QPushButton("\u21aa  Redo")
+        self._btn_redo.setToolTip("Redo last undone action (Ctrl+Shift+Z)")
+        self._btn_redo.setEnabled(False)
+        self._btn_redo.setStyleSheet(
+            f"QPushButton {{ background:{LIGHT}; color:{NAVY}; border:1px solid {MID};"
+            f" border-radius:4px; padding:4px 8px; font-size:11px; }}"
+            f"QPushButton:hover {{ border-color:{TEAL}; color:{TEAL}; }}"
+            f"QPushButton:disabled {{ color:#aaa; border-color:#ddd; }}")
+        self._btn_redo.clicked.connect(self._on_redo)
+        undo_row.addWidget(self._btn_undo)
+        undo_row.addWidget(self._btn_redo)
+        cl.addWidget(undo_row_widget)
         cl.addWidget(self._divider())
         toggle.add_section("PROJECT", project_items)
 
@@ -827,6 +856,9 @@ class ConductorDockWidget(QDockWidget):
         self._status_label.setStyleSheet(f"color:{TEAL}; font-size:11px; font-weight:bold; padding-bottom:4px;")
         # Tool availability derived from project state
         self._refresh_tool_states()
+        # Clear undo stack on project change
+        self._undo_stack.clear()
+        self._update_undo_buttons()
         try:
             self.iface.mapCanvas().mapToolSet.connect(self._on_map_tool_set)
         except Exception:
@@ -910,6 +942,54 @@ class ConductorDockWidget(QDockWidget):
             self._clear_active_button()
 
     # ── CALLBACKS — DESIGN TAB ─────────────────────────────────────────────────
+
+    # ── Undo / Redo ───────────────────────────────────────────────────────────
+
+    def push_undo(self, entry):
+        """Push an undo entry. Called by tool _finish() after successful commit."""
+        self._undo_stack.push(entry)
+        self._update_undo_buttons()
+
+    def _update_undo_buttons(self):
+        can_undo = self._undo_stack.can_undo()
+        can_redo = self._undo_stack.can_redo()
+        self._btn_undo.setEnabled(can_undo)
+        self._btn_redo.setEnabled(can_redo)
+        self._btn_undo.setToolTip(
+            f"Undo: {self._undo_stack.undo_description()} (Ctrl+Z)"
+            if can_undo else "Nothing to undo")
+        self._btn_redo.setToolTip(
+            f"Redo: {self._undo_stack.redo_description()} (Ctrl+Shift+Z)"
+            if can_redo else "Nothing to redo")
+
+    def _on_undo(self):
+        if not self._project:
+            return
+        desc = self._undo_stack.undo(self._project)
+        if desc:
+            self.iface.messageBar().pushSuccess("Conductor", f"Undid: {desc}")
+        self._update_undo_buttons()
+
+    def _on_redo(self):
+        if not self._project:
+            return
+        desc = self._undo_stack.redo(self._project)
+        if desc:
+            self.iface.messageBar().pushSuccess("Conductor", f"Redid: {desc}")
+        self._update_undo_buttons()
+
+    def keyPressEvent(self, event):
+        """Intercept Ctrl+Z (undo) and Ctrl+Shift+Z (redo)."""
+        from qgis.PyQt.QtCore import Qt
+        if event.modifiers() & Qt.ControlModifier:
+            if event.key() == Qt.Key_Z:
+                if event.modifiers() & Qt.ShiftModifier:
+                    self._on_redo()
+                else:
+                    self._on_undo()
+                event.accept()
+                return
+        super().keyPressEvent(event)
 
     def _on_new_project(self):
         from .new_project_dialog import NewProjectDialog

@@ -23,6 +23,28 @@ from qgis.gui import QgsMapTool, QgsRubberBand
 from ..conductor_utils import get_layer, fld, val, LayerEditContext, NAVY, TEAL, ORANGE, LIGHT, WHITE, MID, BTN_PRIMARY, BTN_SECONDARY, INPUT_STYLE, LABEL_STYLE, SECTION_STYLE, MONO_STYLE, CALC_STYLE
 from ..conductor_utils import compass_quadrant, line_length_m, snap_to_node
 
+def _push_undo(project, layer_name, action, id_field, id_value, attrs, geom, description):
+    """Push an undo entry to the dockwidget's undo stack if available."""
+    try:
+        from qgis.utils import iface
+        from qgis.core import QgsGeometry
+        plugins = __import__('qgis.utils', fromlist=['plugins']).plugins
+        dw = plugins.get('conductor')
+        if dw and hasattr(dw, 'dockwidget') and dw.dockwidget:
+            dw.dockwidget.push_undo({
+                'description': description,
+                'layer_name':  layer_name,
+                'action':      action,
+                'feature_id':  None,
+                'attrs':       attrs,
+                'geometry':    QgsGeometry(geom) if geom else None,
+                'id_field':    id_field,
+                'id_value':    str(id_value),
+            })
+    except Exception:
+        pass  # undo is best-effort, never block the main action
+
+
 # ── NUMBERING HELPERS ─────────────────────────────────────────────────────────
 
 LEG_BASE = {"N": 1, "S": 100, "E": 200, "W": 300}
@@ -543,6 +565,13 @@ class DigitiseDuctMapTool(QgsMapTool):
                 tree_layer.setItemVisibilityChecked(True)
 
             self.placed.emit(attrs["duct_id"])
+            _push_undo(
+                self._project, "ducts", "ADD",
+                "duct_id", attrs["duct_id"],
+                {f: feat[f] for f in feat.fields().names()},
+                feat.geometry(),
+                "Digitise Duct " + str(attrs["duct_id"])
+            )
             # Stay active — ready to draw the next duct segment immediately
         else:
             duct_layer.rollBack()

@@ -861,6 +861,26 @@ class EditAssetMapTool(QgsMapTool):
 
         attrs = get_attrs()
         if _save_attrs(layer, feat, attrs):
+            # Push undo entry before emitting (snapshot old attrs)
+            try:
+                from qgis.core import QgsGeometry
+                from qgis.utils import plugins
+                dw = plugins.get('conductor')
+                if dw and hasattr(dw, 'dockwidget') and dw.dockwidget:
+                    id_field = next(
+                        (f for f in feat.fields().names() if feat[f] == asset_id), None)
+                    dw.dockwidget.push_undo({
+                        'description': f"Edit {layer_name.replace('_',' ').title()} {asset_id}",
+                        'layer_name':  layer_name,
+                        'action':      'EDIT',
+                        'feature_id':  feat.id(),
+                        'attrs':       {f: feat[f] for f in feat.fields().names()},
+                        'geometry':    QgsGeometry(feat.geometry()),
+                        'id_field':    id_field,
+                        'id_value':    asset_id,
+                    })
+            except Exception:
+                pass
             self.edited.emit(layer_name, asset_id)
             # Splitter integrity check after editing a joint
             if layer_name == "joints":

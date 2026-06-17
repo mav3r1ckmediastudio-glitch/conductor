@@ -19,6 +19,28 @@ from qgis.core import (
 from qgis.gui import QgsMapTool, QgsMapToolEmitPoint
 from ..conductor_utils import get_layer, fld, val, LayerEditContext, NAVY, TEAL, ORANGE, LIGHT, WHITE, MID, BTN_PRIMARY, BTN_SECONDARY, INPUT_STYLE, LABEL_STYLE, SUBLABEL_STYLE, SECTION_STYLE, MONO_STYLE, CALC_STYLE
 
+def _push_undo(project, layer_name, action, id_field, id_value, attrs, geom, description):
+    """Push an undo entry to the dockwidget's undo stack if available."""
+    try:
+        from qgis.utils import iface
+        from qgis.core import QgsGeometry
+        plugins = __import__('qgis.utils', fromlist=['plugins']).plugins
+        dw = plugins.get('conductor')
+        if dw and hasattr(dw, 'dockwidget') and dw.dockwidget:
+            dw.dockwidget.push_undo({
+                'description': description,
+                'layer_name':  layer_name,
+                'action':      action,
+                'feature_id':  None,
+                'attrs':       attrs,
+                'geometry':    QgsGeometry(geom) if geom else None,
+                'id_field':    id_field,
+                'id_value':    str(id_value),
+            })
+    except Exception:
+        pass  # undo is best-effort, never block the main action
+
+
 RED    = "#C0392B"
 
 # ── HELPERS ───────────────────────────────────────────────────────────────────
@@ -575,6 +597,13 @@ class PlacePOPMapTool(QgsMapToolEmitPoint):
             )
 
             self.placed.emit(attrs["pop_id"])
+            _push_undo(
+                self._project, "exchange_pops", "ADD",
+                "pop_id", attrs["pop_id"],
+                {f: feat[f] for f in feat.fields().names()},
+                feat.geometry(),
+                "Place Cabinet " + str(attrs["pop_id"])
+            )
         else:
             layer.rollBack()
             QMessageBox.critical(None, "Error",

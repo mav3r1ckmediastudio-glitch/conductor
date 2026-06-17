@@ -22,6 +22,28 @@ from qgis.core import (
 from qgis.gui import QgsMapToolEmitPoint
 from ..conductor_utils import get_layer, fld, val, LayerEditContext, NAVY, TEAL, ORANGE, LIGHT, WHITE, MID, BTN_PRIMARY, BTN_SECONDARY, INPUT_STYLE, LABEL_STYLE, SECTION_STYLE, MONO_STYLE
 
+def _push_undo(project, layer_name, action, id_field, id_value, attrs, geom, description):
+    """Push an undo entry to the dockwidget's undo stack if available."""
+    try:
+        from qgis.utils import iface
+        from qgis.core import QgsGeometry
+        plugins = __import__('qgis.utils', fromlist=['plugins']).plugins
+        dw = plugins.get('conductor')
+        if dw and hasattr(dw, 'dockwidget') and dw.dockwidget:
+            dw.dockwidget.push_undo({
+                'description': description,
+                'layer_name':  layer_name,
+                'action':      action,
+                'feature_id':  None,
+                'attrs':       attrs,
+                'geometry':    QgsGeometry(geom) if geom else None,
+                'id_field':    id_field,
+                'id_value':    str(id_value),
+            })
+    except Exception:
+        pass  # undo is best-effort, never block the main action
+
+
 def _next_joint_id(layer, area_id):
     existing = set()
     prefix = f"{area_id}-JNT-"
@@ -413,6 +435,13 @@ class PlaceJointMapTool(QgsMapToolEmitPoint):
                 tree_layer.setItemVisibilityChecked(True)
 
             self.placed.emit(joint_id)
+            _push_undo(
+                self._project, "joints", "ADD",
+                "joint_id", joint_id,
+                {f: feat[f] for f in feat.fields().names()},
+                feat.geometry(),
+                "Place Joint " + str(joint_id)
+            )
             # Warn if joint has multiple downstream connections but no splitter declared
             # (at place-time there are rarely any, but catches immediate re-edits)
             _check_splitter_intent(self._project, joint_id, attrs.get("has_splitter", False))

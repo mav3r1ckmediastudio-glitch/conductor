@@ -355,3 +355,227 @@ def open_url_with_fragment(url_string):
 
     import webbrowser
     return webbrowser.open(url_string)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# UNDO STACK
+# Lightweight inverse-action undo for single-asset operations.
+# Supports ADD, DELETE, MOVE, EDIT actions with max 5 entries.
+# ═══════════════════════════════════════════════════════════════════════════
+
+class UndoStack:
+    """Inverse-action undo/redo stack for Conductor.
+
+    Each entry is a dict:
+        {
+            "description": str,          # human-readable label
+            "layer_name":  str,          # e.g. "chambers"
+            "action":      str,          # "ADD" | "DELETE" | "MOVE" | "EDIT"
+            "feature_id":  int | None,   # QgsFeature fid (for DELETE/MOVE/EDIT)
+            "attrs":       dict | None,  # field name → value snapshot
+            "geometry":    QgsGeometry,  # geometry snapshot
+        }
+
+    Excluded by design (too expensive or complex to invert):
+        - Import premises
+        - Cookie-cutter clip
+        - Auto-assign fibres
+        - Validate routes (read-only)
+    """
+
+    MAX_SIZE = 5
+
+    def __init__(self):
+        from collections import deque
+        self._undo = deque(maxlen=self.MAX_SIZE)
+        self._redo = deque(maxlen=self.MAX_SIZE)
+
+    def push(self, entry):
+        """Push a new action onto the undo stack. Clears the redo stack."""
+        self._undo.append(entry)
+        self._redo.clear()
+
+    def can_undo(self):
+        return bool(self._undo)
+
+    def can_redo(self):
+        return bool(self._redo)
+
+    def undo_description(self):
+        return self._undo[-1]["description"] if self._undo else ""
+
+    def redo_description(self):
+        return self._redo[-1]["description"] if self._redo else ""
+
+    def undo(self, project):
+        """Pop from undo stack, apply inverse, push to redo stack.
+        Returns description string or None on failure."""
+        if not self._undo:
+            return None
+        entry = self._undo.pop()
+        try:
+            inverse = _apply_inverse(entry, project)
+            self._redo.append(inverse)
+            return entry["description"]
+        except Exception as e:
+            log(f"Undo failed: {e}", level="warning")
+            return None
+
+    def redo(self, project):
+        """Pop from redo stack, re-apply action, push to undo stack.
+        Returns description string or None on failure."""
+        if not self._redo:
+            return None
+        entry = self._redo.pop()
+        try:
+            inverse = _apply_inverse(entry, project)
+            self._undo.append(inverse)
+            return entry["description"]
+        except Exception as e:
+            log(f"Redo failed: {e}", level="warning")
+            return None
+
+    def clear(self):
+        self._undo.clear()
+        self._redo.clear()
+
+
+def _apply_inverse(entry, project):
+    """Apply the inverse of an undo entry and return the inverse entry
+    (so it can be pushed onto the redo stack)."""
+    from qgis.core import QgsFeature, QgsGeometry
+    NULL = None
+
+    layer_name = entry["layer_name"]
+    action     = entry["action"]
+    layer      = get_layer(layer_name, project)
+
+    if not layer or not layer.isValid():
+        raise RuntimeError(f"Layer '{layer_name}' not found or invalid.")
+
+    if action == "ADD":
+        # Inverse of ADD is DELETE — remove the feature we added
+        feat_id = entry["feature_id"]
+        if feat_id is None:
+            # Find by primary key
+            id_field = entry.get("id_field")
+            id_value = entry.get("id_value")
+            feat_id = None
+            if id_field and id_value:
+                for f in layer.getFeatures():
+                    if str(f[id_field]) == str(id_value):
+                        feat_id = f.id()
+                        break
+        if feat_id is None:
+            raise RuntimeError("Cannot find feature to undo ADD.")
+
+        # Snapshot before deleting (for redo)
+        feat = next(layer.getFeatures(), None)
+        for f in layer.getFeatures():
+            if f.id() == feat_id:
+                feat = f
+                break
+
+        inverse = {
+            "description": entry["description"],
+            "layer_name":  layer_name,
+            "action":      "DELETE",
+            "feature_id":  None,
+            "attrs":       {f: feat[f] for f in feat.fields().names()},
+            "geometry":    QgsGeometry(feat.geometry()),
+            "id_field":    entry.get("id_field"),
+            "id_value":    entry.get("id_value"),
+        }
+
+        layer.startEditing()
+        layer.deleteFeature(feat_id)
+        layer.commitChanges()
+        layer.triggerRepaint()
+        return inverse
+
+    elif action == "DELETE":
+        # Inverse of DELETE is ADD — re-add the feature
+        attrs   = entry["attrs"]
+        geom    = entry["geometry"]
+        inverse = {
+            "description": entry["description"],
+            "layer_name":  layer_name,
+            "action":      "ADD",
+            "feature_id":  None,
+            "attrs":       attrs,
+            "geometry":    QgsGeometry(geom),
+            "id_field":    entry.get("id_field"),
+            "id_value":    entry.get("id_value"),
+        }
+        feat = QgsFeature(layer.fields())
+        feat.setGeometry(geom)
+        for fname, fvalue in (attrs or {}).items():
+            idx = layer.fields().indexOf(fname)
+            if idx >= 0:
+                feat.setAttribute(idx, fvalue)
+        layer.startEditing()
+        layer.addFeature(feat)
+        layer.commitChanges()
+        layer.triggerRepaint()
+        # Update feature_id for next undo
+        id_field = entry.get("id_field")
+        id_value = entry.get("id_value")
+        if id_field and id_value:
+            for f in layer.getFeatures():
+                if str(f[id_field]) == str(id_value):
+                    inverse["feature_id"] = f.id()
+                    break
+        return inverse
+
+    elif action == "MOVE":
+        # Inverse of MOVE is MOVE back to old geometry
+        feat_id  = entry["feature_id"]
+        old_geom = entry["geometry"]
+        feat = next((f for f in layer.getFeatures() if f.id() == feat_id), None)
+        if feat is None:
+            raise RuntimeError("Cannot find feature to undo MOVE.")
+        inverse = {
+            "description": entry["description"],
+            "layer_name":  layer_name,
+            "action":      "MOVE",
+            "feature_id":  feat_id,
+            "attrs":       None,
+            "geometry":    QgsGeometry(feat.geometry()),
+            "id_field":    entry.get("id_field"),
+            "id_value":    entry.get("id_value"),
+        }
+        layer.startEditing()
+        layer.changeGeometry(feat_id, old_geom)
+        layer.commitChanges()
+        layer.triggerRepaint()
+        return inverse
+
+    elif action == "EDIT":
+        # Inverse of EDIT is re-write old attribute values
+        feat_id  = entry["feature_id"]
+        old_attrs = entry["attrs"]
+        feat = next((f for f in layer.getFeatures() if f.id() == feat_id), None)
+        if feat is None:
+            raise RuntimeError("Cannot find feature to undo EDIT.")
+        # Snapshot current attrs for redo
+        inverse = {
+            "description": entry["description"],
+            "layer_name":  layer_name,
+            "action":      "EDIT",
+            "feature_id":  feat_id,
+            "attrs":       {f: feat[f] for f in feat.fields().names()},
+            "geometry":    QgsGeometry(feat.geometry()),
+            "id_field":    entry.get("id_field"),
+            "id_value":    entry.get("id_value"),
+        }
+        layer.startEditing()
+        for fname, fvalue in (old_attrs or {}).items():
+            idx = layer.fields().indexOf(fname)
+            if idx >= 0:
+                layer.changeAttributeValue(feat_id, idx, fvalue)
+        layer.commitChanges()
+        layer.triggerRepaint()
+        return inverse
+
+    else:
+        raise RuntimeError(f"Unknown action type: {action}")
