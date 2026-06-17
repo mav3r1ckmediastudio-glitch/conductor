@@ -268,26 +268,48 @@ class PlaceJointDialog(QDialog):
 
 
 def _check_splitter_intent(project, joint_id, has_splitter):
-    """After placing a joint, check if it looks like it should have a splitter.
-    
-    We can't know the designer's intent at place-time (no downstream connections
-    exist yet), so this is a no-op at place time. It's called at EDIT time when
-    downstream connections may already exist.
+    """After editing a joint, warn if it has multiple downstream connections
+    but has_splitter is False/NULL — the optical budget will be wrong if a
+    splitter is present but not declared.
+
+    from_chamber on drop_ducts can hold either:
+      - a chamber_id (UG drop snapped to chamber) → look up joint inside that chamber
+      - a joint_id directly (CBT aerial drop)      → compare directly
     """
     if has_splitter:
         return  # splitter declared — nothing to warn about
 
     bundle_layer = project.get_layer("bundles")
     ddct_layer   = project.get_layer("drop_ducts")
+    joint_layer  = project.get_layer("joints")
+
+    # Build chamber_id → joint_id map for quick lookup
+    chamber_to_joint = {}
+    if joint_layer:
+        for f in joint_layer.getFeatures():
+            cid = str(f["chamber_id"] or "")
+            jid = str(f["joint_id"]   or "")
+            if cid and jid:
+                chamber_to_joint[cid] = jid
 
     downstream = 0
     if bundle_layer:
         for f in bundle_layer.getFeatures():
             if str(f["from_joint"] or "") == str(joint_id):
                 downstream += 1
+
     if ddct_layer:
         for f in ddct_layer.getFeatures():
-            if str(f["from_chamber"] or "") == str(joint_id):
+            fc = str(f["from_chamber"] or "")
+            if not fc:
+                continue
+            # Direct joint_id match (CBT aerial drop)
+            if fc == str(joint_id):
+                downstream += 1
+                continue
+            # Chamber_id → resolve to joint_id and compare
+            resolved = chamber_to_joint.get(fc, "")
+            if resolved == str(joint_id):
                 downstream += 1
 
     if downstream > 1:

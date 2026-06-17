@@ -448,20 +448,40 @@ class ValidateWorker(QThread):
 
         # ── Splitter integrity scan ───────────────────────────────────────
         # Find joints that have >1 downstream bundle/drop but has_splitter=False/NULL
+        # from_chamber on drop_ducts holds either a chamber_id (UG drop) or
+        # a joint_id directly (CBT aerial drop) — handle both cases.
         splitter_warnings = []
         try:
             if joint_layer and bundle_layer:
-                # Build downstream count per joint
+                # Build chamber_id -> joint_id map
+                chamber_to_joint = {}
+                for feat in joint_layer.getFeatures():
+                    cid = str(feat["chamber_id"] or "")
+                    jid = str(feat["joint_id"]   or "")
+                    if cid and jid:
+                        chamber_to_joint[cid] = jid
+
+                # Build downstream count per joint_id
                 downstream_counts = {}
                 for feat in bundle_layer.getFeatures():
                     jid = str(feat["from_joint"] or "")
                     if jid:
                         downstream_counts[jid] = downstream_counts.get(jid, 0) + 1
+
                 if ddct_layer:
                     for feat in ddct_layer.getFeatures():
-                        jid = str(feat["from_chamber"] or "")
-                        if jid:
-                            downstream_counts[jid] = downstream_counts.get(jid, 0) + 1
+                        fc = str(feat["from_chamber"] or "")
+                        if not fc:
+                            continue
+                        # Direct joint_id match (CBT aerial drop)
+                        if fc in downstream_counts or fc in chamber_to_joint.values():
+                            downstream_counts[fc] = downstream_counts.get(fc, 0) + 1
+                        else:
+                            # Resolve chamber_id to joint_id
+                            resolved = chamber_to_joint.get(fc, "")
+                            if resolved:
+                                downstream_counts[resolved] = downstream_counts.get(resolved, 0) + 1
+
                 for feat in joint_layer.getFeatures():
                     jid = str(feat["joint_id"] or "")
                     count = downstream_counts.get(jid, 0)
