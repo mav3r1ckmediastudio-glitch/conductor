@@ -335,7 +335,59 @@ def trace_premises(uprn, area_id,
                 if breakdown is not None:
                     breakdown.clear()
                     breakdown.update(new_bd)
-                return (STATUS_OK, new_path, f"Route complete — {len(new_path)} hops.", total_loss_db)
+
+                # ── Splitter chain validation (Gigaloch rule: 1:8 nearest premises, 1:4 nearest cabinet) ──
+                splitter_joints = []  # ordered from premises to cabinet
+                for node in new_path:
+                    node_s = str(node)
+                    if "-JNT-" not in node_s and "-CBT-" not in node_s:
+                        continue
+                    jfeats = joint_idx.get(node_s, [])
+                    if not jfeats:
+                        continue
+                    jf = jfeats[0]
+                    has_sp = jf["has_splitter"] if "has_splitter" in jf.fields().names() else None
+                    if has_sp and has_sp != NULL:
+                        ratio = str(jf["split_ratio"] or "") if "split_ratio" in jf.fields().names() else ""
+                        splitter_joints.append((node_s, ratio))
+
+                if len(splitter_joints) == 0:
+                    return (STATUS_PARTIAL, new_path,
+                            "No splitters found in path. Gigaloch topology requires a 1:4 spine splitter "
+                            "and a 1:8 distribution splitter. Check joints in this route.", None)
+
+                elif len(splitter_joints) == 1:
+                    jid, ratio = splitter_joints[0]
+                    return (STATUS_PARTIAL, new_path,
+                            f"Only one splitter found ({jid}, {ratio or 'ratio not set'}). "
+                            f"Gigaloch topology requires exactly two: a 1:8 distribution splitter "
+                            f"nearest the premises and a 1:4 spine splitter nearest the cabinet.", None)
+
+                elif len(splitter_joints) > 2:
+                    jid, ratio = splitter_joints[2]
+                    return (STATUS_PARTIAL, new_path,
+                            f"Too many splitters ({len(splitter_joints)}) in path. "
+                            f"Gigaloch allows exactly two: 1:8 then 1:4. "
+                            f"Excess splitter at {jid} ({ratio or 'ratio not set'}).", None)
+
+                else:
+                    # Exactly 2 — validate ratios and order
+                    near_jid, near_ratio = splitter_joints[0]  # closest to premises
+                    far_jid,  far_ratio  = splitter_joints[1]  # closest to cabinet
+                    if near_ratio != "1:8":
+                        return (STATUS_PARTIAL, new_path,
+                                f"Wrong splitter ratio at distribution joint {near_jid}. "
+                                f"The joint nearest the premises should be 1:8, "
+                                f"but is set to '{near_ratio or 'not set'}'. "
+                                f"Gigaloch rule: 1:8 nearest premises, 1:4 nearest cabinet.", None)
+                    if far_ratio != "1:4":
+                        return (STATUS_PARTIAL, new_path,
+                                f"Wrong splitter ratio at spine joint {far_jid}. "
+                                f"The joint nearest the cabinet should be 1:4, "
+                                f"but is set to '{far_ratio or 'not set'}'. "
+                                f"Gigaloch rule: 1:4 nearest cabinet, 1:8 nearest premises.", None)
+                    # Valid chain — genuine STATUS_OK
+                    return (STATUS_OK, new_path, f"Route complete — {len(new_path)} hops.", total_loss_db)
 
             new_visited = visited | {next_node}
             new_path    = new_path + [next_node]
