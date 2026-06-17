@@ -237,7 +237,7 @@ class DeleteAssetMapTool(QgsMapTool):
             return
 
         # Snapshot before deleting for undo
-        id_field = LAYER_ID_FIELDS.get(layer_name)
+        id_field = ID_FIELDS.get(layer_name)
         _push_undo_delete(
             self._project, layer_name, id_field, feat,
             f"Delete {label} {asset_id}"
@@ -378,7 +378,7 @@ class MoveAssetMapTool(QgsMapTool):
                     from qgis.utils import plugins
                     dw = plugins.get('conductor')
                     if dw and hasattr(dw, 'dockwidget') and dw.dockwidget:
-                        id_field = LAYER_ID_FIELDS.get(layer_name)
+                        id_field = ID_FIELDS.get(layer_name)
                         dw.dockwidget.push_undo({
                             'description': f"Move {LAYER_LABELS.get(layer_name, layer_name)} {asset_id}",
                             'layer_name':  layer_name,
