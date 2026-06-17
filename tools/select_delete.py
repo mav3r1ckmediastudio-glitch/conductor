@@ -25,7 +25,9 @@ SEARCHABLE_LAYERS = [
     "cables",
     "drop_ducts",
     "bundles",
-    "build_areas",
+    # "build_areas" intentionally excluded — deleting the build area polygon
+    # via the delete tool risks corrupting the entire project state.
+    # Use the dedicated Redraw Build Area workflow instead.
     "surveys",
     "wayleaves",
     "build_tasks",
