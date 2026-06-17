@@ -473,8 +473,8 @@ class ConductorDockWidget(QDockWidget):
         cl.addWidget(self._section_label("DESIGN"))
         design_items = []
         for label, slot, icon in [
-            ("Build Areas",                    self._on_draw_build_area,   "build_areas.svg"),
             ("Import Premises (AddressBase)",   self._on_import_premises,  "import_premises_addressbase.svg"),
+            ("Build Areas",                    self._on_draw_build_area,   "build_areas.svg"),
             ("Place Cabinet / POP",             self._on_place_pop,        "place_cabinet_pop.svg"),
             ("Edit Cabinet / POP",              self._on_edit_pop,         "edit_cabinet_pop.svg"),
             ("Digitise Duct",                   self._on_digitise_duct,    "digitise_duct.svg"),
