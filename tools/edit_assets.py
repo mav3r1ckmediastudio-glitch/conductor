@@ -251,21 +251,7 @@ def _edit_chamber_dialog(feat):
         widgets['notes'].setText(_fv(feat,"notes"))
         fl.addWidget(widgets['notes'])
 
-    # Auto-size: force dialog tall enough to show port panel without scrolling
-    has_sp = bool(_fv(feat, "has_splitter", False))
-    if has_sp:
-        try:
-            n_ports = int(str(_fv(feat, "split_ratio", "1:8")).split(":")[1])
-        except Exception:
-            n_ports = 8
-        half = (n_ports + 1) // 2
-        content_h = 380 + half * 58
-        dlg.setMinimumWidth(660)
-        dlg.setMinimumHeight(min(content_h + 120, 900))
-    else:
-        content_h = None
-
-    _scrolled_form(root, build, min_height=content_h)
+    _scrolled_form(root, build)
 
     br = QHBoxLayout(); br.setContentsMargins(20,12,20,16); br.addStretch()
     cancel = QPushButton("Cancel"); cancel.setStyleSheet(BTN_SECONDARY)
@@ -580,6 +566,30 @@ def _edit_joint_dialog(feat, project=None):
     save.clicked.connect(dlg.accept); br.addWidget(save)
     root.addLayout(br)
 
+    # Defer resize until after dialog is shown and Qt has laid out the scroll area
+    def _auto_size():
+        has_sp = widgets.get('has_splitter')
+        if has_sp and has_sp.isChecked():
+            try:
+                ratio = widgets['split_ratio'].currentText()
+                n_ports = int(ratio.split(':')[1]) if ':' in ratio else 8
+            except Exception:
+                n_ports = 8
+            half = (n_ports + 1) // 2
+            target_h = min(420 + half * 62, 900)
+            dlg.setMinimumWidth(660)
+            if dlg.height() < target_h:
+                dlg.resize(660, target_h)
+        else:
+            dlg.setMinimumWidth(560)
+
+    _orig_show = dlg.showEvent
+    def _patched_show(event):
+        _orig_show(event)
+        from qgis.PyQt.QtCore import QTimer
+        QTimer.singleShot(0, _auto_size)
+    dlg.showEvent = _patched_show
+
     def get_attrs():
         ratio = widgets['split_ratio'].currentText()
         level = widgets['cascade_level'].currentText()
@@ -845,21 +855,6 @@ class EditAssetMapTool(QgsMapTool):
             dlg, get_attrs = dialog_fn(feat, project=self._project)
         else:
             dlg, get_attrs = dialog_fn(feat)
-
-        # Force joint dialog to open at full size when splitter port panel is present
-        if layer_name == "joints":
-            try:
-                has_sp = bool(feat["has_splitter"])
-            except Exception:
-                has_sp = False
-            if has_sp:
-                try:
-                    n_ports = int(str(feat["split_ratio"]).split(":")[1])
-                except Exception:
-                    n_ports = 8
-                half = (n_ports + 1) // 2
-                h = min(380 + half * 58 + 120, 900)
-                dlg.resize(660, h)
 
         if dlg.exec_() != QDialog.Accepted:
             return
