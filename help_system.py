@@ -109,10 +109,16 @@ class HelpDialog(QtWidgets.QDialog):
 
         self.body = QtWidgets.QTextBrowser()
         self.body.setOpenExternalLinks(False)
+        self.body.viewport().setStyleSheet("background-color: #1A2332;")
         self.body.setStyleSheet(
-            f"QTextBrowser {{ background-color: {WHITE}; color: {NAVY};"
-            f" border: 1px solid {MID}; border-radius: 4px; padding: 8px;"
-            f" font-size: 12px; }}"
+            "QTextBrowser { background-color: #1A2332; color: #E8EDF2;"
+            " border: 1px solid #2D3F52; border-radius: 4px; padding: 8px;"
+            " font-size: 12px; }"
+        )
+        self.body.document().setDefaultStyleSheet(
+            "body { background-color: #1A2332; color: #E8EDF2; }"
+            "b, strong { color: #00C9B1; }"
+            "h3 { color: #00C9B1; margin-bottom: 4px; }"
         )
         self._layout.addWidget(self.body)
 
