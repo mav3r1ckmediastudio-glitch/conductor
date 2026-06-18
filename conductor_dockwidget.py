@@ -935,7 +935,7 @@ class ConductorDockWidget(QDockWidget):
             from qgis.PyQt.QtGui import QIcon
             from qgis.PyQt.QtCore import QSize
             import os as _os
-            _icons_dir = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'icons')
+            _icons_dir = _os.path.join(self.plugin_dir, 'icons')
             # Prefer PNG over SVG if available
             _icon_file = icon
             if icon.lower().endswith('.svg'):

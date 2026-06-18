@@ -26,6 +26,7 @@ from .conductor_utils import (
 # ── Asset type config ─────────────────────────────────────────────────────────
 # Maps layer name → (display_name, id_field, colour, fields_to_show)
 ASSET_CONFIG = {
+    # (display_name, id_field, accent, fields, icon_png)
     "chambers": (
         "Chamber / Pole", "chamber_id", TEAL,
         [("ID",          "chamber_id"),
@@ -36,6 +37,7 @@ ASSET_CONFIG = {
          ("Pole Type",   "pole_type"),
          ("OR Ref",      "openreach_ref"),
          ("Notes",       "notes")],
+        "place_chamber.png",
     ),
     "joints": (
         "Joint / Closure", "joint_id", "#A78BFA",
@@ -47,6 +49,7 @@ ASSET_CONFIG = {
          ("Cascade Lvl",  "cascade_level"),
          ("Status",       "status"),
          ("Notes",        "notes")],
+        "place_joint.png",
     ),
     "cables": (
         "Cable", "cable_id", "#60A5FA",
@@ -58,6 +61,7 @@ ASSET_CONFIG = {
          ("From",        "from_node"),
          ("To",          "to_node"),
          ("Status",      "status")],
+        "digitise_cable.png",
     ),
     "bundles": (
         "Bundle (Drop)", "bundle_id", GREEN,
@@ -68,6 +72,7 @@ ASSET_CONFIG = {
          ("Length (m)",  "length_m"),
          ("Status",      "status"),
          ("Wayleave",    "wayleave_req")],
+        "digitise_bundle.png",
     ),
     "drop_ducts": (
         "Drop Duct", "ddct_id", ORANGE,
@@ -78,6 +83,7 @@ ASSET_CONFIG = {
          ("Drop Type",   "drop_type"),
          ("Status",      "status"),
          ("Wayleave",    "wayleave_req")],
+        "digitise_drop_duct.png",
     ),
     "premises": (
         "Premises", "uprn", WHITE,
@@ -89,6 +95,7 @@ ASSET_CONFIG = {
          ("Type",        "premise_type"),
          ("Tech",        "current_tech"),
          ("Registered",  "registered")],
+        "import_premises_addressbase.png",
     ),
     "exchange_pops": (
         "Cabinet / POP", "pop_id", TEAL,
@@ -99,6 +106,7 @@ ASSET_CONFIG = {
          ("Status",      "status"),
          ("Max Cust.",   "max_customers"),
          ("Address",     "address")],
+        "place_cabinet_pop.png",
     ),
 }
 
@@ -303,7 +311,7 @@ class ConductorAssetDock(QDockWidget):
         if not cfg:
             return
 
-        display_name, id_field, accent, fields = cfg
+        display_name, id_field, accent, fields, icon_png = cfg
         asset_id = str(feat[id_field] or "") if id_field in feat.fields().names() else "—"
 
         # Clear content
@@ -319,8 +327,21 @@ class ConductorAssetDock(QDockWidget):
             f"border-bottom:1px solid {MID};"
         )
         bl = QHBoxLayout(badge)
-        bl.setContentsMargins(12, 10, 12, 10)
+        bl.setContentsMargins(8, 8, 12, 8)
         bl.setSpacing(8)
+
+        # Asset icon
+        import os as _os
+        _icon_path = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'icons', icon_png)
+        if _os.path.exists(_icon_path):
+            from qgis.PyQt.QtGui import QIcon, QPixmap
+            from qgis.PyQt.QtCore import QSize
+            icon_lbl = QLabel()
+            icon_lbl.setFixedSize(28, 28)
+            icon_lbl.setAlignment(Qt.AlignCenter)
+            icon_lbl.setPixmap(QIcon(_icon_path).pixmap(QSize(24, 24)))
+            icon_lbl.setStyleSheet("background:transparent; border:none;")
+            bl.addWidget(icon_lbl)
 
         type_lbl = QLabel(display_name.upper())
         type_lbl.setMinimumWidth(0)

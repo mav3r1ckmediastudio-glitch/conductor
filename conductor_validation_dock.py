@@ -292,7 +292,7 @@ class ConductorValidationDock(QDockWidget):
         cfg = ASSET_CONFIG.get(layer_name)
         if not cfg:
             return
-        display_name, id_field, colour, fields = cfg
+        display_name, id_field, colour, fields, _icon_png = cfg
         if accent:
             colour = accent
 
@@ -334,30 +334,19 @@ class ConductorValidationDock(QDockWidget):
         tcl.addWidget(id_lbl)
         bl.addWidget(text_col, 1)
 
-        # Asset icon (right side of badge)
-        _icon_map = {
-            'chambers':     'place_chamber.svg',
-            'joints':       'place_joint.svg',
-            'cables':       'digitise_cable.svg',
-            'bundles':      'digitise_bundle.svg',
-            'drop_ducts':   'digitise_drop_duct.svg',
-            'premises':     'import_premises_addressbase.svg',
-            'exchange_pops':'place_cabinet_pop.svg',
-        }
-        icon_file = _icon_map.get(layer_name)
-        if icon_file:
-            from qgis.PyQt.QtGui import QIcon, QPixmap
+        # Asset icon (right side of badge) — use icon_png from ASSET_CONFIG
+        if _icon_png:
+            from qgis.PyQt.QtGui import QIcon
             from qgis.PyQt.QtCore import QSize
-            icon_path = os.path.join(
-                os.path.dirname(os.path.abspath(__file__)), 'icons', icon_file
-            )
-            icon_lbl = QLabel()
-            icon_lbl.setFixedSize(36, 36)
-            icon_lbl.setStyleSheet(f"background:{NAVY}; border-radius:6px;")
-            px = QIcon(icon_path).pixmap(QSize(28, 28))
-            icon_lbl.setPixmap(px)
-            icon_lbl.setAlignment(Qt.AlignCenter)
-            bl.addWidget(icon_lbl)
+            _icons_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'icons')
+            icon_path = os.path.join(_icons_dir, _icon_png)
+            if os.path.exists(icon_path):
+                icon_lbl = QLabel()
+                icon_lbl.setFixedSize(36, 36)
+                icon_lbl.setStyleSheet(f"background:{NAVY}; border-radius:6px;")
+                icon_lbl.setPixmap(QIcon(icon_path).pixmap(QSize(28, 28)))
+                icon_lbl.setAlignment(Qt.AlignCenter)
+                bl.addWidget(icon_lbl)
 
         self._asset_content_layout.addWidget(badge)
 
