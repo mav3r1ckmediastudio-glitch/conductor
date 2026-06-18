@@ -19,7 +19,7 @@ import json
 import os
 
 from qgis.PyQt import QtCore, QtWidgets
-from .conductor_utils import NAVY, TEAL, ORANGE, LIGHT, WHITE, MID
+from .conductor_utils import NAVY, TEAL, ORANGE, LIGHT, WHITE, MID, GREY
 
 
 class HelpContentStore:
@@ -91,7 +91,11 @@ class HelpDialog(QtWidgets.QDialog):
         self.store = store
         self.setWindowTitle("Conductor Help")
         self.setMinimumWidth(440)
-        self.setStyleSheet(f"QDialog {{ background-color: {LIGHT}; }}")
+        self.setStyleSheet(
+            f"QDialog {{ background-color: #0F1923; color: #E8EDF2; }}"
+            f"QLabel {{ color: #E8EDF2; background: transparent; }}"
+            f"QTextEdit {{ background: #1A2332; color: #E8EDF2; border: 1px solid #2D3F52; border-radius: 4px; }}"
+        )
 
         self._layout = QtWidgets.QVBoxLayout(self)
         self._layout.setContentsMargins(14, 14, 14, 14)
@@ -227,12 +231,12 @@ def make_info_button(tool_id, store, parent=None):
         f"QToolButton {{"
         f"  border: 1px solid {MID};"
         f"  border-radius: 10px;"
-        f"  background-color: {WHITE};"
-        f"  color: {NAVY};"
-        f"  font-weight: bold;"
-        f"  font-size: 10pt;"
+        f"  background-color: transparent;"
+        f"  color: {GREY};"
+        f"  font-weight: 600;"
+        f"  font-size: 9pt;"
         f"}}"
-        f"QToolButton:hover {{ background-color: {TEAL}; color: {WHITE}; border-color: {TEAL}; }}"
+        f"QToolButton:hover {{ background-color: {TEAL}; color: #0F1923; border-color: {TEAL}; }}"
         f"QToolButton:pressed {{ background-color: {NAVY}; color: {WHITE}; border-color: {NAVY}; }}"
     )
 
