@@ -966,6 +966,183 @@ class ValidateRoutesDialog(QDialog):
         QMessageBox.information(self, "Export complete", f"Results saved to:\n{actual}")
 
 
+
+def run_validation_headless(project):
+    """
+    Run the full route validation synchronously (no QThread/dialog) and return
+    a results dict compatible with ConductorValidationDock.push_validation_results().
+
+    Returns:
+        {
+            "critical":  int,
+            "errors":    int,
+            "warnings":  int,
+            "info":      int,
+            "score_pct": int | None,
+            "issues":    [ {"severity", "message", "asset_id"} ]
+        }
+    """
+    from ..conductor_utils import get_layer
+
+    LAYER_NAMES = {
+        "premises":   "premises",
+        "bundles":    "bundles",
+        "drop_ducts": "drop_ducts",
+        "joints":     "joints",
+        "cables":     "cables",
+    }
+
+    issues   = []
+    counts   = {"critical": 0, "errors": 0, "warnings": 0, "info": 0}
+    summary  = {STATUS_OK: 0, STATUS_PARTIAL: 0, STATUS_UNSERVED: 0, STATUS_ERROR: 0}
+
+    try:
+        premises_layer = get_layer(LAYER_NAMES["premises"],   project)
+        bundle_layer   = get_layer(LAYER_NAMES["bundles"],    project)
+        ddct_layer     = get_layer(LAYER_NAMES["drop_ducts"], project)
+        joint_layer    = get_layer(LAYER_NAMES["joints"],     project)
+        cable_layer    = get_layer(LAYER_NAMES["cables"],     project)
+
+        if not premises_layer or not cable_layer:
+            return {**counts, "score_pct": None, "issues": [{
+                "severity": "error",
+                "message":  "Required layers not found (premises / cables).",
+                "asset_id": "",
+            }]}
+
+        bundle_idx     = _build_index(bundle_layer, "uprn")    if bundle_layer else {}
+        ddct_idx       = _build_index(ddct_layer,   "uprn")    if ddct_layer   else {}
+        joint_idx      = _build_index(joint_layer,  "joint_id")
+        cable_node_idx = _build_cable_node_index(cable_layer)
+
+        from .optical_budget import load_optical, link_budget_db
+        optical   = load_optical()
+        budget_db = link_budget_db(optical)
+
+        total   = premises_layer.featureCount()
+        routed  = 0
+
+        for prem in premises_layer.getFeatures():
+            uprn    = prem["uprn"]
+            area_id = prem["area_id"] if "area_id" in prem.fields().names() else ""
+
+            try:
+                status, path, reason, loss_db = trace_premises(
+                    uprn, area_id,
+                    bundle_idx, ddct_idx,
+                    joint_idx, cable_node_idx,
+                    optical=optical,
+                )
+            except Exception as e:
+                status = STATUS_ERROR
+                reason = f"Trace exception: {e}"
+                loss_db = None
+
+            summary[status] = summary.get(status, 0) + 1
+
+            if status == STATUS_OK:
+                routed += 1
+                # Optical budget check
+                if loss_db is not None:
+                    margin_db = budget_db - loss_db
+                    if margin_db < 0:
+                        counts["warnings"] += 1
+                        issues.append({
+                            "severity": "warning",
+                            "message":  f"Optical budget fail ({margin_db:+.1f} dB margin)",
+                            "asset_id": str(uprn),
+                        })
+            elif status == STATUS_PARTIAL:
+                counts["warnings"] += 1
+                issues.append({
+                    "severity": "warning",
+                    "message":  f"Partial route: {reason}",
+                    "asset_id": str(uprn),
+                })
+            elif status == STATUS_UNSERVED:
+                counts["info"] += 1
+                issues.append({
+                    "severity": "info",
+                    "message":  f"Unserved: {reason}",
+                    "asset_id": str(uprn),
+                })
+            elif status == STATUS_ERROR:
+                counts["errors"] += 1
+                issues.append({
+                    "severity": "error",
+                    "message":  f"Trace error: {reason}",
+                    "asset_id": str(uprn),
+                })
+
+        # ── Splitter integrity scan ───────────────────────────────────────────
+        try:
+            if joint_layer and bundle_layer:
+                chamber_to_joint = {}
+                for feat in joint_layer.getFeatures():
+                    cid = str(feat["chamber_id"] or "")
+                    jid = str(feat["joint_id"]   or "")
+                    if cid and jid:
+                        chamber_to_joint[cid] = jid
+
+                downstream_counts = {}
+                for feat in bundle_layer.getFeatures():
+                    jid = str(feat["from_joint"] or "")
+                    if jid:
+                        downstream_counts[jid] = downstream_counts.get(jid, 0) + 1
+
+                if ddct_layer:
+                    for feat in ddct_layer.getFeatures():
+                        fc = str(feat["from_chamber"] or "")
+                        if not fc:
+                            continue
+                        if fc in downstream_counts or fc in chamber_to_joint.values():
+                            downstream_counts[fc] = downstream_counts.get(fc, 0) + 1
+                        else:
+                            resolved = chamber_to_joint.get(fc, "")
+                            if resolved:
+                                downstream_counts[resolved] = downstream_counts.get(resolved, 0) + 1
+
+                for feat in joint_layer.getFeatures():
+                    jid   = str(feat["joint_id"] or "")
+                    count = downstream_counts.get(jid, 0)
+                    if count > 1:
+                        from qgis.core import NULL
+                        has_sp = feat["has_splitter"] if "has_splitter" in feat.fields().names() else None
+                        if not has_sp or has_sp == NULL:
+                            counts["warnings"] += 1
+                            issues.append({
+                                "severity": "warning",
+                                "message":  f"Joint {jid} has {count} downstream paths but no splitter",
+                                "asset_id": jid,
+                            })
+        except Exception:
+            pass
+
+        # ── Score ─────────────────────────────────────────────────────────────
+        clean = routed - sum(
+            1 for iss in issues
+            if iss["severity"] == "warning" and "Optical budget" in iss["message"]
+        )
+        score_pct = round((clean / total) * 100) if total > 0 else None
+
+    except Exception as e:
+        import traceback
+        return {**counts, "score_pct": None, "routed": 0, "partial": 0, "total": 0, "issues": [{
+            "severity": "critical",
+            "message":  f"Validation failed: {traceback.format_exc()}",
+            "asset_id": "",
+        }]}
+
+    return {
+        **counts,
+        "score_pct": score_pct,
+        "routed":    summary.get(STATUS_OK,      0),
+        "partial":   summary.get(STATUS_PARTIAL,  0),
+        "total":     total,
+        "issues":    issues,
+    }
+
+
 def open_validate_routes_dialog(iface, parent=None, project=None):
     dlg = ValidateRoutesDialog(iface, parent, project=project)
     dlg.show()

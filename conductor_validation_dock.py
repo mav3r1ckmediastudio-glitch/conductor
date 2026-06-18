@@ -1,3 +1,4 @@
+import os
 # -*- coding: utf-8 -*-
 """
 Conductor v2 — Right Dock: Validation Summary + Engineer Outputs
@@ -11,6 +12,7 @@ from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import (
     QDockWidget, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QFrame, QScrollArea, QSizePolicy, QToolButton,
+    QSplitter,
 )
 from qgis.core import QgsSettings
 from .conductor_utils import (
@@ -56,7 +58,9 @@ class ConductorValidationDock(QDockWidget):
         self.main_dock = main_dock   # ConductorDockWidget reference
         self.iface = iface
         self.setObjectName("ConductorValidationDock")
-        self.setMinimumWidth(260)
+        self.setMinimumWidth(300)
+        self.setMaximumWidth(480)
+        self.resize(320, self.height())
         self.setFeatures(
             QDockWidget.DockWidgetMovable |
             QDockWidget.DockWidgetFloatable |
@@ -73,17 +77,26 @@ class ConductorValidationDock(QDockWidget):
     # ── UI ──────────────────────────────────────────────────────────────────────
 
     def _build_ui(self):
-        container = QWidget()
-        container.setObjectName("ConductorValContainer")
-        container.setStyleSheet(_QSS)
+        # Three-pane splitter: validation top, selected asset middle, route inspector bottom
+        splitter = QSplitter(Qt.Vertical)
+        splitter.setStyleSheet(f"""
+            QSplitter {{ background:{NAVY}; }}
+            QSplitter::handle {{ background:{MID}; height:2px; }}
+        """)
+        splitter.setHandleWidth(2)
+        self.setWidget(splitter)
 
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setWidget(container)
-        self.setWidget(scroll)
+        # ── Pane 1: Validation Summary ───────────────────────────────────────
+        val_pane = QWidget()
+        val_pane.setStyleSheet(_QSS)
+        val_scroll = QScrollArea()
+        val_scroll.setWidgetResizable(True)
+        val_scroll.setFrameShape(QFrame.NoFrame)
+        val_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        val_scroll.setWidget(val_pane)
+        splitter.addWidget(val_scroll)
 
-        root = QVBoxLayout(container)
+        root = QVBoxLayout(val_pane)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
@@ -122,13 +135,13 @@ class ConductorValidationDock(QDockWidget):
         badge_area = QWidget()
         badge_area.setStyleSheet(f"background:{LIGHT}; border-bottom:1px solid {MID};")
         bl = QHBoxLayout(badge_area)
-        bl.setContentsMargins(8, 8, 8, 8)
-        bl.setSpacing(6)
+        bl.setContentsMargins(6, 6, 6, 6)
+        bl.setSpacing(4)
 
-        self._badge_critical = self._count_badge(bl, "0", "Critical", RED,    "#3B1212")
-        self._badge_errors   = self._count_badge(bl, "0", "Errors",   ORANGE, "#3B2A0A")
-        self._badge_warnings = self._count_badge(bl, "0", "Warnings", "#FACC15", "#302800")
-        self._badge_info     = self._count_badge(bl, "0", "Info",     TEAL,   "#0A2622")
+        self._badge_critical, self._badge_critical_val = self._count_badge(bl, "0", "Critical",  RED,       "#3B1212")
+        self._badge_errors,   self._badge_errors_val   = self._count_badge(bl, "0", "Errors",    ORANGE,    "#3B2A0A")
+        self._badge_warnings, self._badge_warnings_val = self._count_badge(bl, "0", "Warnings",  "#FACC15", "#302800")
+        self._badge_info,     self._badge_info_val     = self._count_badge(bl, "0", "Info",      TEAL,      "#0A2622")
         root.addWidget(badge_area)
 
         # Progress bar row
@@ -157,6 +170,7 @@ class ConductorValidationDock(QDockWidget):
         root.addWidget(issues_hdr)
 
         self._issues_container = QWidget()
+        self._issues_container.setMinimumWidth(0)
         self._issues_container.setStyleSheet("background:transparent;")
         self._issues_layout = QVBoxLayout(self._issues_container)
         self._issues_layout.setContentsMargins(8, 0, 8, 8)
@@ -199,29 +213,363 @@ class ConductorValidationDock(QDockWidget):
         root.addWidget(out_area)
         root.addStretch(1)
 
-    def _count_badge(self, layout, value, caption, fg, bg):
-        cell = QWidget()
-        cell.setStyleSheet(
-            f"background:{bg}; border:1px solid {fg}; border-radius:6px;"
+        # ── Pane 2: Selected Asset ───────────────────────────────────────────
+        self._asset_pane = QWidget()
+        self._asset_pane.setStyleSheet(_QSS)
+        asset_scroll = QScrollArea()
+        asset_scroll.setWidgetResizable(True)
+        asset_scroll.setFrameShape(QFrame.NoFrame)
+        asset_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        asset_scroll.setWidget(self._asset_pane)
+        splitter.addWidget(asset_scroll)
+        self._build_asset_pane()
+
+        # ── Pane 3: Route Inspector ──────────────────────────────────────────
+        self._route_pane = QWidget()
+        self._route_pane.setStyleSheet(_QSS)
+        route_scroll = QScrollArea()
+        route_scroll.setWidgetResizable(True)
+        route_scroll.setFrameShape(QFrame.NoFrame)
+        route_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        route_scroll.setWidget(self._route_pane)
+        splitter.addWidget(route_scroll)
+        self._build_route_pane()
+
+        # Set initial proportions: 50% / 25% / 25%
+        splitter.setSizes([400, 200, 200])
+        self._splitter = splitter
+
+    # ── Asset pane ──────────────────────────────────────────────────────────────
+
+    def _build_asset_pane(self):
+        root = QVBoxLayout(self._asset_pane)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+
+        # Header
+        hdr = QWidget()
+        hdr.setFixedHeight(36)
+        hdr.setStyleSheet(f"background:{LIGHT}; border-bottom:1px solid {MID};")
+        hl = QHBoxLayout(hdr)
+        hl.setContentsMargins(12, 0, 12, 0)
+        title = QLabel("SELECTED ASSET")
+        title.setStyleSheet(f"color:{GREY}; font-size:9px; font-weight:700; letter-spacing:2px;")
+        title.setMinimumWidth(0)
+        title.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        hl.addWidget(title, 1)
+        self._asset_clear_btn = QToolButton()
+        self._asset_clear_btn.setText("✕")
+        self._asset_clear_btn.setFixedSize(20, 20)
+        self._asset_clear_btn.setCursor(Qt.PointingHandCursor)
+        self._asset_clear_btn.setStyleSheet(f"""
+            QToolButton {{ background:transparent; border:none; color:{MID}; font-size:11px; }}
+            QToolButton:hover {{ color:{RED}; }}
+        """)
+        self._asset_clear_btn.clicked.connect(self._clear_asset)
+        hl.addWidget(self._asset_clear_btn)
+        root.addWidget(hdr)
+
+        # Empty state
+        self._asset_empty = QLabel("Click any asset on the map")
+        self._asset_empty.setAlignment(Qt.AlignCenter)
+        self._asset_empty.setMinimumWidth(0)
+        self._asset_empty.setStyleSheet(f"color:{MID}; font-size:11px; padding:16px;")
+        root.addWidget(self._asset_empty)
+
+        # Content area (hidden until asset clicked)
+        self._asset_content = QWidget()
+        self._asset_content.setVisible(False)
+        self._asset_content.setMinimumWidth(0)
+        self._asset_content_layout = QVBoxLayout(self._asset_content)
+        self._asset_content_layout.setContentsMargins(0, 0, 0, 0)
+        self._asset_content_layout.setSpacing(0)
+        root.addWidget(self._asset_content)
+        root.addStretch(1)
+
+    def show_asset(self, layer_name, feat, accent=None):
+        """Populate the Selected Asset pane with a clicked feature."""
+        from .conductor_asset_dock import ASSET_CONFIG
+        cfg = ASSET_CONFIG.get(layer_name)
+        if not cfg:
+            return
+        display_name, id_field, colour, fields = cfg
+        if accent:
+            colour = accent
+
+        asset_id = str(feat[id_field] or "") if id_field in feat.fields().names() else "—"
+
+        # Clear old content
+        while self._asset_content_layout.count():
+            item = self._asset_content_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        # Type badge + ID row
+        badge = QWidget()
+        badge.setMinimumWidth(0)
+        badge.setStyleSheet(
+            f"background:{LIGHT}; border-left:4px solid {colour}; border-bottom:1px solid {MID};"
         )
+        bl = QHBoxLayout(badge)
+        bl.setContentsMargins(10, 8, 8, 8)
+        bl.setSpacing(8)
+
+        # Text column
+        text_col = QWidget()
+        text_col.setMinimumWidth(0)
+        text_col.setStyleSheet("background:transparent;")
+        tcl = QVBoxLayout(text_col)
+        tcl.setContentsMargins(0, 0, 0, 0)
+        tcl.setSpacing(2)
+        type_lbl = QLabel(display_name.upper())
+        type_lbl.setMinimumWidth(0)
+        type_lbl.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        type_lbl.setStyleSheet(f"color:{colour}; font-size:9px; font-weight:700; letter-spacing:2px;")
+        tcl.addWidget(type_lbl)
+        id_lbl = QLabel(asset_id)
+        id_lbl.setMinimumWidth(0)
+        id_lbl.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        id_lbl.setStyleSheet(f"color:{WHITE}; font-size:11px; font-weight:600;")
+        id_lbl.setToolTip(asset_id)
+        tcl.addWidget(id_lbl)
+        bl.addWidget(text_col, 1)
+
+        # Asset icon (right side of badge)
+        _icon_map = {
+            'chambers':     'place_chamber.svg',
+            'joints':       'place_joint.svg',
+            'cables':       'digitise_cable.svg',
+            'bundles':      'digitise_bundle.svg',
+            'drop_ducts':   'digitise_drop_duct.svg',
+            'premises':     'import_premises_addressbase.svg',
+            'exchange_pops':'place_cabinet_pop.svg',
+        }
+        icon_file = _icon_map.get(layer_name)
+        if icon_file:
+            from qgis.PyQt.QtGui import QIcon, QPixmap
+            from qgis.PyQt.QtCore import QSize
+            icon_path = os.path.join(
+                os.path.dirname(os.path.abspath(__file__)), 'icons', icon_file
+            )
+            icon_lbl = QLabel()
+            icon_lbl.setFixedSize(36, 36)
+            icon_lbl.setStyleSheet(f"background:{NAVY}; border-radius:6px;")
+            px = QIcon(icon_path).pixmap(QSize(28, 28))
+            icon_lbl.setPixmap(px)
+            icon_lbl.setAlignment(Qt.AlignCenter)
+            bl.addWidget(icon_lbl)
+
+        self._asset_content_layout.addWidget(badge)
+
+        # Field rows
+        field_names = feat.fields().names()
+        from qgis.core import NULL
+        for label, field in fields:
+            if field not in field_names:
+                continue
+            val = feat[field]
+            if val is None or val == NULL or str(val).strip() == "":
+                continue
+            row = QWidget()
+            row.setMinimumWidth(0)
+            row.setStyleSheet(f"border-bottom:1px solid {NAVY};")
+            rl = QHBoxLayout(row)
+            rl.setContentsMargins(10, 5, 10, 5)
+            rl.setSpacing(8)
+            key_lbl = QLabel(label)
+            key_lbl.setFixedWidth(76)
+            key_lbl.setMinimumWidth(0)
+            key_lbl.setStyleSheet(f"color:{GREY}; font-size:10px;")
+            rl.addWidget(key_lbl)
+            val_lbl = QLabel(str(val))
+            val_lbl.setMinimumWidth(0)
+            val_lbl.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+            val_lbl.setStyleSheet(f"color:{WHITE}; font-size:11px;")
+            val_lbl.setToolTip(str(val))
+            rl.addWidget(val_lbl, 1)
+            self._asset_content_layout.addWidget(row)
+
+        # Zoom button
+        zoom_btn = QPushButton("⊙  Zoom To")
+        zoom_btn.setMinimumWidth(0)
+        zoom_btn.setCursor(Qt.PointingHandCursor)
+        zoom_btn.clicked.connect(lambda: self._zoom_to_asset(feat, layer_name))
+        zoom_btn.setStyleSheet(f"""
+            QPushButton {{ background:{LIGHT}; color:{TEAL}; border:1px solid {MID};
+                           border-radius:3px; padding:5px 10px; font-size:11px; margin:6px; }}
+            QPushButton:hover {{ border-color:{TEAL}; }}
+        """)
+        self._asset_content_layout.addWidget(zoom_btn)
+
+        self._asset_empty.setVisible(False)
+        self._asset_content.setVisible(True)
+
+    def _clear_asset(self):
+        self._asset_empty.setVisible(True)
+        self._asset_content.setVisible(False)
+
+    def _zoom_to_asset(self, feat, layer_name):
+        from .conductor_utils import get_layer
+        from qgis.core import QgsCoordinateTransform, QgsProject
+        layer = get_layer(layer_name, getattr(self, '_project', None))
+        if not layer:
+            return
+        canvas = self.iface.mapCanvas()
+        geom = feat.geometry()
+        if geom and not geom.isEmpty():
+            geom.transform(QgsCoordinateTransform(
+                layer.crs(), canvas.mapSettings().destinationCrs(), QgsProject.instance()
+            ))
+            bbox = geom.boundingBox()
+            bbox.grow(max(bbox.width(), bbox.height(), 50) * 0.5)
+            canvas.setExtent(bbox)
+            canvas.refresh()
+
+    # ── Route Inspector pane ─────────────────────────────────────────────────────
+
+    def _build_route_pane(self):
+        root = QVBoxLayout(self._route_pane)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+
+        hdr = QWidget()
+        hdr.setFixedHeight(36)
+        hdr.setStyleSheet(f"background:{LIGHT}; border-bottom:1px solid {MID};")
+        hl = QHBoxLayout(hdr)
+        hl.setContentsMargins(12, 0, 12, 0)
+        title = QLabel("ROUTE INSPECTOR")
+        title.setMinimumWidth(0)
+        title.setStyleSheet(f"color:{GREY}; font-size:9px; font-weight:700; letter-spacing:2px;")
+        hl.addWidget(title)
+        root.addWidget(hdr)
+
+        self._route_empty = QLabel("Select a route in the table below")
+        self._route_empty.setAlignment(Qt.AlignCenter)
+        self._route_empty.setMinimumWidth(0)
+        self._route_empty.setStyleSheet(f"color:{MID}; font-size:11px; padding:16px;")
+        root.addWidget(self._route_empty)
+
+        self._route_content = QWidget()
+        self._route_content.setVisible(False)
+        self._route_content.setMinimumWidth(0)
+        self._route_content_layout = QVBoxLayout(self._route_content)
+        self._route_content_layout.setContentsMargins(10, 8, 10, 8)
+        self._route_content_layout.setSpacing(6)
+        root.addWidget(self._route_content)
+        root.addStretch(1)
+
+    def show_route(self, route_data):
+        """Populate the Route Inspector pane from a routes table row dict."""
+        while self._route_content_layout.count():
+            item = self._route_content_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        # Route ID + status header
+        id_row = QWidget()
+        id_row.setMinimumWidth(0)
+        il = QHBoxLayout(id_row)
+        il.setContentsMargins(0, 0, 0, 0)
+        id_lbl = QLabel(f"Route: {route_data.get('route_id', '—')}")
+        id_lbl.setMinimumWidth(0)
+        id_lbl.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        id_lbl.setStyleSheet(f"color:{WHITE}; font-size:11px; font-weight:600;")
+        il.addWidget(id_lbl, 1)
+
+        status = route_data.get('status', '')
+        sc = GREEN if status == 'Routed' else (ORANGE if status == 'Partial' else RED)
+        st_lbl = QLabel(status)
+        st_lbl.setStyleSheet(f"""
+            color:{sc}; font-size:9px; font-weight:700;
+            border:1px solid {sc}; border-radius:3px; padding:1px 5px;
+        """)
+        il.addWidget(st_lbl)
+        self._route_content_layout.addWidget(id_row)
+
+        # From → To
+        path_lbl = QLabel(
+            f"{route_data.get('from_node','—')}  →  {route_data.get('to_node','—')}"
+        )
+        path_lbl.setMinimumWidth(0)
+        path_lbl.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        path_lbl.setStyleSheet(f"color:{GREY}; font-size:10px;")
+        path_lbl.setToolTip(path_lbl.text())
+        self._route_content_layout.addWidget(path_lbl)
+
+        # Stats row
+        stats = QWidget()
+        stats.setMinimumWidth(0)
+        sl = QHBoxLayout(stats)
+        sl.setContentsMargins(0, 4, 0, 0)
+        sl.setSpacing(4)
+        for val, label in [
+            (route_data.get('length','–'),   'Length'),
+            (route_data.get('fibres','–'),   'Fibres'),
+            (route_data.get('capacity','–'), 'Capacity'),
+        ]:
+            cell = QWidget()
+            cell.setMinimumWidth(0)
+            cell.setStyleSheet(f"background:{LIGHT}; border-radius:4px;")
+            cl = QVBoxLayout(cell)
+            cl.setContentsMargins(6, 4, 6, 4)
+            cl.setSpacing(1)
+            v = QLabel(str(val))
+            v.setAlignment(Qt.AlignCenter)
+            v.setMinimumWidth(0)
+            v.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+            v.setStyleSheet(f"color:{WHITE}; font-size:13px; font-weight:700;")
+            l = QLabel(label)
+            l.setAlignment(Qt.AlignCenter)
+            l.setMinimumWidth(0)
+            l.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+            l.setStyleSheet(f"color:{GREY}; font-size:8px;")
+            cl.addWidget(v)
+            cl.addWidget(l)
+            sl.addWidget(cell, 1)
+        self._route_content_layout.addWidget(stats)
+
+        self._route_empty.setVisible(False)
+        self._route_content.setVisible(True)
+
+    def clear_route(self):
+        self._route_empty.setVisible(True)
+        self._route_content.setVisible(False)
+
+    # ── COUNT BADGE ──────────────────────────────────────────────────────────────
+
+    def _count_badge(self, layout, value, caption, fg, bg):
+        """Returns (value_label, caption_label) tuple. Cell expands to fill equal share."""
+        from qgis.PyQt.QtWidgets import QSizePolicy as QSP
+        cell = QFrame()
+        cell.setStyleSheet(
+            f"QFrame {{ background:{bg}; border:1px solid {fg}; border-radius:5px; }}"
+        )
+        cell.setSizePolicy(QSP.Expanding, QSP.Preferred)
+        cell.setMinimumWidth(0)
         cl = QVBoxLayout(cell)
-        cl.setContentsMargins(4, 6, 4, 6)
+        cl.setContentsMargins(1, 4, 1, 4)
         cl.setSpacing(1)
 
         v_lbl = QLabel(value)
         v_lbl.setAlignment(Qt.AlignCenter)
+        v_lbl.setMinimumWidth(0)
+        v_lbl.setSizePolicy(QSP.Ignored, QSP.Preferred)
         v_lbl.setStyleSheet(
-            f"color:{fg}; font-size:20px; font-weight:700; border:none; background:transparent;"
+            f"color:{fg}; font-size:15px; font-weight:700; border:none; background:transparent;"
         )
         cl.addWidget(v_lbl)
 
         c_lbl = QLabel(caption)
         c_lbl.setAlignment(Qt.AlignCenter)
-        c_lbl.setStyleSheet(f"color:{fg}; font-size:9px; border:none; background:transparent; opacity:0.8;")
+        c_lbl.setMinimumWidth(0)
+        c_lbl.setSizePolicy(QSP.Expanding, QSP.Preferred)
+        c_lbl.setStyleSheet(
+            f"color:{fg}; font-size:8px; border:none; background:transparent;"
+        )
         cl.addWidget(c_lbl)
 
         layout.addWidget(cell, 1)
-        return v_lbl   # return value label for later updates
+        return v_lbl, c_lbl   # (value_label, caption_label)
 
     def _divider(self):
         line = QFrame()
@@ -232,11 +580,47 @@ class ConductorValidationDock(QDockWidget):
     # ── DATA ────────────────────────────────────────────────────────────────────
 
     def set_project(self, project):
-        """Enable output buttons and trigger first validation pass."""
+        """Enable output buttons, wire canvas clicks, and trigger first validation pass."""
         self._project = project
         for btn in self._out_buttons.values():
             btn.setEnabled(True)
+        # Wire canvas click via event filter
+        canvas = self.iface.mapCanvas()
+        canvas.viewport().removeEventFilter(self)
+        canvas.viewport().installEventFilter(self)
         self._on_refresh()
+
+    def eventFilter(self, obj, event):
+        from qgis.PyQt.QtCore import QEvent, QTimer
+        if (event.type() == QEvent.MouseButtonPress
+                and event.button() == Qt.LeftButton
+                and self._project):
+            canvas = self.iface.mapCanvas()
+            pt = event.pos()
+            map_pt = canvas.getCoordinateTransform().toMapCoordinates(pt.x(), pt.y())
+            QTimer.singleShot(50, lambda: self._identify_asset(map_pt))
+        return False
+
+    def _identify_asset(self, map_pt):
+        from qgis.core import QgsFeatureRequest, QgsRectangle, QgsCoordinateTransform, QgsProject
+        from .conductor_asset_dock import ASSET_CONFIG, SEARCH_ORDER
+        canvas = self.iface.mapCanvas()
+        tol = canvas.mapUnitsPerPixel() * 8
+        rect = QgsRectangle(map_pt.x()-tol, map_pt.y()-tol, map_pt.x()+tol, map_pt.y()+tol)
+        from .conductor_utils import get_layer
+        canvas_crs = canvas.mapSettings().destinationCrs()
+        for layer_name in SEARCH_ORDER:
+            layer = get_layer(layer_name, self._project)
+            if not layer or not layer.isValid():
+                continue
+            if canvas_crs != layer.crs():
+                xform = QgsCoordinateTransform(canvas_crs, layer.crs(), QgsProject.instance())
+                search = xform.transformBoundingBox(rect)
+            else:
+                search = rect
+            for feat in layer.getFeatures(QgsFeatureRequest().setFilterRect(search).setLimit(1)):
+                self.show_asset(layer_name, feat)
+                return
 
     def push_validation_results(self, results):
         """
@@ -261,6 +645,10 @@ class ConductorValidationDock(QDockWidget):
         from datetime import datetime
         self._updated_lbl.setText(f"Updated {datetime.now().strftime('%H:%M')}")
 
+        # Force badge row to reflow to actual dock width
+        from qgis.PyQt.QtCore import QTimer
+        QTimer.singleShot(0, lambda: self.widget().updateGeometry())
+
         # Rebuild issues list
         while self._issues_layout.count():
             item = self._issues_layout.takeAt(0)
@@ -268,26 +656,93 @@ class ConductorValidationDock(QDockWidget):
                 item.widget().deleteLater()
 
         issues = results.get("issues", [])
-        if not issues:
+        routed  = results.get("routed",  0)
+        partial = results.get("partial", 0)
+        total   = results.get("total",   0)
+
+        # ── Connection summary row ───────────────────────────────────────────
+        summary_row = QWidget()
+        summary_row.setMinimumWidth(0)
+        summary_row.setStyleSheet(
+            f"background:{LIGHT}; border-left:3px solid {GREEN}; "
+            f"border-radius:3px; margin-bottom:4px;"
+        )
+        sr_layout = QHBoxLayout(summary_row)
+        sr_layout.setContentsMargins(8, 6, 8, 6)
+        sr_layout.setSpacing(12)
+
+        def _stat(val, label, colour):
+            w = QWidget()
+            w.setMinimumWidth(0)
+            w.setStyleSheet("background:transparent;")
+            vl = QVBoxLayout(w)
+            vl.setContentsMargins(0,0,0,0)
+            vl.setSpacing(0)
+            n = QLabel(str(val))
+            n.setAlignment(Qt.AlignCenter)
+            n.setMinimumWidth(0)
+            n.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+            n.setStyleSheet(f"color:{colour}; font-size:14px; font-weight:700; border:none; background:transparent;")
+            c = QLabel(label)
+            c.setAlignment(Qt.AlignCenter)
+            c.setMinimumWidth(0)
+            c.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+            c.setStyleSheet(f"color:{colour}; font-size:8px; border:none; background:transparent;")
+            vl.addWidget(n)
+            vl.addWidget(c)
+            return w
+
+        unserved = total - routed - partial if total > 0 else results.get("info", 0)
+        sr_layout.addWidget(_stat(routed,  "Routed",   GREEN),  1)
+        sr_layout.addWidget(_stat(partial, "Partial",  ORANGE), 1)
+        sr_layout.addWidget(_stat(unserved,"Unserved", GREY),   1)
+        if total > 0:
+            sr_layout.addWidget(_stat(total, "Total", WHITE), 1)
+        self._issues_layout.addWidget(summary_row)
+
+        # ── Separate out unserved info items from real issues ────────────────
+        unserved_issues = [i for i in issues if i.get("severity") == "info"
+                           and "Unserved" in i.get("message", "")]
+        real_issues     = [i for i in issues if i not in unserved_issues]
+
+        if not real_issues and not unserved_issues:
             lbl = QLabel("No issues found  ✓")
+            lbl.setMinimumWidth(0)
             lbl.setStyleSheet(f"color:{GREEN}; font-size:11px; padding:8px 4px;")
             self._issues_layout.addWidget(lbl)
         else:
             colours = {"critical": RED, "error": ORANGE, "warning": "#FACC15", "info": TEAL}
-            for issue in issues[:20]:   # cap display at 20
+
+            # Real issues (critical / error / warning / non-unserved info) — list individually
+            for issue in real_issues[:50]:
                 sev = issue.get("severity", "info").lower()
                 row = self._issue_row(
                     sev, issue.get("message", ""), issue.get("asset_id", ""),
                     colours.get(sev, GREY)
                 )
                 self._issues_layout.addWidget(row)
-            if len(issues) > 20:
-                more = QLabel(f"+ {len(issues)-20} more issues")
+            if len(real_issues) > 50:
+                more = QLabel(f"+ {len(real_issues)-50} more issues")
+                more.setMinimumWidth(0)
                 more.setStyleSheet(f"color:{MID}; font-size:10px; padding:4px 4px;")
                 self._issues_layout.addWidget(more)
 
+            # Unserved — single collapsed summary line, not 1158 rows
+            if unserved_issues:
+                n = len(unserved_issues)
+                row = self._issue_row(
+                    "info",
+                    f"{n} premises not yet connected to network",
+                    "",
+                    TEAL
+                )
+                self._issues_layout.addWidget(row)
+
     def _issue_row(self, severity, message, asset_id, colour):
+        from qgis.PyQt.QtCore import Qt as _Qt
+
         row = QWidget()
+        row.setMinimumWidth(0)
         row.setStyleSheet(
             f"background:{LIGHT}; border-left:3px solid {colour}; "
             f"border-radius:3px; margin-bottom:1px;"
@@ -296,16 +751,22 @@ class ConductorValidationDock(QDockWidget):
         rl.setContentsMargins(8, 5, 8, 5)
         rl.setSpacing(6)
 
+        # QSizePolicy.Ignored = Qt completely disregards the label's text width,
+        # so a long message can never force the container wider than the dock.
         msg = QLabel(message)
         msg.setStyleSheet(f"color:{WHITE}; font-size:11px; border:none; background:transparent;")
         msg.setWordWrap(False)
-        msg.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        msg.setMinimumWidth(0)
+        msg.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        msg.setTextInteractionFlags(_Qt.TextSelectableByMouse)
+        msg.setToolTip(message)
         rl.addWidget(msg, 1)
 
         if asset_id:
             aid = QLabel(asset_id)
             aid.setStyleSheet(f"color:{GREY}; font-size:10px; border:none; background:transparent;")
-            rl.addWidget(aid)
+            aid.setMinimumWidth(0)
+            rl.addWidget(aid, 0)
 
         zoom_btn = QToolButton()
         zoom_btn.setText("⊙")
@@ -316,7 +777,7 @@ class ConductorValidationDock(QDockWidget):
             QToolButton {{ background:transparent; border:none; color:{MID}; font-size:12px; }}
             QToolButton:hover {{ color:{TEAL}; }}
         """)
-        rl.addWidget(zoom_btn)
+        rl.addWidget(zoom_btn, 0)
         return row
 
     def _on_refresh(self):

@@ -187,7 +187,8 @@ class ConductorDockWidget(QDockWidget):
         self._undo_stack = UndoStack()
 
         self.setObjectName("ConductorDockWidget")
-        self.setMinimumWidth(280)
+        self.setMinimumWidth(240)
+        self.setMaximumWidth(380)
         self.setFeatures(
             QDockWidget.DockWidgetMovable |
             QDockWidget.DockWidgetFloatable |
@@ -402,11 +403,6 @@ class ConductorDockWidget(QDockWidget):
         # Project summary panel
         root.addWidget(self._build_summary_panel())
 
-        # ── ACTIVE TOOL STATUS BAR ────────────────────────────────────────
-        self._active_tool_bar = self._build_active_tool_bar()
-        root.addWidget(self._active_tool_bar)
-        self._active_tool_bar.setVisible(False)  # hidden until a tool activates
-
         # ── TAB WIDGET ────────────────────────────────────────────────────
         self._tabs = QTabWidget()
         self._tabs.setStyleSheet(f"""
@@ -471,7 +467,7 @@ class ConductorDockWidget(QDockWidget):
         self._tabs.setCornerWidget(grid_btn, Qt.TopRightCorner)
         self._tabs.currentChanged.connect(self._on_tab_changed)
 
-        root.addWidget(self._tabs)
+        root.addWidget(self._tabs, 1)  # stretch=1 so tabs fill all remaining vertical space
         self.setWidget(container)
 
     # ── PROJECT SUMMARY PANEL ────────────────────────────────────────────────
@@ -696,6 +692,8 @@ class ConductorDockWidget(QDockWidget):
             return []
 
     def _refresh_recent_tools_ui(self):
+        if not hasattr(self, '_recent_tools_container'):
+            return
         """Rebuild the Recent Tools list widget from QgsSettings."""
         from datetime import datetime
         container = self._recent_tools_container
@@ -804,54 +802,165 @@ class ConductorDockWidget(QDockWidget):
             cb()
 
     def _build_active_tool_bar(self):
-        """Thin 36px strip between summary and tabs showing current tool state."""
+        """Active tool panel — shown in place of recent tools when a tool is running."""
+        from qgis.PyQt.QtWidgets import QSizePolicy as QSP
         bar = QWidget()
-        bar.setFixedHeight(36)
-        bar.setStyleSheet(
-            f"background:{LIGHT}; border-top:1px solid {MID}; border-bottom:1px solid {MID};"
-        )
-        bl = QHBoxLayout(bar)
-        bl.setContentsMargins(8, 0, 8, 0)
-        bl.setSpacing(8)
+        bar.setMinimumWidth(0)
+        bar.setFixedHeight(120)
+        bar.setStyleSheet(f"""
+            QWidget {{ background:{LIGHT}; border:1px solid {MID}; border-radius:6px; }}
+        """)
+        outer = QVBoxLayout(bar)
+        outer.setContentsMargins(10, 10, 10, 10)
+        outer.setSpacing(6)
 
-        self._tool_bar_icon = QLabel("⬤")
-        self._tool_bar_icon.setFixedWidth(14)
-        self._tool_bar_icon.setStyleSheet(f"color:{TEAL}; font-size:10px;")
-        bl.addWidget(self._tool_bar_icon)
-
-        self._tool_bar_name = QLabel("—")
-        self._tool_bar_name.setStyleSheet(f"color:{WHITE}; font-size:12px; font-weight:600;")
-        bl.addWidget(self._tool_bar_name)
-
-        self._tool_bar_hint = QLabel("Right-click to finish · Esc to cancel")
-        self._tool_bar_hint.setStyleSheet(f"color:{GREY}; font-size:10px;")
-        bl.addWidget(self._tool_bar_hint, 1)
-
+        # Header row: "ACTIVE TOOL" label + collapse arrow
+        hdr = QWidget()
+        hdr.setStyleSheet("background:transparent; border:none;")
+        hl = QHBoxLayout(hdr)
+        hl.setContentsMargins(0, 0, 0, 0)
+        hl.setSpacing(0)
+        hdr_lbl = QLabel("ACTIVE TOOL")
+        hdr_lbl.setStyleSheet(f"color:{GREY}; font-size:9px; font-weight:700; letter-spacing:2px; border:none;")
+        hl.addWidget(hdr_lbl, 1)
         dismiss_btn = QToolButton()
         dismiss_btn.setText("✕")
-        dismiss_btn.setFixedSize(20, 20)
-        dismiss_btn.setToolTip("Cancel active tool (Esc)")
+        dismiss_btn.setFixedSize(18, 18)
         dismiss_btn.setCursor(Qt.PointingHandCursor)
         dismiss_btn.setStyleSheet(f"""
-            QToolButton {{ background:transparent; border:none; color:{GREY}; font-size:12px; }}
+            QToolButton {{ background:transparent; border:none; color:{MID}; font-size:11px; }}
             QToolButton:hover {{ color:{RED}; }}
         """)
         dismiss_btn.clicked.connect(self._on_cancel_active_tool)
-        bl.addWidget(dismiss_btn)
+        hl.addWidget(dismiss_btn)
+        outer.addWidget(hdr)
+
+        # Icon + name row
+        mid_row = QWidget()
+        mid_row.setStyleSheet("background:transparent; border:none;")
+        ml = QHBoxLayout(mid_row)
+        ml.setContentsMargins(0, 0, 0, 0)
+        ml.setSpacing(10)
+
+        self._tool_bar_icon = QLabel()
+        self._tool_bar_icon.setFixedSize(40, 40)
+        self._tool_bar_icon.setAlignment(Qt.AlignCenter)
+        self._tool_bar_icon.setStyleSheet(f"background:{NAVY}; border-radius:8px; border:none;")
+        ml.addWidget(self._tool_bar_icon)
+
+        text_col = QWidget()
+        text_col.setStyleSheet("background:transparent; border:none;")
+        text_col.setMinimumWidth(0)
+        tcl = QVBoxLayout(text_col)
+        tcl.setContentsMargins(0, 0, 0, 0)
+        tcl.setSpacing(2)
+
+        self._tool_bar_name = QLabel("—")
+        self._tool_bar_name.setMinimumWidth(0)
+        self._tool_bar_name.setSizePolicy(QSP.Ignored, QSP.Preferred)
+        self._tool_bar_name.setStyleSheet(f"color:{WHITE}; font-size:13px; font-weight:700; border:none;")
+        tcl.addWidget(self._tool_bar_name)
+
+        self._tool_bar_hint = QLabel("Click on the map to continue")
+        self._tool_bar_hint.setMinimumWidth(0)
+        self._tool_bar_hint.setSizePolicy(QSP.Ignored, QSP.Preferred)
+        self._tool_bar_hint.setStyleSheet(f"color:{GREY}; font-size:10px; border:none;")
+        tcl.addWidget(self._tool_bar_hint)
+
+        ml.addWidget(text_col, 1)
+        outer.addWidget(mid_row)
+
+        # Finish button
+        self._tool_finish_btn = QPushButton("Finish (Esc)")
+        self._tool_finish_btn.setCursor(Qt.PointingHandCursor)
+        self._tool_finish_btn.setMinimumWidth(0)
+        self._tool_finish_btn.setStyleSheet(f"""
+            QPushButton {{
+                background:transparent; color:{TEAL};
+                border:1px solid {TEAL}; border-radius:4px;
+                padding:4px 8px; font-size:11px; font-weight:600;
+            }}
+            QPushButton:hover {{ background:{TEAL}; color:{NAVY}; }}
+        """)
+        self._tool_finish_btn.clicked.connect(self._on_cancel_active_tool)
+        outer.addWidget(self._tool_finish_btn)
 
         return bar
 
-    def _show_active_tool(self, name, hint="Right-click to finish · Esc to cancel"):
-        """Show the active tool status bar with tool name and hint text."""
+    def _show_active_tool(self, name, hint="Right-click to finish · Esc to cancel", icon=None):
+        """Show the active tool card with icon, name and hint."""
         self._tool_bar_name.setText(name)
-        self._tool_bar_hint.setText(hint)
-        self._active_tool_bar.setVisible(True)
-        # Also record in recent tools
+
+        # Short hint — full instructions already in QGIS status bar
+        short_hints = {
+            "Left-click": "Click on the map to place",
+            "Click on the map": "Click on the map to continue",
+            "Tracing": hint,  # keep fibre trace context
+        }
+        short = next((v for k, v in short_hints.items() if hint.startswith(k)), "Click on the map to continue")
+        if len(short) > 45:
+            short = short[:43] + "…"
+        self._tool_bar_hint.setText(short)
+
+        # Derive icon from name if not explicitly passed
+        if not icon:
+            _name_icon_map = {
+                "digitise duct":        "digitise_duct.svg",
+                "digitise drop duct":   "digitise_drop_duct.svg",
+                "digitise cable":       "digitise_cable.svg",
+                "digitise bundle":      "digitise_bundle.svg",
+                "place joint":          "place_joint.svg",
+                "place chamber":        "place_chamber.svg",
+                "place cabinet":        "place_cabinet_pop.svg",
+                "place pop":            "place_cabinet_pop.svg",
+                "place cbt":            "place_cbt.svg",
+                "place pole":           "place_pole.svg",
+                "fibre trace":          "fibre_trace.svg",
+                "aerial drop":          "digitise_aerial_drop.svg",
+                "aerial span":          "digitise_aerial_span.svg",
+                "cbt tail":             "digitise_cbt_tail.svg",
+                "road crossing":        "digitise_road_crossing.svg",
+                "stream crossing":      "digitise_stream_crossing.svg",
+                "delete asset":         "delete_asset.svg",
+                "move asset":           "move_asset.svg",
+                "edit asset":           "edit_cabinet_pop.svg",
+                "pia ug duct":          "digitise_pia_ug_duct.svg",
+                "pia ug drop":          "digitise_pia_ug_drop.svg",
+                "pia chamber":          "place_pia_ug_chamber.svg",
+            }
+            name_lower = name.lower()
+            icon = next((v for k, v in _name_icon_map.items() if k in name_lower), None)
+
+        if icon:
+            from qgis.PyQt.QtGui import QIcon
+            from qgis.PyQt.QtCore import QSize
+            import os as _os
+            icon_path = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'icons', icon)
+            if _os.path.exists(icon_path):
+                px = QIcon(icon_path).pixmap(QSize(32, 32))
+                self._tool_bar_icon.setPixmap(px)
+            else:
+                self._tool_bar_icon.setText("⬤")
+                self._tool_bar_icon.setStyleSheet(f"color:{TEAL}; font-size:20px; background:{NAVY}; border-radius:8px; border:none;")
+        else:
+            self._tool_bar_icon.setText("⬤")
+            self._tool_bar_icon.setStyleSheet(f"color:{TEAL}; font-size:20px; background:{NAVY}; border-radius:8px; border:none;")
+
+        # Update finish button label
+        if hasattr(self, '_tool_finish_btn'):
+            if 'trace' in name.lower():
+                self._tool_finish_btn.setText("Finish Trace (Esc)")
+            else:
+                self._tool_finish_btn.setText("Cancel (Esc)")
+
         self._record_recent_tool(name)
 
     def _hide_active_tool_bar(self):
-        """Hide the active tool status bar."""
-        self._active_tool_bar.setVisible(False)
+        """Clear the active tool card."""
+        self._tool_bar_name.setText("—")
+        self._tool_bar_hint.setText("No active tool")
+        self._tool_bar_icon.clear()
+        self._tool_bar_icon.setStyleSheet(f"background:{NAVY}; border-radius:8px; border:none;")
 
     def _on_cancel_active_tool(self):
         """Dismiss the active map tool (equivalent to Esc)."""
@@ -926,35 +1035,9 @@ class ConductorDockWidget(QDockWidget):
         cl.addWidget(self._divider())
         toggle.add_section("PROJECT", project_items)
 
-        # ── RECENT TOOLS ──────────────────────────────────────────────
-        recent_header_row = QWidget()
-        rhr = QHBoxLayout(recent_header_row)
-        rhr.setContentsMargins(0, 6, 0, 0)
-        rhr.setSpacing(0)
-        recent_lbl = self._section_label("RECENT TOOLS")
-        rhr.addWidget(recent_lbl, 1)
-        clear_btn = QPushButton("Clear")
-        clear_btn.setFixedHeight(18)
-        clear_btn.setStyleSheet(
-            f"QPushButton {{ background:transparent; color:{MID}; border:none; font-size:10px; padding:0 4px; }}"
-            f"QPushButton:hover {{ color:{TEAL}; }}"
-        )
-        def _clear_recent():
-            QgsSettings().setValue("Conductor/v2/recent_tools", "[]")
-            self._refresh_recent_tools_ui()
-        clear_btn.clicked.connect(_clear_recent)
-        rhr.addWidget(clear_btn)
-        cl.addWidget(recent_header_row)
-
-        self._recent_tools_container = QWidget()
-        self._recent_tools_container.setStyleSheet("background:transparent;")
-        rtl = QVBoxLayout(self._recent_tools_container)
-        rtl.setContentsMargins(0, 2, 0, 6)
-        rtl.setSpacing(0)
-        cl.addWidget(self._recent_tools_container)
-        # Populate immediately on build
-        QTimer.singleShot(0, self._refresh_recent_tools_ui)
-
+        # ── ACTIVE TOOL CARD (replaces recent tools — shown when tool active) ─
+        self._active_tool_bar = self._build_active_tool_bar()
+        cl.addWidget(self._active_tool_bar)
         cl.addWidget(self._divider())
 
         # ── Helper to build a collapsible group ───────────────────────
@@ -1364,7 +1447,6 @@ class ConductorDockWidget(QDockWidget):
                 self._routes_dock.set_project(conductor_project)
             except Exception:
                 pass
-
     def _refresh_tool_states(self):
         """Enable/disable tools based on project state (ground-truth from gpkg).
 
@@ -1542,11 +1624,29 @@ class ConductorDockWidget(QDockWidget):
             return
         try:
             self._activate_tool(handler)
-            # Show active tool bar with the info hint
-            self._show_active_tool(
-                cls_name.replace("MapTool", "").replace("Digitise", "Digitise ").strip(),
-                info
-            )
+            # Derive display name and icon from cls_name
+            _tool_name = cls_name.replace("MapTool", "").replace("Digitise", "Digitise ").strip()
+            # Map cls_name to icon file
+            _icon_map = {
+                "MapToolPlaceChamber":       "place_chamber.svg",
+                "MapToolPlacePole":          "place_pole.svg",
+                "MapToolPlaceCBT":           "place_cbt.svg",
+                "MapToolPlacePOP":           "place_cabinet_pop.svg",
+                "MapToolPlacePIAChamber":    "place_pia_ug_chamber.svg",
+                "MapToolPlaceJoint":         "place_joint.svg",
+                "MapToolDigitiseDuct":       "digitise_duct.svg",
+                "MapToolDigitiseBundle":     "digitise_bundle.svg",
+                "MapToolDigitiseDrop":       "digitise_drop_duct.svg",
+                "MapToolDigitiseFibre":      "digitise_cable.svg",
+                "MapToolDigitisePIAUGDuct":  "digitise_pia_ug_duct.svg",
+                "MapToolDigitisePIAUGDrop":  "digitise_pia_ug_drop.svg",
+                "MapToolDigitiseAerialSpan": "digitise_aerial_span.svg",
+                "MapToolDigitiseAerialDrop": "digitise_aerial_drop.svg",
+                "MapToolDigitiseCBTTail":    "digitise_cbt_tail.svg",
+                "MapToolRoadCrossing":       "digitise_road_crossing.svg",
+                "MapToolStreamCrossing":     "digitise_stream_crossing.svg",
+            }
+            self._show_active_tool(_tool_name, info, icon=_icon_map.get(cls_name))
             import importlib
             mod = importlib.import_module(".tools." + module, __package__)
             tool = getattr(mod, cls_name)(self.iface.mapCanvas(), self._project)

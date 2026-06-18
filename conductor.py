@@ -164,6 +164,19 @@ class Conductor:
         # Keep toolbar button in sync when user closes the panel via the X
         self.dockwidget.visibilityChanged.connect(self._on_dock_visibility_changed)
 
+        # If a project is already loaded (e.g. after plugin reload), push it now
+        from qgis.PyQt.QtCore import QTimer
+        def _push_existing_project():
+            project = getattr(self.dockwidget, '_project', None)
+            if project:
+                for dock in (self._val_dock, self._routes_dock):
+                    if dock:
+                        try:
+                            dock.set_project(project)
+                        except Exception:
+                            pass
+        QTimer.singleShot(500, _push_existing_project)
+
     def _on_dock_visibility_changed(self, visible):
         if self._toggle_action:
             self._toggle_action.setChecked(visible)

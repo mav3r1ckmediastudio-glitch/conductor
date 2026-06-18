@@ -15,6 +15,7 @@ from qgis.PyQt.QtWidgets import (
 from qgis.core import QgsSettings
 from .conductor_utils import (
     NAVY, LIGHT, MID, WHITE, GREY, TEAL, GREEN, ORANGE, RED,
+    get_layer,
 )
 
 
@@ -305,42 +306,68 @@ class ConductorRoutesDock(QDockWidget):
         self._count_badge.setText(str(len(rows)))
 
     def _load_routes(self):
-        """Build a row list from the cables/bundles/drop_ducts layers."""
+        """Build a route row per cable, with fibre utilisation from fibre_assignments."""
         rows = []
         if not self._project:
             return rows
         try:
-            # Build from cables layer as a proxy for routes (no dedicated routes layer in v1 schema)
-            cables_layer = self._project.get_layer("cables")
+            cables_layer = get_layer("cables", self._project)
             if not cables_layer or not cables_layer.isValid():
                 return rows
 
-            for feat in cables_layer.getFeatures():
-                geom = feat.geometry()
-                length_m = geom.length() if geom and not geom.isEmpty() else 0
+            # Build fibre assignment counts per cable (unique tube+fibre pairs)
+            assigned_per_cable = {}
+            unique_per_cable   = {}
+            fa_layer = get_layer("fibre_assignments", self._project)
+            if fa_layer:
+                seen = {}   # (cable_id, tube, fibre) -> True
+                for fa in fa_layer.getFeatures():
+                    cid  = str(fa["cable_id"]    or "")
+                    tube = fa["tube_number"]
+                    fib  = fa["fibre_number"]
+                    if cid:
+                        assigned_per_cable[cid] = assigned_per_cable.get(cid, 0) + 1
+                        key = (cid, tube, fib)
+                        if key not in seen:
+                            seen[key] = True
+                            unique_per_cable[cid] = unique_per_cable.get(cid, 0) + 1
 
-                status_raw = feat["installation_status"] if "installation_status" in feat.fields().names() else ""
-                if status_raw in ("routed", "ROUTED", "in service", "In Service"):
-                    status = "Routed"
-                elif status_raw in ("partial", "PARTIAL"):
+            for feat in cables_layer.getFeatures():
+                fields = feat.fields().names()
+
+                cable_id    = str(feat["cable_id"]    or feat.id()) if "cable_id"    in fields else str(feat.id())
+                from_node   = str(feat["from_node"]   or "–")       if "from_node"   in fields else "–"
+                to_node     = str(feat["to_node"]     or "–")       if "to_node"     in fields else "–"
+                fibre_count = int(feat["fibre_count"] or 0)         if "fibre_count" in fields else 0
+                length_m    = float(feat["length_m"]  or 0)         if "length_m"    in fields else 0
+
+                assigned = assigned_per_cable.get(cable_id, 0)
+
+                # Fibre assignments double-count through-splices (in+out),
+                # so effective assigned fibres = assigned // 2 for through
+                # cables. Use unique fibre numbers instead — count distinct
+                # (tube, fibre) pairs assigned to this cable.
+                unique_fibres = unique_per_cable.get(cable_id, 0)
+
+                # Derive status
+                if unique_fibres == 0:
+                    status = "Unserved"
+                elif unique_fibres < fibre_count:
                     status = "Partial"
                 else:
-                    status = "Unserved"
+                    status = "Routed"
 
-                cable_id = feat["cable_id"] if "cable_id" in feat.fields().names() else str(feat.id())
-                from_node = feat["from_node"] if "from_node" in feat.fields().names() else "–"
-                to_node   = feat["to_node"]   if "to_node"   in feat.fields().names() else "–"
-                fibre_count = feat["fibre_count"] if "fibre_count" in feat.fields().names() else 0
+                capacity_pct = f"{round((unique_fibres/fibre_count)*100)}%" if fibre_count else "–"
 
                 rows.append({
                     "route_id":  cable_id,
                     "status":    status,
-                    "from_node": from_node or "–",
-                    "to_node":   to_node or "–",
+                    "from_node": from_node,
+                    "to_node":   to_node,
                     "length":    f"{length_m/1000:.2f} km" if length_m >= 100 else f"{length_m:.0f} m",
                     "assets":    "–",
-                    "fibres":    str(fibre_count) if fibre_count else "–",
-                    "capacity":  "–",
+                    "fibres":    str(unique_fibres) if unique_fibres else "–",
+                    "capacity":  capacity_pct,
                     "updated":   "–",
                     "engineer":  "–",
                 })
@@ -365,7 +392,7 @@ class ConductorRoutesDock(QDockWidget):
         self._count_badge.setText(str(self._proxy.rowCount()))
 
     def _on_row_clicked(self, proxy_index):
-        """Zoom map canvas to the selected route's geometry."""
+        """Zoom to route and push data to Route Inspector in val dock."""
         if not self._project:
             return
         try:
@@ -373,6 +400,12 @@ class ConductorRoutesDock(QDockWidget):
             row_data = self._model.get_row(src_index.row())
             if not row_data:
                 return
+
+            # Push to Route Inspector panel in val dock
+            if hasattr(self.main_dock, '_val_dock') and self.main_dock._val_dock:
+                self.main_dock._val_dock.show_route(row_data)
+
+            # Zoom to cable geometry
             cable_id = row_data.get("route_id")
             cables_layer = self._project.get_layer("cables")
             if not cables_layer:
@@ -380,11 +413,19 @@ class ConductorRoutesDock(QDockWidget):
             feats = [f for f in cables_layer.getFeatures()
                      if str(f["cable_id"]) == str(cable_id)]
             if feats and feats[0].geometry():
-                from qgis.core import QgsRectangle
-                bbox = feats[0].geometry().boundingBox()
-                bbox.scale(2.0)
-                self.iface.mapCanvas().setExtent(bbox)
-                self.iface.mapCanvas().refresh()
+                from qgis.core import QgsCoordinateTransform, QgsProject
+                geom = feats[0].geometry()
+                canvas = self.iface.mapCanvas()
+                xform = QgsCoordinateTransform(
+                    cables_layer.crs(),
+                    canvas.mapSettings().destinationCrs(),
+                    QgsProject.instance()
+                )
+                geom.transform(xform)
+                bbox = geom.boundingBox()
+                bbox.grow(max(bbox.width(), bbox.height(), 100) * 1.5)
+                canvas.setExtent(bbox)
+                canvas.refresh()
         except Exception:
             pass
 
