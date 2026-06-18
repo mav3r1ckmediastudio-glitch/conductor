@@ -9,7 +9,7 @@ below the Validation dock.
 from qgis.PyQt.QtCore import Qt, QTimer, QEvent, QPoint
 from qgis.PyQt.QtWidgets import (
     QDockWidget, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QFrame, QScrollArea, QSizePolicy, QToolButton, QPushButton,
+    QFrame, QScrollArea, QSizePolicy, QToolButton, QPushButton, QDialog,
 )
 from qgis.PyQt.QtGui import QColor
 from qgis.core import (
@@ -145,6 +145,75 @@ _QSS = f"""
 """
 
 
+# ── Shared stacked-asset picker ───────────────────────────────────────────────
+
+def pick_stacked_asset(matches, action_verb="inspect"):
+    """Show a picker dialog when multiple assets overlap at the clicked point.
+
+    `matches` is a list of (layer_name, feat) tuples. Returns the chosen
+    (layer_name, feat), or None if cancelled. Shared by both the standalone
+    asset dock and the validation dock's embedded inspector so the stacked-
+    asset picker behaves identically wherever you click.
+    """
+    dlg = QDialog()
+    dlg.setWindowTitle("Multiple Assets Found")
+    dlg.setMinimumWidth(380)
+    dlg.setModal(True)
+    root = QVBoxLayout(dlg)
+    root.setSpacing(0)
+    root.setContentsMargins(0, 0, 0, 0)
+
+    hdr = QLabel("  Multiple Assets Found")
+    hdr.setFixedHeight(40)
+    hdr.setStyleSheet(f"background:{NAVY}; color:{WHITE}; font-size:13px; font-weight:bold;")
+    root.addWidget(hdr)
+
+    body = QVBoxLayout()
+    body.setContentsMargins(12, 12, 12, 12)
+    body.setSpacing(6)
+    info = QLabel(f"These assets overlap at the point you clicked. Choose which one to {action_verb}:")
+    info.setWordWrap(True)
+    body.addWidget(info)
+
+    result = {"choice": None}
+
+    for layer_name, feat in matches:
+        cfg = ASSET_CONFIG.get(layer_name)
+        if cfg:
+            display_name = cfg[0]
+            id_field     = cfg[1]
+        else:
+            display_name = layer_name
+            id_field     = "fid"
+        try:
+            asset_id = str(feat[id_field])
+        except Exception:
+            asset_id = str(feat.id())
+
+        btn = QPushButton(f"{display_name}  \u2014  {asset_id}")
+        btn.setStyleSheet(
+            f"QPushButton {{ padding:8px 12px; text-align:left; border:1px solid {MID}; "
+            f"border-radius:4px; }} QPushButton:hover {{ border-color:{TEAL}; background:{LIGHT}; }}"
+        )
+        def _choose(_checked=False, ln=layer_name, ft=feat):
+            result["choice"] = (ln, ft)
+            dlg.accept()
+        btn.clicked.connect(_choose)
+        body.addWidget(btn)
+
+    cancel_btn = QPushButton("Cancel")
+    cancel_btn.setStyleSheet(
+        f"QPushButton {{ padding:7px 14px; border-radius:4px; font-size:12px; border:1px solid {MID}; }} "
+        f"QPushButton:hover {{ background:{LIGHT}; }}"
+    )
+    cancel_btn.clicked.connect(dlg.reject)
+    body.addWidget(cancel_btn)
+
+    root.addLayout(body)
+    dlg.exec_()
+    return result["choice"]
+
+
 class ConductorAssetDock(QDockWidget):
     """Right-hand panel: Selected Asset Inspector."""
 
@@ -242,19 +311,33 @@ class ConductorAssetDock(QDockWidget):
     def set_project(self, project):
         self._project = project
         canvas = self.iface.mapCanvas()
-        # Install event filter on canvas viewport to intercept mouse clicks
-        canvas.viewport().installEventFilter(self)
+        # Install event filter on canvas viewport to intercept mouse clicks.
+        # Guard against double-install: removeEventFilter is a no-op if not
+        # already installed, so this keeps exactly one filter regardless of how
+        # many times set_project is called (timer push + project-open).
+        vp = canvas.viewport()
+        vp.removeEventFilter(self)
+        vp.installEventFilter(self)
 
     def eventFilter(self, obj, event):
-        """Intercept canvas mouse press to identify clicked asset."""
+        """Intercept canvas mouse press to identify the clicked asset.
+
+        Only fires the inspector when the user is in plain navigation mode.
+        If any Conductor map tool (Edit/Delete/Move/Place/Digitise) is active,
+        we bail out so that tool's own click handling — including its stacked-
+        asset picker — runs without interference.
+        """
         if (event.type() == QEvent.MouseButtonPress
                 and event.button() == Qt.LeftButton
                 and self._project):
             canvas = self.iface.mapCanvas()
-            # Only fire if no active editing tool is drawing
             active_tool = canvas.mapTool()
-            if active_tool and hasattr(active_tool, 'isEditTool'):
-                pass  # let edit tools handle their own clicks
+            # Skip if a Conductor tool is driving the canvas. Conductor tools
+            # live in the conductor_v2.tools package; match on the tool's module.
+            if active_tool is not None:
+                mod = type(active_tool).__module__ or ""
+                if ".tools." in mod or mod.endswith("select_delete") or mod.endswith("edit_assets"):
+                    return False
             # Convert pixel pos to map point
             pixel_pt = event.pos()
             map_pt = canvas.getCoordinateTransform().toMapCoordinates(
@@ -267,41 +350,115 @@ class ConductorAssetDock(QDockWidget):
     # ── Map click handler ────────────────────────────────────────────────────
 
     def _on_canvas_click(self, point):
-        """Identify the clicked feature across all asset layers."""
+        """Identify the clicked feature across all asset layers.
+        When multiple assets overlap, show a picker so the user can choose which to inspect.
+        """
         if not self._project:
             return
 
         canvas = self.iface.mapCanvas()
-        scale  = canvas.scale()
 
         # Convert tolerance from mm to map units
-        dpm      = canvas.mapSettings().outputDpi() / 25.4
-        tol_px   = TOLERANCE_MM * dpm
-        tol_mu   = tol_px * canvas.mapUnitsPerPixel()
+        dpm    = canvas.mapSettings().outputDpi() / 25.4
+        tol_px = TOLERANCE_MM * dpm
+        tol_mu = tol_px * canvas.mapUnitsPerPixel()
 
         search_rect = QgsRectangle(
             point.x() - tol_mu, point.y() - tol_mu,
             point.x() + tol_mu, point.y() + tol_mu,
         )
 
+        # Collect ALL hits across all layers
+        matches = []  # list of (layer_name, feat)
+        canvas_crs = canvas.mapSettings().destinationCrs()
         for layer_name in SEARCH_ORDER:
             layer = get_layer(layer_name, self._project)
             if not layer or not layer.isValid():
                 continue
 
-            # Transform search rect to layer CRS if needed
-            canvas_crs = canvas.mapSettings().destinationCrs()
-            layer_crs  = layer.crs()
+            layer_crs = layer.crs()
             if canvas_crs != layer_crs:
                 xform = QgsCoordinateTransform(canvas_crs, layer_crs, QgsProject.instance())
                 rect  = xform.transformBoundingBox(search_rect)
             else:
                 rect = search_rect
 
-            request = QgsFeatureRequest().setFilterRect(rect).setLimit(1)
-            for feat in layer.getFeatures(request):
-                self._show_asset(layer_name, feat)
-                return
+            for feat in layer.getFeatures(QgsFeatureRequest().setFilterRect(rect)):
+                matches.append((layer_name, feat))
+
+        if not matches:
+            return
+
+        if len(matches) == 1:
+            self._show_asset(matches[0][0], matches[0][1])
+            return
+
+        # Multiple stacked assets — show picker
+        chosen = self._pick_stacked_asset(matches)
+        if chosen:
+            self._show_asset(chosen[0], chosen[1])
+
+    def _pick_stacked_asset(self, matches):
+        """Show a picker dialog when multiple assets overlap at the clicked point.
+        Returns (layer_name, feat) for the chosen asset, or None if cancelled.
+        """
+        dlg = QDialog()
+        dlg.setWindowTitle("Multiple Assets Found")
+        dlg.setMinimumWidth(380)
+        dlg.setModal(True)
+        root = QVBoxLayout(dlg)
+        root.setSpacing(0)
+        root.setContentsMargins(0, 0, 0, 0)
+
+        hdr = QLabel("  Multiple Assets Found")
+        hdr.setFixedHeight(40)
+        hdr.setStyleSheet(f"background:{NAVY}; color:{WHITE}; font-size:13px; font-weight:bold;")
+        root.addWidget(hdr)
+
+        body = QVBoxLayout()
+        body.setContentsMargins(12, 12, 12, 12)
+        body.setSpacing(6)
+        info = QLabel("These assets overlap at the point you clicked. Choose which one to inspect:")
+        info.setWordWrap(True)
+        body.addWidget(info)
+
+        result = {"choice": None}
+
+        for layer_name, feat in matches:
+            cfg = ASSET_CONFIG.get(layer_name)
+            if cfg:
+                display_name = cfg[0]
+                id_field     = cfg[1]
+            else:
+                display_name = layer_name
+                id_field     = "fid"
+            try:
+                asset_id = str(feat[id_field])
+            except Exception:
+                asset_id = str(feat.id())
+
+            btn = QPushButton(f"{display_name}  —  {asset_id}")
+            btn.setStyleSheet(
+                f"QPushButton {{ padding:8px 12px; text-align:left; border:1px solid {MID}; "
+                f"border-radius:4px; }} QPushButton:hover {{ border-color:{TEAL}; background:{LIGHT}; }}"
+            )
+            def _choose(_checked=False, ln=layer_name, ft=feat):
+                result["choice"] = (ln, ft)
+                dlg.accept()
+            btn.clicked.connect(_choose)
+            body.addWidget(btn)
+
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.setStyleSheet(
+            f"QPushButton {{ padding:7px 14px; border-radius:4px; font-size:12px; border:1px solid {MID}; }} "
+            f"QPushButton:hover {{ background:{LIGHT}; }}"
+        )
+        cancel_btn.clicked.connect(dlg.reject)
+        body.addWidget(cancel_btn)
+
+        root.addLayout(body)
+        dlg.exec_()
+        return result["choice"]
 
     # ── Display ──────────────────────────────────────────────────────────────
 

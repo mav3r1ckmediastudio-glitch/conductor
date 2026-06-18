@@ -157,6 +157,7 @@ class Conductor:
         self.iface.addDockWidget(Qt.BottomDockWidgetArea, self._routes_dock)
         self._routes_dock.show()
 
+
         # Wire the dockwidget so it can notify secondary panels on project open
         self.dockwidget._val_dock    = self._val_dock
         self.dockwidget._routes_dock = self._routes_dock

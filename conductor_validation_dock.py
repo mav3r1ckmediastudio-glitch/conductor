@@ -592,12 +592,15 @@ class ConductorValidationDock(QDockWidget):
 
     def _identify_asset(self, map_pt):
         from qgis.core import QgsFeatureRequest, QgsRectangle, QgsCoordinateTransform, QgsProject
-        from .conductor_asset_dock import ASSET_CONFIG, SEARCH_ORDER
+        from .conductor_asset_dock import SEARCH_ORDER, pick_stacked_asset
+        from .conductor_utils import get_layer
         canvas = self.iface.mapCanvas()
         tol = canvas.mapUnitsPerPixel() * 8
         rect = QgsRectangle(map_pt.x()-tol, map_pt.y()-tol, map_pt.x()+tol, map_pt.y()+tol)
-        from .conductor_utils import get_layer
         canvas_crs = canvas.mapSettings().destinationCrs()
+
+        # Collect ALL hits across all layers (stacked assets)
+        matches = []
         for layer_name in SEARCH_ORDER:
             layer = get_layer(layer_name, self._project)
             if not layer or not layer.isValid():
@@ -607,9 +610,19 @@ class ConductorValidationDock(QDockWidget):
                 search = xform.transformBoundingBox(rect)
             else:
                 search = rect
-            for feat in layer.getFeatures(QgsFeatureRequest().setFilterRect(search).setLimit(1)):
-                self.show_asset(layer_name, feat)
-                return
+            for feat in layer.getFeatures(QgsFeatureRequest().setFilterRect(search)):
+                matches.append((layer_name, feat))
+
+        if not matches:
+            return
+        if len(matches) == 1:
+            self.show_asset(matches[0][0], matches[0][1])
+            return
+
+        # Multiple stacked assets — show the shared picker
+        chosen = pick_stacked_asset(matches)
+        if chosen:
+            self.show_asset(chosen[0], chosen[1])
 
     def push_validation_results(self, results):
         """
