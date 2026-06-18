@@ -15,7 +15,7 @@ from qgis.PyQt.QtWidgets import (
 )
 from qgis.core import QgsProject, QgsSnappingConfig, QgsTolerance, QgsSettings
 from .conductor_utils import (
-    NAVY, TEAL, ORANGE, LIGHT, WHITE, MID, SKY, PURPLE,
+    NAVY, TEAL, ORANGE, LIGHT, WHITE, MID, GREY, SKY, PURPLE,
     GREEN, RED, GREEN_BG, ORANGE_BG, RED_BG, plugin_version,
 )
 from .help_system import HelpContentStore, wrap_with_help
@@ -201,7 +201,172 @@ class ConductorDockWidget(QDockWidget):
     def _build_ui(self):
         container = QWidget()
         container.setObjectName("ConductorContainer")
-        container.setStyleSheet(f"#ConductorContainer {{ background-color: {LIGHT}; }}")
+
+        # ── Global dark theme QSS ─────────────────────────────────────────
+        container.setStyleSheet(f"""
+            #ConductorContainer {{
+                background-color: {NAVY};
+                color: {WHITE};
+            }}
+            QWidget {{
+                background-color: {NAVY};
+                color: {WHITE};
+                font-family: 'Segoe UI', Arial, sans-serif;
+            }}
+            QScrollArea, QScrollArea > QWidget > QWidget {{
+                background-color: {NAVY};
+                border: none;
+            }}
+            QScrollBar:vertical {{
+                background: {NAVY};
+                width: 6px;
+                border-radius: 3px;
+            }}
+            QScrollBar::handle:vertical {{
+                background: {MID};
+                border-radius: 3px;
+                min-height: 20px;
+            }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                height: 0px;
+            }}
+            QTabWidget::pane {{
+                border: none;
+                background: {NAVY};
+            }}
+            QTabBar::tab {{
+                background: {NAVY};
+                color: {GREY};
+                padding: 6px 14px;
+                border: none;
+                border-bottom: 2px solid transparent;
+                font-size: 11px;
+                font-weight: 600;
+                letter-spacing: 0.5px;
+            }}
+            QTabBar::tab:selected {{
+                color: {TEAL};
+                border-bottom: 2px solid {TEAL};
+            }}
+            QTabBar::tab:hover {{
+                color: {WHITE};
+            }}
+            QLineEdit {{
+                background: {LIGHT};
+                color: {WHITE};
+                border: 1px solid {MID};
+                border-radius: 4px;
+                padding: 5px 8px;
+                font-size: 12px;
+                selection-background-color: {TEAL};
+            }}
+            QLineEdit:focus {{
+                border-color: {TEAL};
+            }}
+            QComboBox {{
+                background: {LIGHT};
+                color: {WHITE};
+                border: 1px solid {MID};
+                border-radius: 4px;
+                padding: 4px 8px;
+                font-size: 12px;
+            }}
+            QComboBox:focus {{
+                border-color: {TEAL};
+            }}
+            QComboBox::drop-down {{
+                border: none;
+                width: 20px;
+            }}
+            QComboBox QAbstractItemView {{
+                background: {LIGHT};
+                color: {WHITE};
+                border: 1px solid {MID};
+                selection-background-color: {TEAL};
+                selection-color: #0F1923;
+            }}
+            QSpinBox, QDoubleSpinBox {{
+                background: {LIGHT};
+                color: {WHITE};
+                border: 1px solid {MID};
+                border-radius: 4px;
+                padding: 4px 8px;
+                font-size: 12px;
+            }}
+            QSpinBox:focus, QDoubleSpinBox:focus {{
+                border-color: {TEAL};
+            }}
+            QCheckBox {{
+                color: {WHITE};
+                font-size: 12px;
+                spacing: 6px;
+            }}
+            QCheckBox::indicator {{
+                width: 14px;
+                height: 14px;
+                border-radius: 3px;
+                border: 1px solid {MID};
+                background: {LIGHT};
+            }}
+            QCheckBox::indicator:checked {{
+                background: {TEAL};
+                border-color: {TEAL};
+            }}
+            QPushButton {{
+                background: {LIGHT};
+                color: {WHITE};
+                border: 1px solid {MID};
+                border-radius: 4px;
+                padding: 5px 12px;
+                font-size: 12px;
+            }}
+            QPushButton:hover {{
+                border-color: {TEAL};
+                color: {TEAL};
+            }}
+            QPushButton:pressed {{
+                background: {MID};
+            }}
+            QPushButton:disabled {{
+                color: {MID};
+                border-color: {LIGHT};
+                background: {NAVY};
+            }}
+            QPushButton[conductor_active=true] {{
+                background: {TEAL};
+                color: #0F1923;
+                border-color: {TEAL};
+                font-weight: bold;
+            }}
+            QLabel {{
+                color: {WHITE};
+                background: transparent;
+            }}
+            QFrame[frameShape="4"], QFrame[frameShape="5"] {{
+                color: {MID};
+            }}
+            QProgressBar {{
+                background: {LIGHT};
+                border: none;
+                border-radius: 3px;
+                height: 6px;
+                text-align: center;
+                font-size: 10px;
+                color: {WHITE};
+            }}
+            QProgressBar::chunk {{
+                background: {TEAL};
+                border-radius: 3px;
+            }}
+            QToolTip {{
+                background: {LIGHT};
+                color: {WHITE};
+                border: 1px solid {MID};
+                padding: 4px 8px;
+                border-radius: 4px;
+                font-size: 11px;
+            }}
+        """)
 
         root = QVBoxLayout(container)
         root.setContentsMargins(0, 0, 0, 0)
@@ -210,7 +375,7 @@ class ConductorDockWidget(QDockWidget):
 
         # Postcode search bar
         pc_bar = QWidget()
-        pc_bar.setStyleSheet(f"background:{NAVY}; padding:0px;")
+        pc_bar.setStyleSheet(f"background:#0A1219; padding:0px; border-bottom: 1px solid {MID};")
         pc_layout = QHBoxLayout(pc_bar)
         pc_layout.setContentsMargins(8, 6, 8, 6)
         pc_layout.setSpacing(6)
@@ -310,7 +475,7 @@ class ConductorDockWidget(QDockWidget):
         """Persistent project summary panel shown above the tabs, regardless
         of which tab (Design / PIA) is currently active."""
         panel = QWidget()
-        panel.setStyleSheet(f"background:{LIGHT};")
+        panel.setStyleSheet(f"background:{LIGHT}; border-radius:6px; border:1px solid {MID};")
         outer = QVBoxLayout(panel)
         outer.setContentsMargins(8, 6, 8, 6)
         outer.setSpacing(6)
@@ -368,7 +533,7 @@ class ConductorDockWidget(QDockWidget):
         project summary panel. Returns the value QLabel for later updates."""
         cell = QWidget()
         cell.setStyleSheet(
-            f"background:{bg or WHITE}; border:1px solid {MID}; border-radius:4px;"
+            f"background:{LIGHT}; border:1px solid {MID}; border-radius:6px;"
         )
         cl = QVBoxLayout(cell)
         cl.setContentsMargins(4, 4, 4, 4)
@@ -376,12 +541,12 @@ class ConductorDockWidget(QDockWidget):
 
         value_lbl = QLabel(value_text)
         value_lbl.setAlignment(Qt.AlignCenter)
-        value_lbl.setStyleSheet(f"color:{fg or NAVY}; font-size:15px; font-weight:bold; border:none; background:transparent;")
+        value_lbl.setStyleSheet(f"color:{fg or WHITE}; font-size:16px; font-weight:700; border:none; background:transparent;")
         cl.addWidget(value_lbl)
 
         cap_lbl = QLabel(caption)
         cap_lbl.setAlignment(Qt.AlignCenter)
-        cap_lbl.setStyleSheet(f"color:{fg or MID}; font-size:10px; border:none; background:transparent;")
+        cap_lbl.setStyleSheet(f"color:{GREY}; font-size:10px; border:none; background:transparent;")
         cl.addWidget(cap_lbl)
 
         layout.addWidget(cell, 1)
@@ -669,12 +834,12 @@ class ConductorDockWidget(QDockWidget):
             layout.addWidget(ico)
 
         title = QLabel("CONDUCTOR")
-        title.setStyleSheet(f"color:{WHITE}; font-size:16px; font-weight:bold; letter-spacing:2px; padding-left:8px;")
+        title.setStyleSheet(f"color:{WHITE}; font-size:15px; font-weight:700; letter-spacing:3px; padding-left:8px; font-family: 'Segoe UI', Arial, sans-serif;")
         layout.addWidget(title)
         layout.addStretch()
 
         sub = QLabel("FTTP Design")
-        sub.setStyleSheet(f"color:{TEAL}; font-size:11px; padding-right:8px;")
+        sub.setStyleSheet(f"color:{TEAL}; font-size:10px; font-weight:600; letter-spacing:1px; padding-right:8px;")
         layout.addWidget(sub)
 
         settings_btn = QToolButton()
@@ -704,7 +869,7 @@ class ConductorDockWidget(QDockWidget):
 
     def _section_label(self, text):
         l = QLabel(text)
-        l.setStyleSheet(f"color:{TEAL}; font-size:10px; font-weight:bold; letter-spacing:1px; padding:4px 0px 2px 0px;")
+        l.setStyleSheet(f"color:{GREY}; font-size:9px; font-weight:700; letter-spacing:2px; padding:10px 0px 4px 0px;")
         return l
 
     def _icon(self, name):
@@ -719,7 +884,7 @@ class ConductorDockWidget(QDockWidget):
     def _primary_button(self, text, callback, icon=None):
         btn = QPushButton(text)
         btn.setStyleSheet(f"""
-            QPushButton {{ background:{NAVY}; color:{WHITE}; border:none; border-radius:4px;
+            QPushButton {{ background:{TEAL}; color:#0F1923; border:none; border-radius:4px;
                            padding:8px 12px; font-size:12px; font-weight:bold; text-align:left; }}
             QPushButton:hover {{ background:{TEAL}; }}
             QPushButton:pressed {{ background:{ORANGE}; }}
@@ -738,7 +903,7 @@ class ConductorDockWidget(QDockWidget):
     def _secondary_button(self, text, callback, icon=None):
         btn = QPushButton(text)
         btn.setStyleSheet(f"""
-            QPushButton {{ background:{WHITE}; color:{NAVY}; border:1px solid {MID};
+            QPushButton {{ background:transparent; color:{WHITE}; border:1px solid {MID};
                            border-radius:4px; padding:6px 12px; font-size:12px; text-align:left; }}
             QPushButton:hover {{ border-color:{TEAL}; color:{TEAL}; }}
             QPushButton:pressed {{ background:{LIGHT}; }}
@@ -760,10 +925,11 @@ class ConductorDockWidget(QDockWidget):
         btn.setCheckable(False)
         btn.setProperty("conductor_active", False)
         btn.setStyleSheet(f"""
-            QPushButton {{ background:{WHITE}; color:{NAVY}; border:1px solid {MID};
-                           border-radius:4px; padding:4px 12px; font-size:12px; text-align:left; min-height:28px; }}
-            QPushButton:hover {{ border-color:{TEAL}; color:{TEAL}; }}
-            QPushButton:pressed {{ background:{LIGHT}; }}
+            QPushButton {{ background:transparent; color:{WHITE}; border:none; border-left:2px solid transparent;
+                           border-radius:0px; padding:4px 12px; font-size:12px; text-align:left; min-height:32px; }}
+            QPushButton:hover {{ background:{LIGHT}; color:{TEAL}; border-left:2px solid {TEAL}; }}
+            QPushButton:pressed {{ background:{MID}; }}
+            QPushButton:disabled {{ color:{MID}; }}
             QPushButton:disabled {{ color:{MID}; border-color:{MID}; background:{LIGHT}; }}
             QPushButton[conductor_active=true] {{ background:{ORANGE}; color:{WHITE}; border-color:{ORANGE}; font-weight:bold; }}
         """)
@@ -842,7 +1008,7 @@ class ConductorDockWidget(QDockWidget):
     def _divider(self):
         line = QFrame()
         line.setFrameShape(QFrame.HLine)
-        line.setStyleSheet(f"color:{MID}; margin:2px 0px;")
+        line.setStyleSheet(f"color:{MID}; margin:4px 0px; background:{MID};")
         return line
 
     # ── PROJECT STATE ──────────────────────────────────────────────────────────
@@ -853,7 +1019,7 @@ class ConductorDockWidget(QDockWidget):
         name = conductor_project.project_name
         code = conductor_project.area_id
         self._status_label.setText(f"▸  {name}  ({code})")
-        self._status_label.setStyleSheet(f"color:{TEAL}; font-size:11px; font-weight:bold; padding-bottom:4px;")
+        self._status_label.setStyleSheet(f"color:{TEAL}; font-size:11px; font-weight:500; padding-bottom:2px; letter-spacing:0.3px;")
         # Tool availability derived from project state
         self._refresh_tool_states()
         # Clear undo stack on project change

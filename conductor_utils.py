@@ -16,24 +16,32 @@ from qgis.core import (
 # Single source of truth for the working CRS. UK national grid (OSGB36).
 PROJECT_CRS = "EPSG:27700"
 
-# ── Colour constants ──────────────────────────────────────────────────────────
-NAVY   = "#1A3A5C"
-TEAL   = "#1D7A6E"
-ORANGE = "#C85A00"
-LIGHT  = "#F4F7FB"
-WHITE  = "#FFFFFF"
-MID    = "#CBD5E1"
-SKY    = "#00AAFF"
-PURPLE = "#7B2D8B"
-GREEN  = "#1A6B3C"
-RED    = "#C0392B"
-GREEN_BG  = "#EAF7EE"
-ORANGE_BG = "#FFF4E6"
-RED_BG    = "#FDECEA"
+# ── Colour constants — v2 dark theme ─────────────────────────────────────────
+# Base surfaces
+NAVY   = "#0F1923"   # deepest background — dock base
+LIGHT  = "#1A2332"   # panel background
+MID    = "#2D3F52"   # borders, dividers
+WHITE  = "#E8EDF2"   # primary text
+GREY   = "#6B8299"   # secondary text
+
+# Accent
+TEAL   = "#00C9B1"   # primary accent
+
+# Status
+GREEN  = "#22C55E"
+ORANGE = "#F59E0B"
+RED    = "#EF4444"
+SKY    = "#38BDF8"
+PURPLE = "#A78BFA"
+
+# Status backgrounds
+GREEN_BG  = "#0F2A1A"
+ORANGE_BG = "#2A1F0A"
+RED_BG    = "#2A0F0F"
 
 # ── Derived UI style constants ────────────────────────────────────────────────
-BTN_PRIMARY   = f"background:{NAVY}; color:{WHITE}; border:none; border-radius:4px; padding:7px 18px; font-size:12px; font-weight:bold;"
-BTN_SECONDARY = f"background:{WHITE}; color:{NAVY}; border:1px solid {MID}; border-radius:4px; padding:7px 18px; font-size:12px;"
+BTN_PRIMARY   = f"background:{TEAL}; color:#0F1923; border:none; border-radius:4px; padding:7px 18px; font-size:12px; font-weight:bold;"
+BTN_SECONDARY = f"background:{MID}; color:{WHITE}; border:1px solid #3D5166; border-radius:4px; padding:7px 18px; font-size:12px;"
 BTN_TEAL      = f"background:{TEAL}; color:{WHITE}; border:none; border-radius:4px; padding:7px 18px; font-size:12px; font-weight:bold;"
 INPUT_STYLE   = f"border:1px solid {MID}; border-radius:3px; padding:5px 8px; background:{WHITE}; font-size:12px;"
 INPUT_WARN    = f"border:1px solid {ORANGE}; border-radius:3px; padding:5px 8px; background:#FFF8F0; font-size:12px;"
