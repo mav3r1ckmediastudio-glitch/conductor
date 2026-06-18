@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="92" height="92" viewBox="0 0 92 92" role="img" aria-label="Digitise Stream Crossing">
-  <title>Digitise Stream Crossing</title>
+<svg xmlns="http://www.w3.org/2000/svg" width="92" height="92" viewBox="0 0 92 92" role="img" aria-label="Stream Crossing">
+  <title>Stream Crossing</title>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#2A4A6A"/><stop offset="1" stop-color="#1E3A55"/>
@@ -7,26 +7,40 @@
     <linearGradient id="cyan" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#73F7FF"/><stop offset="1" stop-color="#00BFAE"/>
     </linearGradient>
+    <linearGradient id="grn" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4AFF91"/><stop offset="1" stop-color="#00C95A"/>
+    </linearGradient>
     <linearGradient id="orange" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#FFD66B"/><stop offset="1" stop-color="#FF8A00"/>
+    </linearGradient>
+    <linearGradient id="red" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FF6B6B"/><stop offset="1" stop-color="#CC2020"/>
     </linearGradient>
     <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
       <feGaussianBlur stdDeviation="2.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
     <filter id="soft" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#00FFE0" flood-opacity="0.18"/></filter>
     <style>
-      .tile{fill:url(#bg);stroke:#00C9B1;stroke-width:2.5;opacity:1;filter:url(#soft)}
+      .tile{fill:url(#bg);stroke:#00C9B1;stroke-width:2.5;filter:url(#soft)}
       .map{fill:none;stroke:#234653;stroke-width:1;opacity:.42}
       .c{fill:none;stroke:url(#cyan);stroke-width:3.2;stroke-linecap:round;stroke-linejoin:round;filter:url(#glow)}
-      .ct{fill:url(#cyan);stroke:#DFFFFF;stroke-width:1.2;filter:url(#glow)}
+      .cf{fill:url(#cyan);stroke:#DFFFFF;stroke-width:1.2;filter:url(#glow)}
+      .g{fill:none;stroke:url(#grn);stroke-width:3.2;stroke-linecap:round;stroke-linejoin:round;filter:url(#glow)}
+      .gf{fill:url(#grn);stroke:#C8FFE0;stroke-width:1.2;filter:url(#glow)}
       .o{fill:none;stroke:url(#orange);stroke-width:3.2;stroke-linecap:round;stroke-linejoin:round;filter:url(#glow)}
-      .ot{fill:url(#orange);stroke:#FFE9A8;stroke-width:1.2;filter:url(#glow)}
+      .of{fill:url(#orange);stroke:#FFE9A8;stroke-width:1.2;filter:url(#glow)}
+      .r{fill:none;stroke:url(#red);stroke-width:3.2;stroke-linecap:round;stroke-linejoin:round;filter:url(#glow)}
+      .rf{fill:url(#red);stroke:#FFB0B0;stroke-width:1.2;filter:url(#glow)}
       .w{fill:none;stroke:#EAFBFF;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
       .dot{fill:#EAFBFF;stroke:#AFFFF8;stroke-width:1.6;filter:url(#glow)}
-      .txt{font-family:Arial, Helvetica, sans-serif;font-size:15px;font-weight:700;fill:#FFE4A3;text-anchor:middle}
     </style>
   </defs>
   <polygon class="tile" points="46,5 78,23.5 78,68.5 46,87 14,68.5 14,23.5"/>
   <path class="map" d="M20 28h14l8-7h11l8 7h11M20 46h16l7-6h14l6 6h9M20 64h18l7-8h16l9 8"/>
-  <path class="c" d="M22 58h48"/><path class="c" d="M20 38c8-6 14 6 22 0s14 6 22 0"/><path class="c" d="M20 48c8-6 14 6 22 0s14 6 22 0"/><path class="o" d="M46 32v31"/>
+  
+  <path style="fill:none;stroke:#1A4A7A;stroke-width:10;stroke-linecap:round;opacity:0.55" d="M16 46C24 38 32 56 40 46C48 38 56 56 64 46C68 42 70 41 74 43"/>
+  <path style="fill:none;stroke:#4AADFF;stroke-width:3;stroke-linecap:round;filter:url(#glow)" d="M16 46C24 38 32 56 40 46C48 38 56 56 64 46C68 42 70 41 74 43"/>
+  <path class="o" d="M46 22v48"/>
+  <circle class="of" cx="46" cy="22" r="4"/>
+  <circle class="of" cx="46" cy="70" r="4"/>
 </svg>
