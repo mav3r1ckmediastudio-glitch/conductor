@@ -1152,13 +1152,34 @@ class ConductorDockWidget(QDockWidget):
         return l
 
     def _icon(self, name):
-        """Load a tool icon from the icons/ directory. Returns None if not found."""
+        """Load a tool icon from the icons/ directory. Returns None if not found.
+        Bypasses Qt's pixmap/icon file cache by reading SVG bytes directly,
+        so icon changes on disk are always picked up on plugin reload."""
         if not name:
             return None
         path = os.path.join(self.plugin_dir, 'icons', name)
-        if os.path.isfile(path):
-            return QIcon(path)
-        return None
+        if not os.path.isfile(path):
+            return None
+        # SVG: load via QByteArray → QIcon so Qt can't cache-hit by path
+        if name.lower().endswith('.svg'):
+            try:
+                from qgis.PyQt.QtCore import QByteArray
+                from qgis.PyQt.QtGui import QPixmap
+                from qgis.PyQt.QtSvg import QSvgRenderer
+                with open(path, 'rb') as f:
+                    data = QByteArray(f.read())
+                renderer = QSvgRenderer(data)
+                pm = QPixmap(92, 92)
+                pm.fill(__import__('qgis.PyQt.QtCore', fromlist=['Qt']).Qt.transparent)
+                from qgis.PyQt.QtGui import QPainter
+                painter = QPainter(pm)
+                renderer.render(painter)
+                painter.end()
+                icon = QIcon(pm)
+                return icon
+            except Exception:
+                pass  # fall through to plain QIcon
+        return QIcon(path)
 
     def _primary_button(self, text, callback, icon=None):
         btn = QPushButton(text)
