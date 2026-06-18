@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="92" height="92" viewBox="0 0 92 92">
+  <defs>
+    <linearGradient id="cyan" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00d8ff"/>
+      <stop offset="100%" stop-color="#42bfff"/>
+    </linearGradient>
+    <linearGradient id="orange" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff8a00"/>
+      <stop offset="100%" stop-color="#ffb347"/>
+    </linearGradient>
+  </defs>
+
+  <!-- transparent background -->
+  <polygon points="46,6 80,25 80,67 46,86 12,67 12,25"
+           fill="#0b1220" stroke="url(#cyan)" stroke-width="2"/>
+
+  <!-- waveform -->
+  <path d="M18 46
+           C24 46,24 26,30 26
+           C36 26,36 66,42 66
+           C48 66,48 20,54 20
+           C60 20,60 46,66 46"
+        fill="none" stroke="url(#cyan)" stroke-width="3"
+        stroke-linecap="round"/>
+
+  <!-- ruler -->
+  <line x1="58" y1="46" x2="74" y2="46" stroke="url(#orange)" stroke-width="4"/>
+  <line x1="60" y1="36" x2="60" y2="46" stroke="url(#orange)" stroke-width="1.5"/>
+  <line x1="64" y1="38" x2="64" y2="46" stroke="url(#orange)" stroke-width="1.5"/>
+  <line x1="68" y1="34" x2="68" y2="46" stroke="url(#orange)" stroke-width="1.5"/>
+  <line x1="72" y1="38" x2="72" y2="46" stroke="url(#orange)" stroke-width="1.5"/>
+
+  <!-- dB badge -->
+  <circle cx="69" cy="69" r="12" fill="#231200" stroke="url(#orange)" stroke-width="2"/>
+  <text x="69" y="73" text-anchor="middle"
+        font-family="Arial, sans-serif" font-size="10"
+        font-weight="bold" fill="#ffb347">dB</text>
+</svg>

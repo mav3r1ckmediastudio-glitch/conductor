@@ -1,0 +1,436 @@
+{
+  "new_project": {
+    "title": "New Project",
+    "status": "implemented",
+    "purpose": "Creates a new Conductor project \u2014 a GeoPackage containing all the network layers (cabinet, chambers, ducts, cables, joints, drops, bundles, premises, build areas, and PIA layers) with Conductor's schema and symbology already applied.",
+    "how_to": "1. Click '+ New Project'.\n2. Choose a location and filename for the GeoPackage.\n3. Fill in the project details (name, CRS).\n4. Conductor creates the GeoPackage and loads all layers into the map.",
+    "common_mistakes": "Pick a folder you have write access to. Once created, use Open Project to re-load this file in future sessions \u2014 don't try to recreate it.",
+    "related_tools": [
+      "open_project",
+      "build_areas"
+    ],
+    "manual_page": "project",
+    "summary": "Create a new Conductor project. Generates a GeoPackage with 14 layers and loads them into QGIS. After creation, only Import Premises is active \u2014 complete the three setup steps (import premises, draw build area, place cabinet) to unlock all tools."
+  },
+  "open_project": {
+    "title": "Open Project",
+    "status": "implemented",
+    "purpose": "Opens an existing Conductor GeoPackage, loading all of its layers into the current QGIS project with Conductor's symbology and snapping configuration applied.",
+    "how_to": "1. Click 'Open Project'.\n2. Browse to and select the project's .gpkg file.\n3. Conductor loads all layers and enables the design tools.",
+    "common_mistakes": "After QGIS reloads the Conductor plugin (e.g. after an update), the project state is reset \u2014 you must Open Project again before any tools will work, even if the layers are still visible on the map.",
+    "related_tools": [
+      "new_project"
+    ],
+    "manual_page": "project",
+    "summary": "Open an existing Conductor GeoPackage. Conductor reads the project state and unlocks tools based on what already exists \u2014 a project with premises, build area and cabinet opens fully unlocked."
+  },
+  "build_areas": {
+    "title": "Build Areas",
+    "status": "implemented",
+    "purpose": "Draws the polygon boundary of the area you're designing. This is the first design step for any new build area \u2014 it's used to filter the premises import and frames the rest of the design.",
+    "how_to": "1. Click the Build Areas tool.\n2. Click points on the map to trace the boundary.\n3. Right-click (or double-click) to finish the shape.\n4. Fill in the build area details and save.",
+    "common_mistakes": "Importing premises before drawing a build area means there's nothing to filter against \u2014 always draw the build area first.",
+    "related_tools": [
+      "import_premises_addressbase",
+      "place_cabinet_pop"
+    ],
+    "manual_page": "civil",
+    "summary": "Step 2 of the new project workflow. Digitise the build area polygon. Left-click to place vertices, right-click to close and confirm. Automatically clips any imported premises outside the polygon. Unlocks Place Cabinet."
+  },
+  "import_premises_addressbase": {
+    "title": "Import Premises (AddressBase)",
+    "status": "implemented",
+    "purpose": "Imports premises from an OS AddressBase CSV export into the premises layer, filtered to the current Build Area polygon.",
+    "how_to": "1. Click Import Premises (AddressBase).\n2. Select the AddressBase CSV file.\n3. Map the relevant columns if prompted.\n4. Review the count of premises found inside the build area.\n5. Confirm to import.",
+    "common_mistakes": "Run this after drawing a Build Area \u2014 without one, the import has nothing to filter against. Large CSVs can take a moment to process; let it finish before clicking away.",
+    "related_tools": [
+      "build_areas",
+      "fibre_count_calculator"
+    ],
+    "manual_page": "civil",
+    "summary": "Step 1 of the new project workflow. Import AddressBase CSV or Shapefile as premises points. Import all records \u2014 filtering to the build area happens automatically when you draw the build area polygon. Unlocks Draw Build Area."
+  },
+  "place_cabinet_pop": {
+    "title": "Place Cabinet / POP",
+    "status": "implemented",
+    "purpose": "Places the primary cabinet (Point of Presence) for the build area \u2014 the root node that compass-based numbering for chambers and ducts, and fibre-count calculations, all radiate from.",
+    "how_to": "1. Click Place Cabinet / POP.\n2. Click the cabinet's location on the map.\n3. Fill in the cabinet ID, capacity and other details.\n4. Save.",
+    "common_mistakes": "Only place one cabinet per build area. A second cabinet will break the compass-based auto-numbering used by Place Chamber and Digitise Duct.",
+    "related_tools": [
+      "edit_cabinet_pop",
+      "place_chamber",
+      "digitise_duct"
+    ],
+    "manual_page": "civil",
+    "summary": "Step 3 of the new project workflow. Click the map to place the serving cabinet / POP. Once saved, all remaining design tools unlock. Requires a build area to exist first."
+  },
+  "edit_cabinet_pop": {
+    "title": "Edit Cabinet / POP",
+    "status": "implemented",
+    "purpose": "Edits the attributes of an existing cabinet/POP \u2014 ID, capacity, splitter configuration and other details \u2014 without moving it.",
+    "how_to": "1. Click Edit Cabinet / POP.\n2. Click the cabinet on the map.\n3. Update the fields in the dialog.\n4. Save.",
+    "common_mistakes": "This tool edits attributes only. To move the cabinet itself, use Move Asset.",
+    "related_tools": [
+      "place_cabinet_pop",
+      "move_asset"
+    ],
+    "manual_page": "civil",
+    "summary": "Click an existing cabinet to edit its attributes \u2014 name, type, equipment, optics, and notes."
+  },
+  "digitise_duct": {
+    "title": "Digitise Duct",
+    "status": "implemented",
+    "purpose": "Draws an underground duct route between two nodes (chambers, poles, or the cabinet). Auto-assigns a DUCT-NNN ID based on the compass leg from the cabinet, and auto-calculates length from the digitised geometry.",
+    "how_to": "1. Click Digitise Duct.\n2. Click the start node (cabinet or chamber) \u2014 must snap.\n3. Click the end node \u2014 must snap.\n4. Fill in duct details (type, diameter) and save.\n5. If the duct is protected by a scaffold-bar sleeve (e.g. either end embedded in a stream bank where ploughing/boring isn't possible), set Sleeve to SCAFFOLD_BAR and enter the sleeve length \u2014 this feeds a dedicated scaffold bar line item into the BoM.",
+    "common_mistakes": "Both ends must snap onto existing chamber/cabinet nodes \u2014 if snapping is off or you click empty space, the duct won't connect into the network topology correctly.",
+    "related_tools": [
+      "place_chamber",
+      "digitise_cable"
+    ],
+    "manual_page": "civil",
+    "summary": "Digitise a duct route between two snap points (chambers, cabinet, or free points). Select duct type (PIA_SUBDUCT, DIRECT_BURIED, etc.) and size. Connects from_node to to_node in the topology."
+  },
+  "digitise_cable": {
+    "title": "Digitise Cable",
+    "status": "implemented",
+    "purpose": "Draws a fibre cable between two joints (or the cabinet). Snaps only to joints and the cabinet \u2014 not chambers. Offers to copy the geometry of the parent duct.",
+    "how_to": "1. Click Digitise Cable.\n2. Click the start joint or cabinet \u2014 must snap.\n3. Click the end joint \u2014 must snap.\n4. Choose whether to copy the parent duct's geometry.\n5. Fill in cable type and fibre count, then save.",
+    "common_mistakes": "Cable snaps to joints and the cabinet only \u2014 if a chamber has no Joint placed inside it, the cable can't connect there. Place a Joint first.",
+    "related_tools": [
+      "place_joint",
+      "fibre_trace",
+      "digitise_aerial_span"
+    ],
+    "manual_page": "fibre",
+    "summary": "Digitise a fibre cable route along an existing duct path. Assign fibre count and cable type. The cable must follow the duct topology \u2014 from joint/cabinet to joint."
+  },
+  "digitise_drop_duct": {
+    "title": "Digitise Drop Duct",
+    "status": "implemented",
+    "purpose": "Two-click tool that draws a drop duct from a joint or chamber to a premises (or a free point).",
+    "how_to": "1. Click Digitise Drop Duct.\n2. LMB click 1 \u2014 start point (joint, chamber, or free).\n3. LMB click 2 \u2014 end point (premises or free).\n4. RMB \u2014 saves the drop and resets ready for the next one.\n5. Esc \u2014 exits the tool.",
+    "common_mistakes": "The tool stays active after each save (RMB) \u2014 press Esc when you're done, otherwise the next click starts a new drop.",
+    "related_tools": [
+      "digitise_bundle",
+      "digitise_pia_ug_drop"
+    ],
+    "manual_page": "civil",
+    "summary": "Digitise a drop duct from a chamber or joint to a customer premises. Carries a single customer bundle. Snaps to the nearest chamber or joint at the network end."
+  },
+  "digitise_bundle": {
+    "title": "Digitise Bundle",
+    "status": "implemented",
+    "purpose": "Two-click tool that draws a fibre bundle from a secondary splitter joint to a premises/ONT.",
+    "how_to": "1. Click Digitise Bundle.\n2. LMB click 1 \u2014 start point, must snap to a secondary splitter joint.\n3. LMB click 2 \u2014 end point (premises/ONT).\n4. RMB \u2014 saves and resets for the next bundle.\n5. Esc \u2014 exits the tool.",
+    "common_mistakes": "The start point must snap to a secondary splitter joint specifically \u2014 clicking a plain joint or chamber won't work.",
+    "related_tools": [
+      "digitise_drop_duct",
+      "assign_fibre_roles"
+    ],
+    "manual_page": "fibre",
+    "summary": "Digitise a customer fibre bundle from a joint to a premises. The bundle represents the customer's 2F allocation within the distribution cable. Must terminate at a UPRN."
+  },
+  "place_chamber": {
+    "title": "Place Chamber",
+    "status": "implemented",
+    "purpose": "Places an underground chamber, auto-numbered by its compass direction from the parent cabinet.",
+    "how_to": "1. Click Place Chamber.\n2. Click the chamber's location on the map.\n3. Fill in chamber details (type, size).\n4. Save.",
+    "common_mistakes": "Requires a Build Area and a Cabinet to already exist \u2014 the auto-numbering is calculated relative to the cabinet's position.",
+    "related_tools": [
+      "place_joint",
+      "digitise_duct"
+    ],
+    "manual_page": "civil",
+    "summary": "Place a chamber (manhole, hand hole, or buried joint box) on the map. Snaps to the nearest duct node. Requires a cabinet to exist first."
+  },
+  "place_joint": {
+    "title": "Place Joint",
+    "status": "implemented",
+    "purpose": "Places a joint closure inside an existing chamber. Joints are the nodes of the fibre topology, and can optionally contain a passive optical splitter.",
+    "how_to": "1. Click Place Joint.\n2. Click inside an existing chamber \u2014 must snap.\n3. Fill in joint details (type, splitter configuration if applicable).\n4. Save.",
+    "common_mistakes": "The joint must be placed inside (snapped to) a chamber \u2014 joints placed in empty space won't be usable for cable connections.",
+    "related_tools": [
+      "place_chamber",
+      "digitise_cable"
+    ],
+    "manual_page": "fibre",
+    "summary": "Place a fibre joint closure at a chamber location. Joints are the optical nodes of the network \u2014 they hold splitters and connect cable segments. Snaps to the nearest chamber."
+  },
+  "digitise_road_crossing": {
+    "title": "Digitise Road Crossing",
+    "status": "working",
+    "purpose": "Digitise a duct segment that crosses under a road. A thin wrapper around Digitise Duct \u2014 surface_type is locked to ROAD.",
+    "how_to": "Left-click to add vertices across the road (snaps to chambers/poles/cabinet). Right-click to finish. Fill in the duct details \u2014 Surface Type is pre-set to ROAD and cannot be changed. Add a permit reference if a road opening licence (e.g. S50) applies.",
+    "common_mistakes": "Forgetting to record the permit reference for road opening licences. Not snapping to the chambers either side of the crossing.",
+    "related_tools": [
+      "digitise_duct",
+      "digitise_stream_crossing"
+    ],
+    "manual_page": "civil:crossings",
+    "summary": "Digitise a road crossing duct segment. Used for duct sections that cross a road, typically installed by directional drilling or moling. Sets the crossing type and reinstatement category."
+  },
+  "digitise_stream_crossing": {
+    "title": "Digitise Stream Crossing",
+    "status": "working",
+    "purpose": "Digitise a duct segment that crosses under a watercourse. A thin wrapper around Digitise Duct \u2014 surface_type is locked to WATERCOURSE.",
+    "how_to": "Left-click to add vertices across the watercourse (snaps to chambers/poles/cabinet). Right-click to finish. Fill in the duct details \u2014 Surface Type is pre-set to WATERCOURSE and cannot be changed. Add a land drainage / watercourse consent reference if applicable.",
+    "common_mistakes": "Forgetting to record watercourse consent references. Not snapping to the chambers either side of the crossing.",
+    "related_tools": [
+      "digitise_duct",
+      "digitise_road_crossing"
+    ],
+    "manual_page": "civil:crossings",
+    "summary": "Digitise a stream or watercourse crossing duct segment. Sets crossing type and any relevant wayleave reference."
+  },
+  "assign_fibre_roles": {
+    "title": "Assign Fibre Roles",
+    "status": "implemented",
+    "purpose": "Runs the automatic fibre assignment engine across the network, assigning tube/fibre numbers and IEC fibre colours to each cable run from the cabinet outward.",
+    "how_to": "1. Make sure the network topology (cables, joints, drops/bundles) is complete.\n2. Click Assign Fibre Roles.\n3. Watch the progress dialog as it walks the network.\n4. Review the resulting fibre/tube assignments on cables.",
+    "common_mistakes": "Run Validate Fibre Routes first \u2014 assigning fibre roles over a broken topology produces incomplete or incorrect assignments.",
+    "related_tools": [
+      "validate_fibre_routes",
+      "fibre_trace",
+      "fibre_count_calculator"
+    ],
+    "manual_page": "assign",
+    "summary": "Auto-assign fibre roles (SPINE, DISTRIBUTION, DROP) to cables and bundles based on network topology. Run after all cables and bundles are digitised. Required before route validation."
+  },
+  "fibre_trace": {
+    "title": "Fibre Trace",
+    "status": "implemented",
+    "purpose": "Traces the fibre path between a premises and the cabinet, following splices and joints, and shows the optical power budget (loss, margin, PASS/FAIL) for that route.",
+    "how_to": "1. Click the Fibre Trace tool.\n2. Click a premises on the map \u2014 it snaps to the nearest one within range.\n3. The route highlights and the panel reports the hop-by-hop path and status.\n4. If the route is complete, an Optical Budget card shows total loss, margin and PASS/FAIL against the configured link class, with an expandable per-element breakdown.\n5. To change the optical power budget settings (fibre attenuation, splice/connector loss, link class, splitter losses), use the \u2699 gear icon in the panel header.",
+    "common_mistakes": "Clicking on a feature that isn't snapped to the network layer will fail to start a trace \u2014 make sure snapping is enabled. The optical budget card only appears for routes with status ROUTED; PARTIAL/UNSERVED routes have no loss figure to show.",
+    "related_tools": [
+      "validate_fibre_routes",
+      "route_splice_export",
+      "fibre_count_calculator"
+    ],
+    "manual_page": "trace",
+    "summary": "Click any premises to trace its fibre route back to the cabinet. Shows each hop (bundle \u2192 joint \u2192 cable \u2192 joint \u2192 spine \u2192 cabinet), IEC fibre colours, and an optical power budget card (PASS/FAIL, total loss, margin)."
+  },
+  "fibre_count_calculator": {
+    "title": "Fibre Count Calculator",
+    "status": "implemented",
+    "purpose": "Calculates required fibre counts for a selected section of the network based on downstream connections.",
+    "how_to": "1. Select the duct or span.\n2. Run the calculator.\n3. Review the suggested fibre count against the assigned count.",
+    "common_mistakes": "Running this before all downstream premises are placed will under-count \u2014 place premises first.",
+    "related_tools": [
+      "fibre_trace",
+      "validate_fibre_routes"
+    ],
+    "manual_page": "fibrecount",
+    "summary": "Shows fibre utilisation across all cables and joints in the network. Displays used, spare, and total fibres per segment with RAG status. Useful for checking headroom before adding new drops."
+  },
+  "route_splice_export": {
+    "title": "Route Splice Export",
+    "status": "implemented",
+    "purpose": "Generates a splice plan with per-drop tables and UPRN address lookups for a selected route \u2014 click a premises or joint, and it traces the full route back to the cabinet, covering every joint's splice schedule along the way.",
+    "how_to": "1. Select the route by clicking a premises or joint.\n2. Run Route Splice Export.\n3. Review the generated HTML splice plan, which opens in your browser.",
+    "common_mistakes": "Pure pass-through CBTs currently show splice counts capped at the total fibre count \u2014 this is a known issue and not a configuration error on your part.",
+    "related_tools": [
+      "fibre_trace",
+      "fibre_count_calculator",
+      "splice_plan_export"
+    ],
+    "manual_page": "routesplice",
+    "summary": "Export a full splice schedule as a standalone HTML file. Shows splice assignments at every joint from premises to cabinet, with IEC colour coding, tube pills, and per-joint summary bars."
+  },
+  "splice_plan_export": {
+    "title": "Splice Plan Export",
+    "status": "implemented",
+    "purpose": "Generates a self-contained HTML splice plan for a single selected joint, showing the splice schedule for that joint only.",
+    "how_to": "1. Select a joint on the map.\n2. Run Splice Plan Export.\n3. Review the generated HTML, which opens in your browser.",
+    "common_mistakes": "For a full route covering every joint back to the cabinet, use Route Splice Export instead \u2014 this tool covers a single joint only.",
+    "related_tools": [
+      "route_splice_export",
+      "fibre_trace"
+    ],
+    "manual_page": "splice",
+    "summary": "Export a splice plan showing all fibre assignments across the network. Lists each fibre's journey from cabinet through to the customer, suitable for passing to the fibre installation team."
+  },
+  "single_line_diagram": {
+    "title": "Single Line Diagram",
+    "status": "implemented",
+    "purpose": "Generates a full-network Single Line Diagram as a self-contained HTML document \u2014 a schematic view of the cabinet, chambers, joints, cables and drops.",
+    "how_to": "1. Run Single Line Diagram with a project open.\n2. The diagram opens automatically in your browser.\n3. Use your browser's find function to locate specific assets on larger networks.",
+    "common_mistakes": "On large networks the diagram can be long \u2014 use Ctrl+F in your browser to jump straight to a specific cabinet, chamber or joint ID.",
+    "related_tools": [
+      "route_splice_export",
+      "bill_of_materials"
+    ],
+    "manual_page": "sld",
+    "summary": "Generate a Single Line Diagram (SLD) of the network \u2014 a schematic view showing the cabinet, joints, splitters, and customer connections as a logical tree. Includes optical budget badges (PASS/FAIL) per branch."
+  },
+  "delete_asset": {
+    "title": "Delete Asset",
+    "status": "implemented",
+    "purpose": "Click any Conductor asset \u2014 chamber, duct, cable, joint, drop, bundle, premises, pole, CBT \u2014 to select and delete it.",
+    "how_to": "1. Click Delete Asset.\n2. Click the asset on the map.\n3. Confirm the deletion.",
+    "common_mistakes": "Deleting a chamber or joint that other assets connect to leaves dangling references in the topology. Run Validate Fibre Routes afterwards to check for breaks.",
+    "related_tools": [
+      "move_asset",
+      "validate_fibre_routes"
+    ],
+    "manual_page": "civil",
+    "summary": "Select one or more assets to delete from the map. Presents a picker showing all assets near the click point \u2014 choose which to remove. Deletion is permanent and cannot be undone."
+  },
+  "move_asset": {
+    "title": "Move Asset",
+    "status": "implemented",
+    "purpose": "Click and drag a Conductor asset to reposition it, updating its geometry.",
+    "how_to": "1. Click Move Asset.\n2. Click and drag the asset to its new location.\n3. Release to confirm the new position.",
+    "common_mistakes": "Moving a node (chamber, joint, cabinet) doesn't automatically re-route the ducts/cables connected to it \u2014 check the connected geometry afterwards and adjust if needed.",
+    "related_tools": [
+      "delete_asset"
+    ],
+    "manual_page": "civil",
+    "summary": "Click an asset then click a new location to move it. Updates the geometry in the GeoPackage. Connected ducts and cables are not automatically re-routed \u2014 check topology after moving."
+  },
+  "validate_fibre_routes": {
+    "title": "Validate Fibre Routes",
+    "status": "implemented",
+    "purpose": "Traces every premises back to its cabinet via bundles/drop ducts \u2192 joints \u2192 cables, reporting any breaks in the route along with the reason.",
+    "how_to": "1. Run Validate Fibre Routes with a project open.\n2. Review the report table \u2014 each premises is listed with its route status.\n3. Fix any reported breaks (missing connections, unsnapped geometry).",
+    "common_mistakes": "Run this before Assign Fibre Roles and Fibre Count Calculator \u2014 those tools rely on a complete, unbroken topology to give correct results.",
+    "related_tools": [
+      "assign_fibre_roles",
+      "fibre_count_calculator"
+    ],
+    "manual_page": "validate",
+    "summary": "Run a BFS trace from every premises to the cabinet and report ROUTED, PARTIAL, or UNSERVED status. PARTIAL means a break was found in the path \u2014 the tool identifies the asset causing the break."
+  },
+  "bill_of_materials": {
+    "title": "Bill of Materials",
+    "status": "implemented",
+    "purpose": "Aggregates fibre and civil layer quantities \u2014 ducts, cables, chambers, joints, drops, bundles, poles, CBTs \u2014 into a categorised material list with unit costs and totals.",
+    "how_to": "1. Run Bill of Materials with a project open.\n2. Review the categorised quantities.\n3. Adjust unit costs if needed.\n4. Export to Excel if required.",
+    "common_mistakes": "Unit costs are project-level settings \u2014 check they're current before relying on the totals for a quote.",
+    "related_tools": [
+      "cabinet_cost_calculator",
+      "single_line_diagram"
+    ],
+    "manual_page": "bom",
+    "summary": "Calculate a full bill of materials from the current design \u2014 chambers, ducts, cables, joints, splitters, drops, CBTs, poles and accessories. Exportable to Excel. Unit costs are editable in Settings."
+  },
+  "cabinet_cost_calculator": {
+    "title": "Cabinet Cost Calculator",
+    "status": "working",
+    "purpose": "For each cabinet (Exchange/POP), costs its own active equipment \u2014 DU-X shelves (+1 inverter each), Management/OOB switch, Calix E7-2 shelves, GPON cards/optics, battery sets, patch panels, aggregation router, plus sundries \u2014 read directly from the cabinet's attribute fields, using the Gigaloch Cabinet Calculator's unit costs. For pop_type=CABINET, also adds the one-off cabinet build costs (enclosure, groundworks, electrical hookup, backhaul install). Then adds the civils/cable Bill of Materials for that cabinet's area. Gives a per-cabinet total build cost, \u00a3/premises, and a project-wide grand total.",
+    "how_to": "Open the calculator \u2014 each Exchange/POP in the project gets a row showing Equipment cost (from its own dux_shelves/calix_shelves/gpon_cards/gpon_optics/battery_sets/patch_panels/has_aggreg_router fields), Civils/Cable cost (BoM for that area), and the combined Total and \u00a3/premises. Use Edit Costs to adjust unit costs \u2014 shared with the BoM dialog.",
+    "common_mistakes": "Equipment cost will be \u00a30 if the cabinet's shelf/card/optic counts haven't been filled in \u2014 edit the cabinet via Edit Cabinet/POP to set these. \u00a3/Premises requires Import Premises to have been run for that area.",
+    "related_tools": [
+      "bill_of_materials",
+      "place_pop"
+    ],
+    "manual_page": "cabinetcost",
+    "summary": "Calculate the equipment cost for the serving cabinet based on GPON port count, splitter configuration, and chassis type. Uses the Calix E7-2 cost model by default."
+  },
+  "place_pole": {
+    "title": "Place Pole",
+    "status": "implemented",
+    "purpose": "Places an Openreach pole as a chamber record with chamber_type = PIA_POLE. Poles are civil-only assets with no optical role \u2014 a CBT placed on a pole carries the optical event.",
+    "how_to": "1. Click Place Pole.\n2. Click the pole's location on the map.\n3. Fill in pole details (height, ownership).\n4. Save.",
+    "common_mistakes": "A pole on its own won't appear in fibre traces \u2014 place a CBT on it with Place CBT to give it optical connectivity.",
+    "related_tools": [
+      "place_cbt",
+      "digitise_aerial_span"
+    ],
+    "manual_page": "aerial",
+    "summary": "Place a PIA telegraph pole on the map. Poles are the anchor points for aerial spans and CBTs. Snaps to the nearest road edge or free point."
+  },
+  "place_pia_ug_chamber": {
+    "title": "Place PIA UG Chamber",
+    "status": "implemented",
+    "purpose": "Places an Openreach underground chamber as a chamber record with chamber_type = PIA_UG_CHAMBER, for routes using Openreach's underground subduct (PIA) network.",
+    "how_to": "1. Click Place PIA UG Chamber.\n2. Click the chamber's location on the map.\n3. Fill in chamber details.\n4. Save.",
+    "common_mistakes": "Use this rather than the standard Place Chamber tool for PIA underground routes, so the chamber_type is correctly tagged as PIA_UG_CHAMBER.",
+    "related_tools": [
+      "digitise_pia_ug_duct",
+      "place_pole"
+    ],
+    "manual_page": "aerial",
+    "summary": "Place a PIA underground chamber (Openreach PIA asset) on the map. Used when routing duct through Openreach PIA infrastructure."
+  },
+  "digitise_aerial_span": {
+    "title": "Digitise Aerial Span",
+    "status": "implemented",
+    "purpose": "A wrapper around Digitise Cable for aerial fibre spans between poles/CBTs. Automatically sets cable_type = AERIAL and renders with the PIA aerial (sky blue) colour.",
+    "how_to": "1. Click Digitise Aerial Span.\n2. Click the start CBT/pole \u2014 must snap.\n3. Click the end CBT/pole \u2014 must snap.\n4. Fill in cable details as for Digitise Cable.",
+    "common_mistakes": "Snaps to joints/CBTs like Digitise Cable \u2014 place CBTs on the poles first with Place CBT.",
+    "related_tools": [
+      "place_pole",
+      "place_cbt",
+      "digitise_cable"
+    ],
+    "manual_page": "aerial",
+    "summary": "Digitise an aerial fibre span between two poles. Sets the span length and cable type. Aerial spans are used where overhead routing is preferred over trenching."
+  },
+  "digitise_pia_ug_duct": {
+    "title": "Digitise PIA UG Duct",
+    "status": "implemented",
+    "purpose": "Multi-vertex line tool for Openreach underground subduct routes. Snaps to PIA UG Chambers and PIA Poles, and writes to the ducts layer with duct_type = PIA_UG.",
+    "how_to": "1. Click Digitise PIA UG Duct.\n2. Click each vertex along the route, snapping to PIA UG chambers/poles.\n3. RMB to finish and save the duct \u2014 the tool stays active for the next one.\n4. Esc to exit.",
+    "common_mistakes": "The tool stays active after each save \u2014 press Esc when you're done routing, otherwise the next click starts a new duct.",
+    "related_tools": [
+      "place_pia_ug_chamber",
+      "place_pole",
+      "digitise_pia_ug_drop"
+    ],
+    "manual_page": "aerial",
+    "summary": "Digitise a PIA underground duct segment using Openreach PIA infrastructure. Sets duct type as PIA_SUBDUCT and records the PIA reference."
+  },
+  "place_cbt": {
+    "title": "Place CBT",
+    "status": "implemented",
+    "purpose": "Places a Cabinet Terminal (CBT) as a joint record with joint_type = CBT, snapping to the nearest PIA Pole within 14px. The CBT shares the pole's coordinates and carries the optical splice/splitter event for that pole.",
+    "how_to": "1. Click Place CBT.\n2. Click near an existing pole \u2014 it snaps automatically.\n3. Fill in CBT details (splitter configuration if applicable).\n4. Save.",
+    "common_mistakes": "Must be placed within snapping distance of a PIA Pole \u2014 place the pole first with Place Pole.",
+    "related_tools": [
+      "place_pole",
+      "digitise_aerial_drop",
+      "assign_fibre_roles"
+    ],
+    "manual_page": "aerial",
+    "summary": "Place a CBT (Cabinet Termination Box / Multiport Closure) on a pole. CBTs serve multiple customers from a single pole-mounted closure. Each CBT must have a dedicated fibre tail back to an underground joint \u2014 CBTs must not be daisy-chained optically."
+  },
+  "digitise_aerial_drop": {
+    "title": "Digitise Aerial Drop",
+    "status": "implemented",
+    "purpose": "A wrapper around Digitise Drop Duct for aerial drops from a CBT to a premises. drop_type = PIA_AERIAL_DROP is set automatically when the start node is a CBT joint, shown with a light blue rubber band.",
+    "how_to": "1. Click Digitise Aerial Drop.\n2. LMB click 1 on the CBT.\n3. LMB click 2 on the premises.\n4. RMB to save and reset. Esc to exit.",
+    "common_mistakes": "The start point must be a CBT joint (placed with Place CBT) for the drop_type to be set correctly.",
+    "related_tools": [
+      "place_cbt",
+      "digitise_bundle"
+    ],
+    "manual_page": "aerial",
+    "summary": "Digitise an aerial drop from a pole or CBT to a customer premises. Sets the installation method as AERIAL and records the pole reference."
+  },
+  "digitise_pia_ug_drop": {
+    "title": "Digitise PIA UG Drop",
+    "status": "implemented",
+    "purpose": "Two-click tool for Openreach underground drops. The start point snaps to a PIA UG Chamber and the end point snaps to a premises. Writes to drop_ducts with drop_type = PIA_UG_DROP.",
+    "how_to": "1. Click Digitise PIA UG Drop.\n2. LMB click 1 on the PIA UG chamber.\n3. LMB click 2 on the premises.\n4. RMB to save and reset. Esc to exit.",
+    "common_mistakes": "The start point must snap to a PIA_UG_CHAMBER specifically \u2014 a regular chamber won't work.",
+    "related_tools": [
+      "place_pia_ug_chamber",
+      "digitise_drop_duct"
+    ],
+    "manual_page": "aerial",
+    "summary": "Digitise a PIA underground drop duct from a PIA chamber to a customer premises using Openreach PIA infrastructure."
+  },
+  "edit_asset": {
+    "title": "Edit Asset",
+    "summary": "Click any placed asset (chamber, joint, cabinet, pole, CBT) to open its edit dialog and update attributes. Changes are committed immediately to the GeoPackage.",
+    "manual_page": "civil",
+    "status": "active"
+  },
+  "digitise_cbt_tail": {
+    "title": "Draw CBT Tail",
+    "summary": "Digitise the fibre tail from a CBT back to its parent underground joint. Each CBT requires its own dedicated tail. Maximum recommended tail length is 350m (rounded to nearest 50m).",
+    "manual_page": "aerial",
+    "status": "active"
+  }
+}

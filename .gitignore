@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*.gpkg
+*.gpkg-shm
+*.gpkg-wal
+.idea/
+*.bak
