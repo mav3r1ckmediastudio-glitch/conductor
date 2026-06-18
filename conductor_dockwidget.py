@@ -598,64 +598,122 @@ class ConductorDockWidget(QDockWidget):
     def _on_tab_changed(self, index):
         self._grid_mode_btn.setChecked(self._active_dialpad_toggle()._is_grid)
 
+    def _collapsible_section(self, title, tool_count, start_expanded=True):
+        """Collapsible section header with chevron toggle and count badge."""
+        # Header
+        header = QWidget()
+        header.setStyleSheet(
+            f"QWidget {{ background:{LIGHT}; border-radius:4px; }}"
+            f"QWidget:hover {{ background:#243347; }}"
+        )
+        header.setCursor(Qt.PointingHandCursor)
+        header.setFixedHeight(34)
+        h_layout = QHBoxLayout(header)
+        h_layout.setContentsMargins(8, 0, 8, 0)
+        h_layout.setSpacing(6)
+
+        chevron = QLabel("▾" if start_expanded else "▸")
+        chevron.setStyleSheet(f"color:{TEAL}; font-size:11px; background:transparent;")
+        chevron.setFixedWidth(14)
+        h_layout.addWidget(chevron)
+
+        title_lbl = QLabel(title)
+        title_lbl.setStyleSheet(
+            f"color:{WHITE}; font-size:11px; font-weight:700; "
+            f"letter-spacing:1px; background:transparent;"
+        )
+        h_layout.addWidget(title_lbl, 1)
+
+        badge = QLabel(str(tool_count))
+        badge.setStyleSheet(
+            f"color:{GREY}; font-size:9px; font-weight:700; background:transparent;"
+        )
+        h_layout.addWidget(badge)
+
+        # Content container
+        section_content = QWidget()
+        section_content.setStyleSheet("background:transparent;")
+        section_layout = QVBoxLayout(section_content)
+        section_layout.setContentsMargins(0, 2, 0, 4)
+        section_layout.setSpacing(0)
+        section_content.setVisible(start_expanded)
+
+        _state = [start_expanded]
+        def _toggle(event=None):
+            _state[0] = not _state[0]
+            section_content.setVisible(_state[0])
+            chevron.setText("▾" if _state[0] else "▸")
+        header.mousePressEvent = _toggle
+
+        # Defer visibility so Qt layout doesn't reset it — capture by value
+        from qgis.PyQt.QtCore import QTimer
+        _exp = start_expanded
+        _sc  = section_content
+        _chv = chevron
+        QTimer.singleShot(0, lambda exp=_exp, sc=_sc, chv=_chv: (
+            sc.setVisible(exp),
+            chv.setText("▾" if exp else "▸")
+        ))
+
+        return header, section_content, section_layout
+
     def _build_design_tab(self):
-        """Build the existing Design tab content."""
+        """Design tab with collapsible grouped tool sections."""
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setFrameShape(QFrame.NoFrame)
-        scroll_area.setStyleSheet(f"background:{LIGHT}; border:none;")
+        scroll_area.setStyleSheet(f"background:{NAVY}; border:none;")
 
-        content = QWidget()
-        content.setStyleSheet(f"background-color: {LIGHT};")
-        cl = QVBoxLayout(content)
-        cl.setContentsMargins(12, 16, 12, 16)
-        cl.setSpacing(8)
+        container = QWidget()
+        container.setStyleSheet(f"background:{NAVY};")
+        cl = QVBoxLayout(container)
+        cl.setContentsMargins(8, 8, 8, 8)
+        cl.setSpacing(4)
 
         toggle = DialPadToggle(self, "design", columns=4)
         self._design_toggle = toggle
 
-        # Project status label
-        status_row = QWidget()
-        sr = QHBoxLayout(status_row)
-        sr.setContentsMargins(0, 0, 0, 0)
-        sr.setSpacing(6)
+        # Project status
         self._status_label = QLabel("No project open")
-        self._status_label.setStyleSheet(f"color:{MID}; font-size:11px; padding-bottom:4px;")
-        sr.addWidget(self._status_label, 1)
-        cl.addWidget(status_row)
+        self._status_label.setStyleSheet(f"color:{MID}; font-size:11px; padding:2px 4px 6px 4px;")
+        cl.addWidget(self._status_label)
 
-        # PROJECT
-        cl.addWidget(self._section_label("PROJECT"))
+        # ── PROJECT (always visible, not collapsible) ──────────────────
+        proj_lbl = self._section_label("PROJECT")
+        cl.addWidget(proj_lbl)
+
         project_items = []
         row = self._primary_button("\uFF0B  New Project", self._on_new_project, icon="new_project.svg")
         cl.addWidget(row)
         project_items.append(self._dialpad_item(row, "new_project.svg"))
+
         row = self._secondary_button("Open Project", self._on_open_project, icon="open_project.svg")
         cl.addWidget(row)
         project_items.append(self._dialpad_item(row, "open_project.svg"))
 
-        # Undo / Redo buttons
+        # Undo / Redo
         undo_row_widget = QWidget()
+        undo_row_widget.setStyleSheet("background:transparent;")
         undo_row = QHBoxLayout(undo_row_widget)
         undo_row.setSpacing(4)
-        undo_row.setContentsMargins(0, 2, 0, 2)
+        undo_row.setContentsMargins(0, 2, 0, 4)
         self._btn_undo = QPushButton("\u21a9  Undo")
         self._btn_undo.setToolTip("Undo last action (Ctrl+Z)")
         self._btn_undo.setEnabled(False)
         self._btn_undo.setStyleSheet(
-            f"QPushButton {{ background:{LIGHT}; color:{NAVY}; border:1px solid {MID};"
+            f"QPushButton {{ background:{LIGHT}; color:{WHITE}; border:1px solid {MID};"
             f" border-radius:4px; padding:4px 8px; font-size:11px; }}"
             f"QPushButton:hover {{ border-color:{TEAL}; color:{TEAL}; }}"
-            f"QPushButton:disabled {{ color:#aaa; border-color:#ddd; }}")
+            f"QPushButton:disabled {{ color:{MID}; border-color:{LIGHT}; }}")
         self._btn_undo.clicked.connect(self._on_undo)
         self._btn_redo = QPushButton("\u21aa  Redo")
-        self._btn_redo.setToolTip("Redo last undone action (Ctrl+Shift+Z)")
+        self._btn_redo.setToolTip("Redo (Ctrl+Shift+Z)")
         self._btn_redo.setEnabled(False)
         self._btn_redo.setStyleSheet(
-            f"QPushButton {{ background:{LIGHT}; color:{NAVY}; border:1px solid {MID};"
+            f"QPushButton {{ background:{LIGHT}; color:{WHITE}; border:1px solid {MID};"
             f" border-radius:4px; padding:4px 8px; font-size:11px; }}"
             f"QPushButton:hover {{ border-color:{TEAL}; color:{TEAL}; }}"
-            f"QPushButton:disabled {{ color:#aaa; border-color:#ddd; }}")
+            f"QPushButton:disabled {{ color:{MID}; border-color:{LIGHT}; }}")
         self._btn_redo.clicked.connect(self._on_redo)
         undo_row.addWidget(self._btn_undo)
         undo_row.addWidget(self._btn_redo)
@@ -663,94 +721,80 @@ class ConductorDockWidget(QDockWidget):
         cl.addWidget(self._divider())
         toggle.add_section("PROJECT", project_items)
 
-        # DESIGN
-        cl.addWidget(self._section_label("DESIGN"))
-        design_items = []
-        for label, slot, icon in [
-            ("Import Premises (AddressBase)",   self._on_import_premises,  "import_premises_addressbase.svg"),
-            ("Build Areas",                    self._on_draw_build_area,   "build_areas.svg"),
-            ("Place Cabinet / POP",             self._on_place_pop,        "place_cabinet_pop.svg"),
-            ("Edit Cabinet / POP",              self._on_edit_pop,         "edit_cabinet_pop.svg"),
-            ("Digitise Duct",                   self._on_digitise_duct,    "digitise_duct.svg"),
-            ("Digitise Cable",                  self._on_digitise_fibre,   "digitise_cable.svg"),
-            ("Digitise Drop Duct",              self._on_digitise_drop,    "digitise_drop_duct.svg"),
-            ("Digitise Bundle",                 self._on_digitise_bundle,  "digitise_bundle.svg"),
-            ("Place Chamber",                   self._on_place_chamber,    "place_chamber.svg"),
-            ("Place Joint",                     self._on_place_joint,      "place_joint.svg"),
-        ]:
-            row = self._tool_button(label, slot, icon=icon)
-            cl.addWidget(row)
-            design_items.append(self._dialpad_item(row, icon))
-        cl.addWidget(self._divider())
-        toggle.add_section("DESIGN", design_items)
+        # ── Helper to build a collapsible group ───────────────────────
+        all_dialpad_items = []
+        def _add_group(group_title, tools, expanded=True):
+            hdr, grp_content, grp_layout = self._collapsible_section(
+                group_title, len(tools), start_expanded=expanded)
+            cl.addWidget(hdr)
+            cl.addWidget(grp_content)
+            items = []
+            for label, slot, icon in tools:
+                btn_row = self._tool_button(label, slot, icon=icon)
+                grp_layout.addWidget(btn_row)
+                items.append(self._dialpad_item(btn_row, icon))
+            all_dialpad_items.extend(items)
+            toggle.add_section(group_title, items)
 
-        # CROSSINGS (not PIA-specific — available in Design tab)
-        cl.addWidget(self._section_label("CROSSINGS"))
-        crossings_items = []
-        for label, slot, icon in [
-            ("Digitise Road Crossing",    self._on_digitise_road_crossing,    "digitise_road_crossing.svg"),
-            ("Digitise Stream Crossing",  self._on_digitise_stream_crossing,  "digitise_stream_crossing.svg"),
-        ]:
-            row = self._tool_button(label, slot, icon=icon)
-            cl.addWidget(row)
-            crossings_items.append(self._dialpad_item(row, icon))
-        cl.addWidget(self._divider())
-        toggle.add_section("CROSSINGS", crossings_items)
+        # ── WORKFLOW ──────────────────────────────────────────────────
+        _add_group("WORKFLOW", [
+            ("Import Premises (AddressBase)", self._on_import_premises,  "import_premises_addressbase.svg"),
+            ("Build Areas",                   self._on_draw_build_area,  "build_areas.svg"),
+            ("Place Cabinet / POP",           self._on_place_pop,        "place_cabinet_pop.svg"),
+        ], expanded=True)
 
-        # FIBRE
-        cl.addWidget(self._section_label("FIBRE"))
-        fibre_items = []
-        for label, slot, icon in [
-            ("Assign Fibre Roles",      self._on_assign_fibres,        "assign_fibre_roles.svg"),
-            ("Fibre Trace",             self._on_fibre_trace,          "fibre_trace.svg"),
-            ("Fibre Count Calculator",  self._on_fibre_count,          "fibre_count_calculator.svg"),
-            ("Route Splice Export",     self._on_route_splice_export,  "route_splice_export.svg"),
-        ]:
-            row = self._tool_button(label, slot, icon=icon)
-            cl.addWidget(row)
-            fibre_items.append(self._dialpad_item(row, icon))
-        cl.addWidget(self._divider())
-        toggle.add_section("FIBRE", fibre_items)
+        # ── CIVIL ─────────────────────────────────────────────────────
+        _add_group("CIVIL", [
+            ("Edit Cabinet / POP",    self._on_edit_pop,                  "edit_cabinet_pop.svg"),
+            ("Place Chamber",         self._on_place_chamber,             "place_chamber.svg"),
+            ("Digitise Duct",         self._on_digitise_duct,             "digitise_duct.svg"),
+            ("Digitise Drop Duct",    self._on_digitise_drop,             "digitise_drop_duct.svg"),
+            ("Road Crossing",         self._on_digitise_road_crossing,    "digitise_road_crossing.svg"),
+            ("Stream Crossing",       self._on_digitise_stream_crossing,  "digitise_stream_crossing.svg"),
+        ], expanded=True)
 
-        # BUILD
-        cl.addWidget(self._section_label("BUILD"))
-        build_items = []
-        for label, slot, icon in [
-            ("Splice Plan Export",   self._on_splice_plan, "splice_plan_export.svg"),
-            ("Single Line Diagram",  self._on_sld,         "single_line_diagram.svg"),
-        ]:
-            row = self._tool_button(label, slot, icon=icon)
-            cl.addWidget(row)
-            build_items.append(self._dialpad_item(row, icon))
-        cl.addWidget(self._divider())
-        toggle.add_section("BUILD", build_items)
+        # ── FIBRE ─────────────────────────────────────────────────────
+        _add_group("FIBRE", [
+            ("Digitise Cable",       self._on_digitise_fibre,   "digitise_cable.svg"),
+            ("Digitise Bundle",      self._on_digitise_bundle,  "digitise_bundle.svg"),
+            ("Place Joint",          self._on_place_joint,      "place_joint.svg"),
+            ("Assign Fibre Roles",   self._on_assign_fibres,    "assign_fibre_roles.svg"),
+        ], expanded=True)
 
-        # TOOLS
-        cl.addWidget(self._section_label("TOOLS"))
-        tools_items = []
-        for label, slot, icon in [
-            ("Edit Asset",               self._on_edit_asset,      "edit_cabinet_pop.svg"),
-            ("Delete Asset",             self._on_delete_asset,    "delete_asset.svg"),
-            ("Move Asset",               self._on_move_asset,      "move_asset.svg"),
-            ("Validate Fibre Routes",    self._on_validate_routes, "validate_fibre_routes.svg"),
-            ("Bill of Materials",        self._on_bom,             "bill_of_materials.svg"),
-            ("Cabinet Cost Calculator",  self._on_cabinet_cost_calculator, "cabinet_cost_calculator.svg"),
-        ]:
-            row = self._tool_button(label, slot, icon=icon)
-            cl.addWidget(row)
-            tools_items.append(self._dialpad_item(row, icon))
-        toggle.add_section("TOOLS", tools_items)
+        # ── ANALYSIS ──────────────────────────────────────────────────
+        _add_group("ANALYSIS", [
+            ("Fibre Trace",           self._on_fibre_trace,          "fibre_trace.svg"),
+            ("Fibre Count",           self._on_fibre_count,          "fibre_count_calculator.svg"),
+            ("Validate Fibre Routes", self._on_validate_routes,      "validate_fibre_routes.svg"),
+        ], expanded=False)
+
+        # ── OUTPUTS ───────────────────────────────────────────────────
+        _add_group("OUTPUTS", [
+            ("Splice Plan Export",    self._on_splice_plan,              "splice_plan_export.svg"),
+            ("Route Splice Export",   self._on_route_splice_export,      "route_splice_export.svg"),
+            ("Single Line Diagram",   self._on_sld,                      "single_line_diagram.svg"),
+            ("Bill of Materials",     self._on_bom,                      "bill_of_materials.svg"),
+            ("Cabinet Cost",          self._on_cabinet_cost_calculator,   "cabinet_cost_calculator.svg"),
+        ], expanded=False)
+
+        # ── TOOLS ─────────────────────────────────────────────────────
+        _add_group("TOOLS", [
+            ("Edit Asset",    self._on_edit_asset,    "edit_cabinet_pop.svg"),
+            ("Delete Asset",  self._on_delete_asset,  "delete_asset.svg"),
+            ("Move Asset",    self._on_move_asset,    "move_asset.svg"),
+        ], expanded=False)
 
         cl.addItem(QSpacerItem(0, 0, QSizePolicy.Minimum, QSizePolicy.Expanding))
 
-        footer = QLabel(f"Conductor v{plugin_version()}  \u00B7  Mav3r1ck Media Studio")
+        footer = QLabel(f"Conductor v2  \u00B7  Mav3r1ck Media Studio")
         footer.setStyleSheet(f"color:{MID}; font-size:10px; padding:8px 0px;")
         footer.setAlignment(Qt.AlignCenter)
         cl.addWidget(footer)
 
-        stack = toggle.build(content)
+        stack = toggle.build(container)
         scroll_area.setWidget(stack)
         return scroll_area
+
 
     def _build_pia_tab(self):
         """Build the PIA tab content."""
