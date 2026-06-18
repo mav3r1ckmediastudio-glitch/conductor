@@ -321,31 +321,21 @@ class ConductorAssetDock(QDockWidget):
 
     def eventFilter(self, obj, event):
         """Intercept canvas mouse press to identify the clicked asset.
-
-        Only fires the inspector when the user is in plain navigation mode.
-        If any Conductor map tool (Edit/Delete/Move/Place/Digitise) is active,
-        we bail out so that tool's own click handling — including its stacked-
-        asset picker — runs without interference.
+        Skips when any Conductor map tool is active — those tools manage
+        their own click handling exclusively.
         """
+        from .conductor_utils import conductor_tool_active
         if (event.type() == QEvent.MouseButtonPress
                 and event.button() == Qt.LeftButton
-                and self._project):
+                and self._project
+                and not conductor_tool_active(self.iface.mapCanvas())):
             canvas = self.iface.mapCanvas()
-            active_tool = canvas.mapTool()
-            # Skip if a Conductor tool is driving the canvas. Conductor tools
-            # live in the conductor_v2.tools package; match on the tool's module.
-            if active_tool is not None:
-                mod = type(active_tool).__module__ or ""
-                if ".tools." in mod or mod.endswith("select_delete") or mod.endswith("edit_assets"):
-                    return False
-            # Convert pixel pos to map point
             pixel_pt = event.pos()
             map_pt = canvas.getCoordinateTransform().toMapCoordinates(
                 pixel_pt.x(), pixel_pt.y()
             )
-            # Use QTimer so we don't block the event
             QTimer.singleShot(50, lambda: self._on_canvas_click(map_pt))
-        return False   # never consume the event
+        return False
 
     # ── Map click handler ────────────────────────────────────────────────────
 

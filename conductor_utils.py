@@ -587,3 +587,18 @@ def _apply_inverse(entry, project):
 
     else:
         raise RuntimeError(f"Unknown action type: {action}")
+
+def conductor_tool_active(canvas):
+    """Return True if a Conductor map tool is currently active on the canvas.
+
+    Use this in any eventFilter to avoid intercepting clicks that belong to
+    Fibre Trace, Edit Asset, Delete Asset, Place Joint, Digitise tools, etc.
+    All Conductor tools live in the conductor_v2.tools package, so a module
+    path check is sufficient and future-proof — any new tool added to that
+    package is automatically covered without changing this function.
+    """
+    tool = canvas.mapTool()
+    if tool is None:
+        return False
+    mod = type(tool).__module__ or ""
+    return ".tools." in mod

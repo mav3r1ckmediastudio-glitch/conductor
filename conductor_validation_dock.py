@@ -581,18 +581,12 @@ class ConductorValidationDock(QDockWidget):
 
     def eventFilter(self, obj, event):
         from qgis.PyQt.QtCore import QEvent, QTimer
+        from .conductor_utils import conductor_tool_active
         if (event.type() == QEvent.MouseButtonPress
                 and event.button() == Qt.LeftButton
-                and self._project):
+                and self._project
+                and not conductor_tool_active(self.iface.mapCanvas())):
             canvas = self.iface.mapCanvas()
-            # Don't intercept clicks when a Conductor map tool is active —
-            # let the tool handle the click exclusively (Fibre Trace, Edit,
-            # Delete, Place, Digitise tools all manage their own click logic).
-            active_tool = canvas.mapTool()
-            if active_tool is not None:
-                mod = type(active_tool).__module__ or ""
-                if ".tools." in mod:
-                    return False
             pt = event.pos()
             map_pt = canvas.getCoordinateTransform().toMapCoordinates(pt.x(), pt.y())
             QTimer.singleShot(50, lambda: self._identify_asset(map_pt))
