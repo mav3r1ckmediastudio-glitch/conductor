@@ -603,11 +603,11 @@ class ConductorDockWidget(QDockWidget):
         # Header
         header = QWidget()
         header.setStyleSheet(
-            f"QWidget {{ background:{LIGHT}; border-radius:4px; }}"
+            f"QWidget {{ background:{LIGHT}; border-radius:4px; border-top: 1px solid {MID}; }}"
             f"QWidget:hover {{ background:#243347; }}"
         )
         header.setCursor(Qt.PointingHandCursor)
-        header.setFixedHeight(34)
+        header.setFixedHeight(36)
         h_layout = QHBoxLayout(header)
         h_layout.setContentsMargins(8, 0, 8, 0)
         h_layout.setSpacing(6)
@@ -634,8 +634,8 @@ class ConductorDockWidget(QDockWidget):
         section_content = QWidget()
         section_content.setStyleSheet("background:transparent;")
         section_layout = QVBoxLayout(section_content)
-        section_layout.setContentsMargins(0, 2, 0, 4)
-        section_layout.setSpacing(0)
+        section_layout.setContentsMargins(0, 4, 0, 6)
+        section_layout.setSpacing(1)
         section_content.setVisible(start_expanded)
 
         _state = [start_expanded]
@@ -668,7 +668,7 @@ class ConductorDockWidget(QDockWidget):
         container.setStyleSheet(f"background:{NAVY};")
         cl = QVBoxLayout(container)
         cl.setContentsMargins(8, 8, 8, 8)
-        cl.setSpacing(4)
+        cl.setSpacing(2)
 
         toggle = DialPadToggle(self, "design", columns=4)
         self._design_toggle = toggle
