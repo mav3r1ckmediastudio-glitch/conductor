@@ -103,7 +103,7 @@ class HelpDialog(QtWidgets.QDialog):
 
         self.title_label = QtWidgets.QLabel()
         self.title_label.setStyleSheet(
-            f"font-weight: bold; font-size: 13pt; color: {NAVY};"
+            f"font-weight: 700; font-size: 13pt; color: #E8EDF2;"
         )
         self._layout.addWidget(self.title_label)
 
@@ -124,9 +124,9 @@ class HelpDialog(QtWidgets.QDialog):
         self.manual_btn = QtWidgets.QPushButton("\U0001F4D6  Open Manual")
         self.manual_btn.setCursor(QtCore.Qt.PointingHandCursor)
         self.manual_btn.setStyleSheet(
-            f"QPushButton {{ background:{WHITE}; color:{TEAL}; border:1px solid {TEAL};"
+            f"QPushButton {{ background:transparent; color:{TEAL}; border:1px solid {TEAL};"
             f" border-radius:4px; padding:6px 16px; font-size:12px; }}"
-            f"QPushButton:hover {{ background:{TEAL}; color:{WHITE}; }}"
+            f"QPushButton:hover {{ background:{TEAL}; color:#0F1923; }}"
         )
         self.manual_btn.clicked.connect(self._open_manual)
         close_row.addWidget(self.manual_btn)
@@ -135,10 +135,10 @@ class HelpDialog(QtWidgets.QDialog):
         close_btn = QtWidgets.QPushButton("Close")
         close_btn.setCursor(QtCore.Qt.PointingHandCursor)
         close_btn.setStyleSheet(
-            f"QPushButton {{ background:{WHITE}; color:{NAVY}; border:1px solid {MID};"
+            f"QPushButton {{ background:#1A2332; color:#E8EDF2; border:1px solid #2D3F52;"
             f" border-radius:4px; padding:6px 16px; font-size:12px; }}"
             f"QPushButton:hover {{ border-color:{TEAL}; color:{TEAL}; }}"
-            f"QPushButton:pressed {{ background:{LIGHT}; }}"
+            f"QPushButton:pressed {{ background:#2D3F52; }}"
         )
         close_btn.clicked.connect(self.close)
         close_row.addWidget(close_btn)
@@ -201,16 +201,16 @@ class HelpDialog(QtWidgets.QDialog):
         related = entry.get("related_tools", [])
         if related:
             label = QtWidgets.QLabel("Related:")
-            label.setStyleSheet(f"color:{NAVY}; font-size:11px;")
+            label.setStyleSheet(f"color:{GREY}; font-size:11px;")
             self.related_row.addWidget(label)
             for related_id in related:
                 related_title = self.store.get(related_id).get("title", related_id)
                 btn = QtWidgets.QPushButton(related_title)
                 btn.setCursor(QtCore.Qt.PointingHandCursor)
                 btn.setStyleSheet(
-                    f"QPushButton {{ background:{WHITE}; color:{TEAL}; border:1px solid {TEAL};"
+                    f"QPushButton {{ background:transparent; color:{TEAL}; border:1px solid {TEAL};"
                     f" border-radius:4px; padding:3px 10px; font-size:11px; }}"
-                    f"QPushButton:hover {{ background:{TEAL}; color:{WHITE}; }}"
+                    f"QPushButton:hover {{ background:{TEAL}; color:#0F1923; }}"
                 )
                 btn.clicked.connect(lambda _, rid=related_id: self.show_tool(rid))
                 self.related_row.addWidget(btn)
