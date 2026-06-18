@@ -11,6 +11,8 @@ from qgis.PyQt.QtWidgets import QAction, QMessageBox
 from qgis.core import QgsProject
 
 from .conductor_dockwidget import ConductorDockWidget
+from .conductor_validation_dock import ConductorValidationDock
+from .conductor_routes_dock import ConductorRoutesDock
 from .conductor_utils import plugin_version
 
 
@@ -33,6 +35,8 @@ class Conductor:
         self.toolbar.setObjectName("ConductorToolbar")
 
         self.dockwidget = None
+        self._val_dock = None
+        self._routes_dock = None
         self._toggle_action = None  # toolbar/menu action for the dock panel
 
     # ── ICON HELPER ────────────────────────────────────────────────────────────
@@ -107,6 +111,14 @@ class Conductor:
 
         del self.toolbar
 
+        if self._routes_dock:
+            self.iface.removeDockWidget(self._routes_dock)
+            self._routes_dock.close()
+            self._routes_dock = None
+        if self._val_dock:
+            self.iface.removeDockWidget(self._val_dock)
+            self._val_dock.close()
+            self._val_dock = None
         if self.dockwidget:
             self.iface.removeDockWidget(self.dockwidget)
             self.dockwidget.close()
@@ -128,11 +140,26 @@ class Conductor:
             self._toggle_action.setChecked(True)
 
     def _create_dockwidget(self):
-        """Instantiate, register, and immediately show the dock panel."""
+        """Instantiate, register, and immediately show all three dock panels."""
+        # Left dock — tools
         self.dockwidget = ConductorDockWidget(self.iface)
-        self.iface.addDockWidget(Qt.RightDockWidgetArea, self.dockwidget)
+        self.iface.addDockWidget(Qt.LeftDockWidgetArea, self.dockwidget)
         self.dockwidget.show()
         self._toggle_action.setChecked(True)
+
+        # Right dock — validation summary + engineer outputs
+        self._val_dock = ConductorValidationDock(self.dockwidget, self.iface)
+        self.iface.addDockWidget(Qt.RightDockWidgetArea, self._val_dock)
+        self._val_dock.show()
+
+        # Bottom panel — routes table
+        self._routes_dock = ConductorRoutesDock(self.dockwidget, self.iface)
+        self.iface.addDockWidget(Qt.BottomDockWidgetArea, self._routes_dock)
+        self._routes_dock.show()
+
+        # Wire the dockwidget so it can notify secondary panels on project open
+        self.dockwidget._val_dock    = self._val_dock
+        self.dockwidget._routes_dock = self._routes_dock
 
         # Keep toolbar button in sync when user closes the panel via the X
         self.dockwidget.visibilityChanged.connect(self._on_dock_visibility_changed)

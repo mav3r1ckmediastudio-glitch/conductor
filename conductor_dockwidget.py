@@ -5,7 +5,7 @@ Main UI surface. Manages project state and enables/disables tool buttons.
 """
 
 import os
-from qgis.PyQt.QtCore import Qt, pyqtSignal, QSize
+from qgis.PyQt.QtCore import Qt, pyqtSignal, QSize, QTimer
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import (
     QDockWidget, QWidget, QVBoxLayout, QHBoxLayout,
@@ -402,6 +402,11 @@ class ConductorDockWidget(QDockWidget):
         # Project summary panel
         root.addWidget(self._build_summary_panel())
 
+        # ── ACTIVE TOOL STATUS BAR ────────────────────────────────────────
+        self._active_tool_bar = self._build_active_tool_bar()
+        root.addWidget(self._active_tool_bar)
+        self._active_tool_bar.setVisible(False)  # hidden until a tool activates
+
         # ── TAB WIDGET ────────────────────────────────────────────────────
         self._tabs = QTabWidget()
         self._tabs.setStyleSheet(f"""
@@ -657,6 +662,206 @@ class ConductorDockWidget(QDockWidget):
 
         return header, section_content, section_layout
 
+    # ── RECENT TOOLS ─────────────────────────────────────────────────────────
+
+    _MAX_RECENT = 5
+
+    def _record_recent_tool(self, tool_name):
+        """Persist a tool name + timestamp to QgsSettings and refresh the UI."""
+        import json
+        from datetime import datetime
+        settings = QgsSettings()
+        raw = settings.value("Conductor/v2/recent_tools", "[]")
+        try:
+            recent = json.loads(raw)
+        except Exception:
+            recent = []
+
+        # Remove existing entry for this tool so it bubbles to top
+        recent = [r for r in recent if r.get("name") != tool_name]
+        recent.insert(0, {"name": tool_name, "ts": datetime.now().isoformat()})
+        recent = recent[:self._MAX_RECENT]
+        settings.setValue("Conductor/v2/recent_tools", json.dumps(recent))
+
+        if hasattr(self, "_recent_tools_container"):
+            self._refresh_recent_tools_ui()
+
+    def _load_recent_tools(self):
+        import json
+        settings = QgsSettings()
+        raw = settings.value("Conductor/v2/recent_tools", "[]")
+        try:
+            return json.loads(raw)
+        except Exception:
+            return []
+
+    def _refresh_recent_tools_ui(self):
+        """Rebuild the Recent Tools list widget from QgsSettings."""
+        from datetime import datetime
+        container = self._recent_tools_container
+        layout = container.layout()
+        # Clear existing rows
+        while layout.count():
+            item = layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        recent = self._load_recent_tools()
+        if not recent:
+            lbl = QLabel("No tools used yet.")
+            lbl.setStyleSheet(f"color:{MID}; font-size:10px; padding:4px 0px;")
+            layout.addWidget(lbl)
+            return
+
+        now = datetime.now()
+        for entry in recent:
+            name = entry.get("name", "")
+            ts_str = entry.get("ts", "")
+            # Human-readable relative time
+            try:
+                ts = datetime.fromisoformat(ts_str)
+                delta = int((now - ts).total_seconds() / 60)
+                if delta < 1:
+                    age = "Just now"
+                elif delta == 1:
+                    age = "1 min ago"
+                elif delta < 60:
+                    age = f"{delta} min ago"
+                else:
+                    age = f"{delta//60} hr ago"
+            except Exception:
+                age = ""
+
+            row = QWidget()
+            row.setStyleSheet(
+                f"QWidget {{ background:transparent; border-radius:3px; }}"
+                f"QWidget:hover {{ background:{LIGHT}; }}"
+            )
+            row.setCursor(Qt.PointingHandCursor)
+            rl = QHBoxLayout(row)
+            rl.setContentsMargins(4, 3, 4, 3)
+            rl.setSpacing(6)
+
+            dot = QLabel("○")
+            dot.setStyleSheet(f"color:{TEAL}; font-size:9px; background:transparent;")
+            dot.setFixedWidth(12)
+            rl.addWidget(dot)
+
+            name_lbl = QLabel(name)
+            name_lbl.setStyleSheet(f"color:{WHITE}; font-size:11px; background:transparent;")
+            rl.addWidget(name_lbl, 1)
+
+            age_lbl = QLabel(age)
+            age_lbl.setStyleSheet(f"color:{MID}; font-size:10px; background:transparent;")
+            rl.addWidget(age_lbl)
+
+            # Click to re-activate tool by name lookup
+            _name = name
+            row.mousePressEvent = lambda e, n=_name: self._reactivate_tool_by_name(n)
+            layout.addWidget(row)
+
+    def _reactivate_tool_by_name(self, name):
+        """Find the tool callback by display label and invoke it."""
+        # Build a name→callback map on first call
+        if not hasattr(self, "_label_to_callback"):
+            self._label_to_callback = {
+                "Import Premises (AddressBase)": self._on_import_premises,
+                "Build Areas":                   self._on_draw_build_area,
+                "Place Cabinet / POP":           self._on_place_pop,
+                "Edit Cabinet / POP":            self._on_edit_pop,
+                "Place Chamber":                 self._on_place_chamber,
+                "Digitise Duct":                 self._on_digitise_duct,
+                "Digitise Drop Duct":            self._on_digitise_drop,
+                "Road Crossing":                 self._on_digitise_road_crossing,
+                "Stream Crossing":               self._on_digitise_stream_crossing,
+                "Digitise Cable":                self._on_digitise_fibre,
+                "Digitise Bundle":               self._on_digitise_bundle,
+                "Place Joint":                   self._on_place_joint,
+                "Assign Fibre Roles":            self._on_assign_fibres,
+                "Fibre Trace":                   self._on_fibre_trace,
+                "Fibre Count":                   self._on_fibre_count,
+                "Validate Fibre Routes":         self._on_validate_routes,
+                "Splice Plan Export":            self._on_splice_plan,
+                "Route Splice Export":           self._on_route_splice_export,
+                "Single Line Diagram":           self._on_sld,
+                "Bill of Materials":             self._on_bom,
+                "Cabinet Cost":                  self._on_cabinet_cost_calculator,
+                "Edit Asset":                    self._on_edit_asset,
+                "Delete Asset":                  self._on_delete_asset,
+                "Move Asset":                    self._on_move_asset,
+                # PIA
+                "Place Pole":                    self._on_place_pole,
+                "Place PIA UG Chamber":          self._on_place_pia_chamber,
+                "Digitise Aerial Span":          self._on_digitise_aerial_span,
+                "Digitise PIA UG Duct":          self._on_digitise_pia_ug_duct,
+                "Place CBT":                     self._on_place_cbt,
+                "Draw CBT Tail":                 self._on_digitise_cbt_tail,
+                "Digitise Aerial Drop":          self._on_digitise_aerial_drop,
+                "Digitise PIA UG Drop":          self._on_digitise_pia_ug_drop,
+            }
+        cb = self._label_to_callback.get(name)
+        if cb:
+            cb()
+
+    def _build_active_tool_bar(self):
+        """Thin 36px strip between summary and tabs showing current tool state."""
+        bar = QWidget()
+        bar.setFixedHeight(36)
+        bar.setStyleSheet(
+            f"background:{LIGHT}; border-top:1px solid {MID}; border-bottom:1px solid {MID};"
+        )
+        bl = QHBoxLayout(bar)
+        bl.setContentsMargins(8, 0, 8, 0)
+        bl.setSpacing(8)
+
+        self._tool_bar_icon = QLabel("⬤")
+        self._tool_bar_icon.setFixedWidth(14)
+        self._tool_bar_icon.setStyleSheet(f"color:{TEAL}; font-size:10px;")
+        bl.addWidget(self._tool_bar_icon)
+
+        self._tool_bar_name = QLabel("—")
+        self._tool_bar_name.setStyleSheet(f"color:{WHITE}; font-size:12px; font-weight:600;")
+        bl.addWidget(self._tool_bar_name)
+
+        self._tool_bar_hint = QLabel("Right-click to finish · Esc to cancel")
+        self._tool_bar_hint.setStyleSheet(f"color:{GREY}; font-size:10px;")
+        bl.addWidget(self._tool_bar_hint, 1)
+
+        dismiss_btn = QToolButton()
+        dismiss_btn.setText("✕")
+        dismiss_btn.setFixedSize(20, 20)
+        dismiss_btn.setToolTip("Cancel active tool (Esc)")
+        dismiss_btn.setCursor(Qt.PointingHandCursor)
+        dismiss_btn.setStyleSheet(f"""
+            QToolButton {{ background:transparent; border:none; color:{GREY}; font-size:12px; }}
+            QToolButton:hover {{ color:{RED}; }}
+        """)
+        dismiss_btn.clicked.connect(self._on_cancel_active_tool)
+        bl.addWidget(dismiss_btn)
+
+        return bar
+
+    def _show_active_tool(self, name, hint="Right-click to finish · Esc to cancel"):
+        """Show the active tool status bar with tool name and hint text."""
+        self._tool_bar_name.setText(name)
+        self._tool_bar_hint.setText(hint)
+        self._active_tool_bar.setVisible(True)
+        # Also record in recent tools
+        self._record_recent_tool(name)
+
+    def _hide_active_tool_bar(self):
+        """Hide the active tool status bar."""
+        self._active_tool_bar.setVisible(False)
+
+    def _on_cancel_active_tool(self):
+        """Dismiss the active map tool (equivalent to Esc)."""
+        try:
+            self.iface.mapCanvas().unsetMapTool(self.iface.mapCanvas().mapTool())
+        except Exception:
+            pass
+        self._clear_active_button()
+        self._hide_active_tool_bar()
+
     def _build_design_tab(self):
         """Design tab with collapsible grouped tool sections."""
         scroll_area = QScrollArea()
@@ -720,6 +925,37 @@ class ConductorDockWidget(QDockWidget):
         cl.addWidget(undo_row_widget)
         cl.addWidget(self._divider())
         toggle.add_section("PROJECT", project_items)
+
+        # ── RECENT TOOLS ──────────────────────────────────────────────
+        recent_header_row = QWidget()
+        rhr = QHBoxLayout(recent_header_row)
+        rhr.setContentsMargins(0, 6, 0, 0)
+        rhr.setSpacing(0)
+        recent_lbl = self._section_label("RECENT TOOLS")
+        rhr.addWidget(recent_lbl, 1)
+        clear_btn = QPushButton("Clear")
+        clear_btn.setFixedHeight(18)
+        clear_btn.setStyleSheet(
+            f"QPushButton {{ background:transparent; color:{MID}; border:none; font-size:10px; padding:0 4px; }}"
+            f"QPushButton:hover {{ color:{TEAL}; }}"
+        )
+        def _clear_recent():
+            QgsSettings().setValue("Conductor/v2/recent_tools", "[]")
+            self._refresh_recent_tools_ui()
+        clear_btn.clicked.connect(_clear_recent)
+        rhr.addWidget(clear_btn)
+        cl.addWidget(recent_header_row)
+
+        self._recent_tools_container = QWidget()
+        self._recent_tools_container.setStyleSheet("background:transparent;")
+        rtl = QVBoxLayout(self._recent_tools_container)
+        rtl.setContentsMargins(0, 2, 0, 6)
+        rtl.setSpacing(0)
+        cl.addWidget(self._recent_tools_container)
+        # Populate immediately on build
+        QTimer.singleShot(0, self._refresh_recent_tools_ui)
+
+        cl.addWidget(self._divider())
 
         # ── Helper to build a collapsible group ───────────────────────
         all_dialpad_items = []
@@ -797,60 +1033,59 @@ class ConductorDockWidget(QDockWidget):
 
 
     def _build_pia_tab(self):
-        """Build the PIA tab content."""
+        """PIA tab with collapsible grouped tool sections — mirrors Design tab pattern."""
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setFrameShape(QFrame.NoFrame)
-        scroll_area.setStyleSheet(f"background:{LIGHT}; border:none;")
+        scroll_area.setStyleSheet(f"background:{NAVY}; border:none;")
 
-        content = QWidget()
-        content.setStyleSheet(f"background-color: {LIGHT};")
-        cl = QVBoxLayout(content)
-        cl.setContentsMargins(12, 16, 12, 16)
-        cl.setSpacing(8)
+        container = QWidget()
+        container.setStyleSheet(f"background:{NAVY};")
+        cl = QVBoxLayout(container)
+        cl.setContentsMargins(8, 8, 8, 8)
+        cl.setSpacing(2)
 
         toggle = DialPadToggle(self, "pia", columns=4)
         self._pia_toggle = toggle
 
         # Info label
-        info_row = QWidget()
-        ir = QHBoxLayout(info_row)
-        ir.setContentsMargins(0, 0, 0, 0)
-        ir.setSpacing(6)
         info = QLabel("Physical Infrastructure Access tools for pole-mounted and Openreach subduct routes.")
         info.setWordWrap(True)
-        info.setStyleSheet(f"color:{MID}; font-size:11px; padding-bottom:6px;")
-        ir.addWidget(info, 1)
-        cl.addWidget(info_row)
+        info.setStyleSheet(f"color:{MID}; font-size:11px; padding:0px 4px 6px 4px;")
+        cl.addWidget(info)
 
-        # CIVIL
-        cl.addWidget(self._section_label("CIVIL"))
-        civil_items = []
-        for label, slot, icon in [
-            ("Place Pole",              self._on_place_pole,           "place_pole.svg"),
-            ("Place PIA UG Chamber",    self._on_place_pia_chamber,     "place_pia_ug_chamber.svg"),
-            ("Digitise Aerial Span",    self._on_digitise_aerial_span,  "digitise_aerial_span.svg"),
-            ("Digitise PIA UG Duct",    self._on_digitise_pia_ug_duct,  "digitise_pia_ug_duct.svg"),
-        ]:
-            row = self._tool_button(label, slot, icon=icon)
-            cl.addWidget(row)
-            civil_items.append(self._dialpad_item(row, icon))
-        cl.addWidget(self._divider())
-        toggle.add_section("CIVIL", civil_items)
+        # ── Helper (same pattern as Design tab) ───────────────────────
+        def _add_pia_group(group_title, tools, expanded=True):
+            hdr, grp_content, grp_layout = self._collapsible_section(
+                group_title, len(tools), start_expanded=expanded)
+            cl.addWidget(hdr)
+            cl.addWidget(grp_content)
+            items = []
+            for label, slot, icon in tools:
+                btn_row = self._tool_button(label, slot, icon=icon)
+                grp_layout.addWidget(btn_row)
+                items.append(self._dialpad_item(btn_row, icon))
+            toggle.add_section(group_title, items)
 
-        # OPTICAL
-        cl.addWidget(self._section_label("OPTICAL"))
-        optical_items = []
-        for label, slot, icon in [
-            ("Place CBT",               self._on_place_cbt,            "place_cbt.svg"),
-            ("Draw CBT Tail",           self._on_digitise_cbt_tail,    "digitise_cbt_tail.svg"),
-            ("Digitise Aerial Drop",    self._on_digitise_aerial_drop, "digitise_aerial_drop.svg"),
-            ("Digitise PIA UG Drop",    self._on_digitise_pia_ug_drop, "digitise_pia_ug_drop.svg"),
-        ]:
-            row = self._tool_button(label, slot, icon=icon)
-            cl.addWidget(row)
-            optical_items.append(self._dialpad_item(row, icon))
-        toggle.add_section("OPTICAL", optical_items)
+        # ── POLES & CBTs ──────────────────────────────────────────────
+        _add_pia_group("POLES & CBTs", [
+            ("Place Pole",     self._on_place_pole,          "place_pole.svg"),
+            ("Place CBT",      self._on_place_cbt,           "place_cbt.svg"),
+            ("Draw CBT Tail",  self._on_digitise_cbt_tail,   "digitise_cbt_tail.svg"),
+        ], expanded=True)
+
+        # ── AERIAL ────────────────────────────────────────────────────
+        _add_pia_group("AERIAL", [
+            ("Digitise Aerial Span", self._on_digitise_aerial_span,  "digitise_aerial_span.svg"),
+            ("Digitise Aerial Drop", self._on_digitise_aerial_drop,  "digitise_aerial_drop.svg"),
+        ], expanded=True)
+
+        # ── PIA UNDERGROUND ───────────────────────────────────────────
+        _add_pia_group("PIA UNDERGROUND", [
+            ("Place PIA UG Chamber", self._on_place_pia_chamber,    "place_pia_ug_chamber.svg"),
+            ("Digitise PIA UG Duct", self._on_digitise_pia_ug_duct, "digitise_pia_ug_duct.svg"),
+            ("Digitise PIA UG Drop", self._on_digitise_pia_ug_drop, "digitise_pia_ug_drop.svg"),
+        ], expanded=True)
 
         cl.addItem(QSpacerItem(0, 0, QSizePolicy.Minimum, QSizePolicy.Expanding))
 
@@ -859,7 +1094,7 @@ class ConductorDockWidget(QDockWidget):
         pia_footer.setAlignment(Qt.AlignCenter)
         cl.addWidget(pia_footer)
 
-        stack = toggle.build(content)
+        stack = toggle.build(container)
         scroll_area.setWidget(stack)
         return scroll_area
 
@@ -1036,6 +1271,7 @@ class ConductorDockWidget(QDockWidget):
 
     def _clear_active_button(self):
         """Called when the map tool is deactivated externally (Esc, another tool)."""
+        self._hide_active_tool_bar()
         if self._active_tool_btn:
             self._active_tool_btn.setProperty("conductor_active", False)
             self._active_tool_btn.style().unpolish(self._active_tool_btn)
@@ -1096,6 +1332,17 @@ class ConductorDockWidget(QDockWidget):
                     pass
 
         self._on_refresh_summary()
+        # Notify secondary docks if they have been registered by conductor.py
+        if hasattr(self, "_val_dock") and self._val_dock:
+            try:
+                self._val_dock.set_project(conductor_project)
+            except Exception:
+                pass
+        if hasattr(self, "_routes_dock") and self._routes_dock:
+            try:
+                self._routes_dock.set_project(conductor_project)
+            except Exception:
+                pass
 
     def _refresh_tool_states(self):
         """Enable/disable tools based on project state (ground-truth from gpkg).
@@ -1274,6 +1521,11 @@ class ConductorDockWidget(QDockWidget):
             return
         try:
             self._activate_tool(handler)
+            # Show active tool bar with the info hint
+            self._show_active_tool(
+                cls_name.replace("MapTool", "").replace("Digitise", "Digitise ").strip(),
+                info
+            )
             import importlib
             mod = importlib.import_module(".tools." + module, __package__)
             tool = getattr(mod, cls_name)(self.iface.mapCanvas(), self._project)
