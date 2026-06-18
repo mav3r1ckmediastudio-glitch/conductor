@@ -278,7 +278,7 @@ class DigitiseDuctDialog(QDialog):
         f4.addRow(self._lbl("Permit Ref"), self.permit_ref)
 
         self.wayleave_req = QCheckBox("Private wayleave required for this duct")
-        self.wayleave_req.setStyleSheet(f"font-size:12px; color:{NAVY};")
+        self.wayleave_req.setStyleSheet(f"font-size:12px; color:{WHITE};")
         f4.addRow(self._lbl(""), self.wayleave_req)
 
         fl.addLayout(f4)

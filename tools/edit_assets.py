@@ -296,7 +296,7 @@ def _edit_duct_dialog(feat):
         f1.addRow(_lbl("Duct Type"), widgets['duct_type'])
 
         widgets['shotgun_spare'] = QCheckBox("Second barrel available (SHOTGUN only)")
-        widgets['shotgun_spare'].setStyleSheet(f"font-size:12px; color:{NAVY};")
+        widgets['shotgun_spare'].setStyleSheet(f"font-size:12px; color:{WHITE};")
         widgets['shotgun_spare'].setChecked(bool(_fv(feat,"shotgun_spare",True)))
         f1.addRow(_lbl(""), widgets['shotgun_spare'])
 
@@ -316,7 +316,7 @@ def _edit_duct_dialog(feat):
         f1.addRow(_lbl("Permit Ref"), widgets['permit_ref'])
 
         widgets['wayleave_req'] = QCheckBox("Private wayleave required")
-        widgets['wayleave_req'].setStyleSheet(f"font-size:12px; color:{NAVY};")
+        widgets['wayleave_req'].setStyleSheet(f"font-size:12px; color:{WHITE};")
         widgets['wayleave_req'].setChecked(bool(_fv(feat,"wayleave_req",False)))
         f1.addRow(_lbl(""), widgets['wayleave_req'])
 
@@ -517,7 +517,7 @@ def _edit_joint_dialog(feat, project=None):
         fl.addWidget(_section("SPLITTER"))
 
         widgets['has_splitter'] = QCheckBox("Contains a passive optical splitter")
-        widgets['has_splitter'].setStyleSheet(f"font-size:12px; color:{NAVY}; font-weight:bold;")
+        widgets['has_splitter'].setStyleSheet(f"font-size:12px; color:{WHITE}; font-weight:bold;")
         widgets['has_splitter'].setChecked(bool(_fv(feat,"has_splitter",False)))
         widgets['has_splitter'].setEnabled(_fv(feat,"joint_type","SPLICE") in ("SPLICE","CBT"))
         fl.addWidget(widgets['has_splitter'])
@@ -690,7 +690,7 @@ def _edit_drop_duct_dialog(feat):
         f1.addRow(_lbl("Status"), widgets['status'])
 
         widgets['wayleave_req'] = QCheckBox("Private wayleave required")
-        widgets['wayleave_req'].setStyleSheet(f"font-size:12px; color:{NAVY};")
+        widgets['wayleave_req'].setStyleSheet(f"font-size:12px; color:{WHITE};")
         widgets['wayleave_req'].setChecked(bool(_fv(feat,"wayleave_req",False)))
         f1.addRow(_lbl(""), widgets['wayleave_req'])
 
@@ -748,7 +748,7 @@ def _edit_bundle_dialog(feat):
         f1.addRow(_lbl("Status"), widgets['status'])
 
         widgets['wayleave_req'] = QCheckBox("Private wayleave required")
-        widgets['wayleave_req'].setStyleSheet(f"font-size:12px; color:{NAVY};")
+        widgets['wayleave_req'].setStyleSheet(f"font-size:12px; color:{WHITE};")
         widgets['wayleave_req'].setChecked(bool(_fv(feat,"wayleave_req",False)))
         f1.addRow(_lbl(""), widgets['wayleave_req'])
 

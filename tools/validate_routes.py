@@ -28,17 +28,17 @@ STATUS_UNSERVED = "UNSERVED"
 STATUS_ERROR    = "ERROR"
 
 STATUS_COLOURS = {
-    STATUS_OK:       QColor("#1a6b3c"),
-    STATUS_PARTIAL:  QColor("#b85c00"),
-    STATUS_UNSERVED: QColor("#c0392b"),
-    STATUS_ERROR:    QColor("#7f0000"),
+    STATUS_OK:       QColor("#34D399"),
+    STATUS_PARTIAL:  QColor("#FBBF24"),
+    STATUS_UNSERVED: QColor("#F87171"),
+    STATUS_ERROR:    QColor("#EF4444"),
 }
 
 STATUS_BG = {
-    STATUS_OK:       QColor("#eaf7ee"),
-    STATUS_PARTIAL:  QColor("#fff4e6"),
-    STATUS_UNSERVED: QColor("#fdecea"),
-    STATUS_ERROR:    QColor("#fdecea"),
+    STATUS_OK:       QColor("#13241B"),   # subtle green tint on dark
+    STATUS_PARTIAL:  QColor("#2A1F0A"),   # subtle amber tint on dark
+    STATUS_UNSERVED: QColor("#2A1214"),   # subtle red tint on dark
+    STATUS_ERROR:    QColor("#2A1214"),
 }
 
 # Display order when the table is sorted by Status — ROUTED first (all good),
@@ -626,21 +626,21 @@ class ValidateRoutesDialog(QDialog):
         root.setContentsMargins(12, 12, 12, 12)
 
         header = QLabel("Fibre Route Validator")
-        header.setStyleSheet("font-size:15px; font-weight:600; color:#1a1a1a;")
+        header.setStyleSheet("font-size:15px; font-weight:600; color:#E8EDF2;")
         root.addWidget(header)
 
         sub = QLabel("Traces every premises to its cabinet via bundles / drop ducts → joints → cables. Flags any break in the chain.")
-        sub.setStyleSheet("font-size:11px; color:#555; margin-bottom:4px;")
+        sub.setStyleSheet("font-size:11px; color:#8B9AAB; margin-bottom:4px;")
         sub.setWordWrap(True)
         root.addWidget(sub)
 
         self._summary_bar = QFrame()
-        self._summary_bar.setStyleSheet("QFrame { background:#f5f5f5; border:1px solid #ddd; border-radius:4px; padding:6px; }")
+        self._summary_bar.setStyleSheet("QFrame { background:#1A2332; border:1px solid #2D3F52; border-radius:4px; padding:6px; }")
         bar_layout = QHBoxLayout(self._summary_bar)
         bar_layout.setContentsMargins(8, 4, 8, 4)
         bar_layout.setSpacing(20)
 
-        self._lbl_total    = self._stat_label("Total",    "—", "#444")
+        self._lbl_total    = self._stat_label("Total",    "—", "#E8EDF2")
         self._lbl_routed   = self._stat_label("Routed",   "—", STATUS_COLOURS[STATUS_OK].name())
         self._lbl_partial  = self._stat_label("Partial",  "—", STATUS_COLOURS[STATUS_PARTIAL].name())
         self._lbl_unserved = self._stat_label("Unserved", "—", STATUS_COLOURS[STATUS_UNSERVED].name())
@@ -654,7 +654,7 @@ class ValidateRoutesDialog(QDialog):
         self._progress.setVisible(False)
         self._progress.setTextVisible(True)
         self._progress.setStyleSheet(
-            "QProgressBar { border:1px solid #ccc; border-radius:3px; background:#f0f0f0; height:18px; font-size:11px; } "
+            "QProgressBar { border:1px solid #2D3F52; border-radius:3px; background:#0F1923; color:#E8EDF2; height:18px; font-size:11px; } "
             "QProgressBar::chunk { background:#2c7a4b; border-radius:2px; }"
         )
         root.addWidget(self._progress)
@@ -674,9 +674,10 @@ class ValidateRoutesDialog(QDialog):
         self._table.setAlternatingRowColors(True)
         self._table.verticalHeader().setVisible(False)
         self._table.setStyleSheet(
-            "QTableWidget { font-size:12px; gridline-color:#e8e8e8; }"
-            "QTableWidget::item:selected { background:#d0e8ff; color:#000; }"
-            "QHeaderView::section { background:#f0f0f0; font-weight:600; padding:4px; border:none; border-bottom:1px solid #ccc; }"
+            "QTableWidget { font-size:12px; background:#1A2332; color:#E8EDF2; gridline-color:#2D3F52; alternate-background-color:#0F1923; }"
+            "QTableWidget::item { color:#E8EDF2; }"
+            "QTableWidget::item:selected { background:#00C9B1; color:#0F1923; }"
+            "QHeaderView::section { background:#0F1923; color:#E8EDF2; font-weight:600; padding:4px; border:none; border-bottom:1px solid #2D3F52; }"
         )
         self._table.itemSelectionChanged.connect(self._on_row_selected)
         splitter.addWidget(self._table)
@@ -686,14 +687,14 @@ class ValidateRoutesDialog(QDialog):
         detail_layout.setContentsMargins(0, 4, 0, 0)
         detail_layout.setSpacing(4)
         detail_header = QLabel("Route detail")
-        detail_header.setStyleSheet("font-size:11px; font-weight:600; color:#444;")
+        detail_header.setStyleSheet("font-size:11px; font-weight:600; color:#8B9AAB;")
         detail_layout.addWidget(detail_header)
         self._detail = QTextEdit()
         self._detail.setReadOnly(True)
         self._detail.setMaximumHeight(130)
         self._detail.setStyleSheet(
             "QTextEdit { font-family: 'Consolas','Courier New',monospace; "
-            "font-size:11px; background:#fafafa; border:1px solid #ddd; border-radius:3px; padding:4px; }"
+            "font-size:11px; background:#0F1923; color:#E8EDF2; border:1px solid #2D3F52; border-radius:3px; padding:4px; }"
         )
         detail_layout.addWidget(self._detail)
         splitter.addWidget(detail_frame)
@@ -712,20 +713,20 @@ class ValidateRoutesDialog(QDialog):
 
         self._btn_zoom = QPushButton("\u233e  Zoom to Selected")
         self._btn_zoom.setEnabled(False)
-        self._btn_zoom.setStyleSheet("QPushButton { padding:7px 14px; border-radius:4px; font-size:12px; border:1px solid #bbb; } QPushButton:hover { background:#e8e8e8; } QPushButton:disabled { color:#aaa; }")
+        self._btn_zoom.setStyleSheet("QPushButton { padding:7px 14px; border-radius:4px; font-size:12px; background:#1A2332; color:#E8EDF2; border:1px solid #2D3F52; } QPushButton:hover { background:#2D3F52; border-color:#00C9B1; } QPushButton:disabled { color:#5A6B7A; border-color:#2D3F52; }")
         self._btn_zoom.clicked.connect(self._zoom_to_selected)
 
         self._btn_export = QPushButton("\u2193  Export CSV")
         self._btn_export.setEnabled(False)
-        self._btn_export.setStyleSheet("QPushButton { padding:7px 14px; border-radius:4px; font-size:12px; border:1px solid #bbb; } QPushButton:hover { background:#e8e8e8; } QPushButton:disabled { color:#aaa; }")
+        self._btn_export.setStyleSheet("QPushButton { padding:7px 14px; border-radius:4px; font-size:12px; background:#1A2332; color:#E8EDF2; border:1px solid #2D3F52; } QPushButton:hover { background:#2D3F52; border-color:#00C9B1; } QPushButton:disabled { color:#5A6B7A; border-color:#2D3F52; }")
         self._btn_export.clicked.connect(self._export_csv)
 
         self._btn_optical = QPushButton("\u2699  Power Budget Settings")
-        self._btn_optical.setStyleSheet("QPushButton { padding:7px 14px; border-radius:4px; font-size:12px; border:1px solid #bbb; } QPushButton:hover { background:#e8e8e8; }")
+        self._btn_optical.setStyleSheet("QPushButton { padding:7px 14px; border-radius:4px; font-size:12px; background:#1A2332; color:#E8EDF2; border:1px solid #2D3F52; } QPushButton:hover { background:#2D3F52; border-color:#00C9B1; }")
         self._btn_optical.clicked.connect(self._edit_optical)
 
         self._btn_close = QPushButton("Close")
-        self._btn_close.setStyleSheet("QPushButton { padding:7px 14px; border-radius:4px; font-size:12px; border:1px solid #bbb; } QPushButton:hover { background:#e8e8e8; }")
+        self._btn_close.setStyleSheet("QPushButton { padding:7px 14px; border-radius:4px; font-size:12px; background:#1A2332; color:#E8EDF2; border:1px solid #2D3F52; } QPushButton:hover { background:#2D3F52; border-color:#00C9B1; }")
         self._btn_close.clicked.connect(self.close)
 
         btn_row.addWidget(self._btn_run)
@@ -744,7 +745,7 @@ class ValidateRoutesDialog(QDialog):
         val_lbl = QLabel(value)
         val_lbl.setStyleSheet(f"font-size:20px; font-weight:700; color:{colour};")
         ttl_lbl = QLabel(title)
-        ttl_lbl.setStyleSheet("font-size:10px; color:#777; text-transform:uppercase;")
+        ttl_lbl.setStyleSheet("font-size:10px; color:#8B9AAB; text-transform:uppercase;")
         layout.addWidget(val_lbl)
         layout.addWidget(ttl_lbl)
         w._value_label = val_lbl
@@ -813,6 +814,12 @@ class ValidateRoutesDialog(QDialog):
             margin_item.setFont(QFont("", -1, QFont.Bold))
 
         reason_item  = QTableWidgetItem(r["reason"])
+        # Plain (non-RAG) cells need an explicit light foreground; with a custom
+        # item background set, Qt ignores the widget stylesheet's text colour and
+        # falls back to a dark default, which is invisible on the dark row tint.
+        _light_fg = QBrush(QColor("#E8EDF2"))
+        for item in (uprn_item, address_item, loss_item, reason_item):
+            item.setForeground(_light_fg)
         for item in (status_item, uprn_item, address_item, loss_item, margin_item, reason_item):
             item.setData(Qt.UserRole, len(self.results) - 1)
             item.setBackground(QBrush(bg))

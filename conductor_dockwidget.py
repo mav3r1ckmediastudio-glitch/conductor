@@ -945,7 +945,18 @@ class ConductorDockWidget(QDockWidget):
             icon_path = _os.path.join(_icons_dir, _icon_file)
             if _os.path.exists(icon_path):
                 px = QIcon(icon_path).pixmap(QSize(32, 32))
+                # Clear any leftover placeholder text/stylesheet from a prior
+                # dot-branch call — a QLabel won't reliably show a pixmap if it
+                # still has text and a text-coloured stylesheet set.
+                self._tool_bar_icon.setText("")
+                self._tool_bar_icon.setStyleSheet(f"background:{NAVY}; border-radius:8px; border:none;")
                 self._tool_bar_icon.setPixmap(px)
+                # Some tools show the active-tool card in the same event in which
+                # the pixmap is set; the label can then paint empty/stale. Set the
+                # pixmap again on the next event-loop turn, once the card is shown.
+                from qgis.PyQt.QtCore import QTimer as _QTimer
+                _lbl = self._tool_bar_icon
+                _QTimer.singleShot(0, lambda _l=_lbl, _p=px: (_l.setPixmap(_p), _l.update()))
             else:
                 self._tool_bar_icon.setText("⬤")
                 self._tool_bar_icon.setStyleSheet(f"color:{TEAL}; font-size:20px; background:{NAVY}; border-radius:8px; border:none;")
@@ -1428,6 +1439,13 @@ class ConductorDockWidget(QDockWidget):
         if not hasattr(self, "_shortcut_undo"):
             self._setup_shortcuts()
         try:
+            # Disconnect any stale connections left by a previous dock instance
+            # (plugin reloads create a new dock but the canvas keeps old
+            # connections, and firing mapToolSet into a dead dock crashes QGIS).
+            try:
+                self.iface.mapCanvas().mapToolSet.disconnect(self._on_map_tool_set)
+            except (TypeError, RuntimeError):
+                pass
             self.iface.mapCanvas().mapToolSet.connect(self._on_map_tool_set)
         except Exception:
             pass
@@ -1516,7 +1534,11 @@ class ConductorDockWidget(QDockWidget):
             "DigitiseAerialSpanMapTool", "DigitisePIAUGDuctMapTool", "DigitiseCBTTailMapTool",
             "DigitiseAerialDropMapTool", "DigitisePIAUGDropMapTool",
         )
-        if new_tool is None or type(new_tool).__name__ not in conductor_tool_types:
+        try:
+            name = type(new_tool).__name__ if new_tool is not None else None
+        except (RuntimeError, AttributeError):
+            name = None
+        if name is None or name not in conductor_tool_types:
             self._clear_active_button()
 
     # ── CALLBACKS — DESIGN TAB ─────────────────────────────────────────────────
@@ -1642,24 +1664,33 @@ class ConductorDockWidget(QDockWidget):
             # Derive display name and icon from cls_name
             _tool_name = cls_name.replace("MapTool", "").replace("Digitise", "Digitise ").strip()
             # Map cls_name to icon file
+            # NB: keys are the actual map-tool CLASS NAMES (suffix "MapTool"),
+            # exactly as passed in cls_name from each _on_* handler. An earlier
+            # version used a "MapTool" *prefix* which never matched, so every
+            # tool fell through to the placeholder dot.
             _icon_map = {
-                "MapToolPlaceChamber":       "place_chamber.svg",
-                "MapToolPlacePole":          "place_pole.svg",
-                "MapToolPlaceCBT":           "place_cbt.svg",
-                "MapToolPlacePOP":           "place_cabinet_pop.svg",
-                "MapToolPlacePIAChamber":    "place_pia_ug_chamber.svg",
-                "MapToolPlaceJoint":         "place_joint.svg",
-                "MapToolDigitiseDuct":       "digitise_duct.svg",
-                "MapToolDigitiseBundle":     "digitise_bundle.svg",
-                "MapToolDigitiseDrop":       "digitise_drop_duct.svg",
-                "MapToolDigitiseFibre":      "digitise_cable.svg",
-                "MapToolDigitisePIAUGDuct":  "digitise_pia_ug_duct.svg",
-                "MapToolDigitisePIAUGDrop":  "digitise_pia_ug_drop.svg",
-                "MapToolDigitiseAerialSpan": "digitise_aerial_span.svg",
-                "MapToolDigitiseAerialDrop": "digitise_aerial_drop.svg",
-                "MapToolDigitiseCBTTail":    "digitise_cbt_tail.svg",
-                "MapToolRoadCrossing":       "digitise_road_crossing.svg",
-                "MapToolStreamCrossing":     "digitise_stream_crossing.svg",
+                "PlaceChamberMapTool":        "place_chamber.svg",
+                "PlacePoleMapTool":           "place_pole.svg",
+                "PlaceCBTMapTool":            "place_cbt.svg",
+                "PlacePOPMapTool":            "place_cabinet_pop.svg",
+                "EditPOPMapTool":             "edit_cabinet_pop.svg",
+                "PlacePIAChamberMapTool":     "place_pia_ug_chamber.svg",
+                "PlaceJointMapTool":          "place_joint.svg",
+                "DrawBuildAreaMapTool":       "build_areas.svg",
+                "DigitiseDuctMapTool":        "digitise_duct.svg",
+                "DigitiseBundleMapTool":      "digitise_bundle.svg",
+                "DigitiseDropMapTool":        "digitise_drop_duct.svg",
+                "DigitiseFibreMapTool":       "digitise_cable.svg",
+                "DigitisePIAUGDuctMapTool":   "digitise_pia_ug_duct.svg",
+                "DigitisePIAUGDropMapTool":   "digitise_pia_ug_drop.svg",
+                "DigitiseAerialSpanMapTool":  "digitise_aerial_span.svg",
+                "DigitiseAerialDropMapTool":  "digitise_aerial_drop.svg",
+                "DigitiseCBTTailMapTool":     "digitise_cbt_tail.svg",
+                "DigitiseRoadCrossingMapTool":   "digitise_road_crossing.svg",
+                "DigitiseStreamCrossingMapTool": "digitise_stream_crossing.svg",
+                "EditAssetMapTool":           "edit_asset.svg",
+                "DeleteAssetMapTool":         "delete_asset.svg",
+                "MoveAssetMapTool":           "move_asset.svg",
             }
             self._show_active_tool(_tool_name, info, icon=_icon_map.get(cls_name))
             import importlib
@@ -1954,6 +1985,13 @@ class ConductorDockWidget(QDockWidget):
 
     def closeEvent(self, event):
         self._close_all_dialogs()
+        # Disconnect the canvas signal so a dead dock instance can never be
+        # called back into after this dock is closed/unloaded (use-after-free
+        # in mapToolSet was crashing QGIS on tool activation after reloads).
+        try:
+            self.iface.mapCanvas().mapToolSet.disconnect(self._on_map_tool_set)
+        except (TypeError, RuntimeError):
+            pass
         if hasattr(self, '_fibre_trace_tool') and self._fibre_trace_tool:
             try:
                 self._fibre_trace_tool._clear_bands()

@@ -153,7 +153,7 @@ class FibreCountDialog(QDialog):
 
         # Header
         title = QLabel("Fibre Count Calculator")
-        title.setStyleSheet(f"font-size:15px; font-weight:700; color:{NAVY};")
+        title.setStyleSheet(f"font-size:15px; font-weight:700; color:{WHITE};")
         root.addWidget(title)
 
         sub = QLabel(
@@ -161,7 +161,7 @@ class FibreCountDialog(QDialog):
             "the fibres required, and the recommended cable size."
         )
         sub.setWordWrap(True)
-        sub.setStyleSheet(f"font-size:11px; color:#555;")
+        sub.setStyleSheet(f"font-size:11px; color:#8B9AAB;")
         root.addWidget(sub)
 
         sep = QFrame()
@@ -171,7 +171,7 @@ class FibreCountDialog(QDialog):
 
         # Summary row
         self._summary_lbl = QLabel("")
-        self._summary_lbl.setStyleSheet(f"font-size:12px; color:{NAVY}; font-weight:600;")
+        self._summary_lbl.setStyleSheet(f"font-size:12px; color:{WHITE}; font-weight:600;")
         root.addWidget(self._summary_lbl)
 
         # Table
@@ -193,11 +193,14 @@ class FibreCountDialog(QDialog):
         self._table.setAlternatingRowColors(True)
         self._table.verticalHeader().setVisible(False)
         self._table.setStyleSheet(
-            f"QTableWidget {{ font-size:11px; background:{WHITE}; gridline-color:{MID}; }}"
-            f"QTableWidget::item:selected {{ background:{TEAL}; color:{WHITE}; }}"
+            f"QTableWidget {{ font-size:11px; background:{LIGHT}; color:{WHITE}; "
+            f"gridline-color:{MID}; alternate-background-color:{NAVY}; }}"
+            f"QTableWidget::item {{ color:{WHITE}; }}"
+            f"QTableWidget::item:selected {{ background:{TEAL}; color:{NAVY}; }}"
             f"QHeaderView::section {{ background:{NAVY}; color:{WHITE}; "
             f"font-weight:600; padding:4px; border:none; }}"
         )
+        self._table.setAlternatingRowColors(True)
         root.addWidget(self._table)
 
         # Legend

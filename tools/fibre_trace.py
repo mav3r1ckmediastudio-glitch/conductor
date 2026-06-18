@@ -118,7 +118,7 @@ class FibreTracePanel(QDialog):
         # Status bar
         self._status_lbl = QLabel("Click a premises on the map to trace its route.")
         self._status_lbl.setWordWrap(True)
-        self._status_lbl.setStyleSheet(f"font-size:12px; color:{NAVY}; font-weight:600;")
+        self._status_lbl.setStyleSheet(f"font-size:12px; color:{WHITE}; font-weight:600;")
         root.addWidget(self._status_lbl)
 
         # Colour legend
@@ -127,7 +127,7 @@ class FibreTracePanel(QDialog):
         dot = QLabel("●")
         dot.setStyleSheet("color:#FFE600; font-size:14px;")
         lbl = QLabel("Highlighted route")
-        lbl.setStyleSheet("font-size:10px; color:#555;")
+        lbl.setStyleSheet("font-size:10px; color:#8B9AAB;")
         legend.addWidget(dot)
         legend.addWidget(lbl)
         legend.addStretch()
@@ -161,7 +161,7 @@ class FibreTracePanel(QDialog):
 
         budget_hdr = QHBoxLayout()
         budget_title = QLabel("Optical budget")
-        budget_title.setStyleSheet(f"font-size:12px; font-weight:600; color:{NAVY};")
+        budget_title.setStyleSheet(f"font-size:12px; font-weight:600; color:{WHITE};")
         self._budget_badge = QLabel("")
         self._budget_badge.setStyleSheet(
             "font-size:11px; font-weight:600; padding:2px 10px; border-radius:8px;"
@@ -190,7 +190,7 @@ class FibreTracePanel(QDialog):
         budget_layout.addWidget(self._breakdown_btn)
 
         self._breakdown_lbl = QLabel("")
-        self._breakdown_lbl.setStyleSheet(f"font-size:11px; color:{NAVY};")
+        self._breakdown_lbl.setStyleSheet(f"font-size:11px; color:{WHITE};")
         self._breakdown_lbl.setTextFormat(Qt.RichText)
         self._breakdown_lbl.setVisible(False)
         budget_layout.addWidget(self._breakdown_lbl)
@@ -219,15 +219,15 @@ class FibreTracePanel(QDialog):
         the optical budget box (caption above, value below)."""
         card = QFrame()
         card.setStyleSheet(
-            f"QFrame {{ background:{LIGHT}; border-radius:4px; }}"
+            f"QFrame {{ background:{MID}; border-radius:4px; }}"
         )
         lay = QVBoxLayout(card)
         lay.setContentsMargins(8, 6, 8, 6)
         lay.setSpacing(2)
         cap_lbl = QLabel(caption)
-        cap_lbl.setStyleSheet("font-size:10px; color:#777;")
+        cap_lbl.setStyleSheet("font-size:10px; color:#8B9AAB;")
         val_lbl = QLabel("—")
-        val_lbl.setStyleSheet(f"font-size:14px; font-weight:600; color:{NAVY};")
+        val_lbl.setStyleSheet(f"font-size:14px; font-weight:600; color:{WHITE};")
         lay.addWidget(cap_lbl)
         lay.addWidget(val_lbl)
         return val_lbl, card
@@ -388,7 +388,7 @@ class FibreTracePanel(QDialog):
 
     def clear(self):
         self._status_lbl.setText("Click a premises on the map to trace its route.")
-        self._status_lbl.setStyleSheet(f"font-size:12px; color:{NAVY}; font-weight:600;")
+        self._status_lbl.setStyleSheet(f"font-size:12px; color:{WHITE}; font-weight:600;")
         self._detail.clear()
         self._budget_box.setVisible(False)
 

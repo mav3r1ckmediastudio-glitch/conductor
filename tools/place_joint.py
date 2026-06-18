@@ -198,7 +198,7 @@ class PlaceJointDialog(QDialog):
         fl.addWidget(self._section("SPLITTER  (leave unchecked if this is a through-splice or blowing point)"))
 
         self.has_splitter = QCheckBox("This joint contains a passive optical splitter")
-        self.has_splitter.setStyleSheet(f"font-size:12px; color:{NAVY}; font-weight:bold;")
+        self.has_splitter.setStyleSheet(f"font-size:12px; color:{WHITE}; font-weight:bold;")
         self.has_splitter.toggled.connect(self._on_splitter_toggled)
         fl.addWidget(self.has_splitter)
 

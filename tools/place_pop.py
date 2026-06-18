@@ -320,7 +320,7 @@ class CabinetDialog(QDialog):
 
         # Aggregation router
         self.has_aggreg = QCheckBox("Aggregation router present")
-        self.has_aggreg.setStyleSheet(f"font-size:12px; color:{NAVY};")
+        self.has_aggreg.setStyleSheet(f"font-size:12px; color:{WHITE};")
         fl.addWidget(self.has_aggreg)
 
         fl.addWidget(self._divider())

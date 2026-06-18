@@ -426,7 +426,7 @@ class FibreAssignDialog(QDialog):
         root.setContentsMargins(12, 12, 12, 12)
 
         header = QLabel("Auto-Assign Fibres")
-        header.setStyleSheet("font-size:15px; font-weight:600; color:#1A3A5C;")
+        header.setStyleSheet("font-size:15px; font-weight:600; color:#E8EDF2;")
         root.addWidget(header)
 
         sub = QLabel("Walks the network from cabinet outward, assigning tube and fibre numbers. "
@@ -435,7 +435,7 @@ class FibreAssignDialog(QDialog):
                      "A 1:4 uses 5 fibres (F1–F5); a 1:8 uses 9 fibres (F1–F9). "
                      "Onward splices begin at the next fibre after the last port.")
         sub.setWordWrap(True)
-        sub.setStyleSheet("font-size:11px; color:#555; margin-bottom:4px;")
+        sub.setStyleSheet("font-size:11px; color:#8B9AAB; margin-bottom:4px;")
         root.addWidget(sub)
 
         warn = QFrame()
@@ -458,22 +458,22 @@ class FibreAssignDialog(QDialog):
         self._progress = QProgressBar()
         self._progress.setRange(0, 0)
         self._progress.setVisible(False)
-        self._progress.setStyleSheet("QProgressBar { border:1px solid #ccc; border-radius:3px; height:16px; } "
+        self._progress.setStyleSheet("QProgressBar { border:1px solid #2D3F52; border-radius:3px; background:#0F1923; color:#E8EDF2; height:16px; } "
                                      "QProgressBar::chunk { background:#2c7a4b; }")
         root.addWidget(self._progress)
 
         btn_row = QHBoxLayout()
         self._btn_run = QPushButton("Run Auto-Assignment")
         self._btn_run.setStyleSheet(
-            "QPushButton { background:#1A3A5C; color:#fff; font-weight:600; padding:7px 18px; "
+            "QPushButton { background:#00C9B1; color:#0F1923; font-weight:600; padding:7px 18px; "
             "border-radius:4px; font-size:12px; } "
             "QPushButton:hover { background:#1D7A6E; } "
             "QPushButton:disabled { background:#aaa; }"
         )
         self._btn_run.clicked.connect(self._run)
         btn_close = QPushButton("Close")
-        btn_close.setStyleSheet("QPushButton { padding:7px 14px; border-radius:4px; "
-                                "font-size:12px; border:1px solid #bbb; } "
+        btn_close.setStyleSheet("QPushButton { padding:7px 14px; border-radius:4px; background:#1A2332; color:#E8EDF2; "
+                                "font-size:12px; border:1px solid #2D3F52; } "
                                 "QPushButton:hover { background:#e8e8e8; }")
         btn_close.clicked.connect(self.close)
         btn_row.addWidget(self._btn_run)

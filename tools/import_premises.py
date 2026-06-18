@@ -231,12 +231,12 @@ class ImportPremisesDialog(QDialog):
 
         self._filter_residential = QCheckBox("Include Residential premises")
         self._filter_residential.setChecked(True)
-        self._filter_residential.setStyleSheet(f"font-size:12px; color:{NAVY};")
+        self._filter_residential.setStyleSheet(f"font-size:12px; color:{WHITE};")
         fl.addWidget(self._filter_residential)
 
         self._filter_business = QCheckBox("Include Business premises")
         self._filter_business.setChecked(True)
-        self._filter_business.setStyleSheet(f"font-size:12px; color:{NAVY};")
+        self._filter_business.setStyleSheet(f"font-size:12px; color:{WHITE};")
         fl.addWidget(self._filter_business)
 
         fl.addWidget(self._divider())
@@ -324,7 +324,7 @@ class ImportPremisesDialog(QDialog):
             if northing_col: bits.append(f"N={sample.get(northing_col,'?')}")
             if postcode_col: bits.append(f"PC={sample.get(postcode_col,'?')}")
             self._preview_label.setText("Sample row: " + "  ".join(bits))
-            self._preview_label.setStyleSheet(f"color:{NAVY}; font-size:11px;")
+            self._preview_label.setStyleSheet(f"color:{WHITE}; font-size:11px;")
 
         self._import_btn.setEnabled(True)
         self._update_count_estimate(row_count)
@@ -368,7 +368,7 @@ class ImportPremisesDialog(QDialog):
             if postcode_col: bits.append(f"PC={sample.get(postcode_col,'?')}")
             bits.append(f"CRS={crs_desc}")
             self._preview_label.setText("Sample feature: " + "  ".join(bits))
-            self._preview_label.setStyleSheet(f"color:{NAVY}; font-size:11px;")
+            self._preview_label.setStyleSheet(f"color:{WHITE}; font-size:11px;")
 
         self._import_btn.setEnabled(True)
         self._update_count_estimate(feat_count)

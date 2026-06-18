@@ -386,7 +386,7 @@ class NewProjectDialog(QDialog):
         form.setLabelAlignment(Qt.AlignRight)
         form.setSpacing(10)
 
-        ls = f"color:{NAVY}; font-weight:bold; font-size:12px;"
+        ls = f"color:{WHITE}; font-weight:bold; font-size:12px;"
         ins = f"border:1px solid {MID}; border-radius:3px; padding:5px 8px; background:{WHITE}; font-size:12px;"
 
         def lbl(t):

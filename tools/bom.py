@@ -726,11 +726,11 @@ class BomDialog(QDialog):
         root.setContentsMargins(12, 12, 12, 12)
 
         header = QLabel("Bill of Materials")
-        header.setStyleSheet(f"font-size:15px; font-weight:600; color:{NAVY};")
+        header.setStyleSheet(f"font-size:15px; font-weight:600; color:{WHITE};")
         root.addWidget(header)
 
         sub = QLabel("Aggregated quantities and costs from all fibre and civil layers. Unit costs editable — prices ex. VAT.")
-        sub.setStyleSheet("font-size:11px; color:#555; margin-bottom:4px;")
+        sub.setStyleSheet("font-size:11px; color:#8B9AAB; margin-bottom:4px;")
         sub.setWordWrap(True)
         root.addWidget(sub)
 

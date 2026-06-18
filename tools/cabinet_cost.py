@@ -86,7 +86,7 @@ class CabinetCostCalculatorDialog(QDialog):
         root.setContentsMargins(12, 12, 12, 12)
 
         header = QLabel("Cabinet Cost Calculator")
-        header.setStyleSheet(f"font-size:15px; font-weight:600; color:{NAVY};")
+        header.setStyleSheet(f"font-size:15px; font-weight:600; color:{WHITE};")
         root.addWidget(header)
 
         sub = QLabel(
@@ -95,7 +95,7 @@ class CabinetCostCalculatorDialog(QDialog):
             "aggregation router) plus the civils/cable Bill of Materials for "
             "that cabinet's area. Edit unit costs below to update all totals."
         )
-        sub.setStyleSheet("font-size:11px; color:#555; margin-bottom:4px;")
+        sub.setStyleSheet("font-size:11px; color:#8B9AAB; margin-bottom:4px;")
         sub.setWordWrap(True)
         root.addWidget(sub)
 
@@ -110,7 +110,7 @@ class CabinetCostCalculatorDialog(QDialog):
         root.addWidget(self._table)
 
         self._lbl_total = QLabel("")
-        self._lbl_total.setStyleSheet(f"font-size:13px; font-weight:600; color:{NAVY}; padding-top:4px;")
+        self._lbl_total.setStyleSheet(f"font-size:13px; font-weight:600; color:{WHITE}; padding-top:4px;")
         self._lbl_total.setAlignment(Qt.AlignRight)
         root.addWidget(self._lbl_total)
 
