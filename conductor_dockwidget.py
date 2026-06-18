@@ -935,7 +935,14 @@ class ConductorDockWidget(QDockWidget):
             from qgis.PyQt.QtGui import QIcon
             from qgis.PyQt.QtCore import QSize
             import os as _os
-            icon_path = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'icons', icon)
+            _icons_dir = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'icons')
+            # Prefer PNG over SVG if available
+            _icon_file = icon
+            if icon.lower().endswith('.svg'):
+                _png = icon[:-4] + '.png'
+                if _os.path.exists(_os.path.join(_icons_dir, _png)):
+                    _icon_file = _png
+            icon_path = _os.path.join(_icons_dir, _icon_file)
             if _os.path.exists(icon_path):
                 px = QIcon(icon_path).pixmap(QSize(32, 32))
                 self._tool_bar_icon.setPixmap(px)
@@ -1236,11 +1243,19 @@ class ConductorDockWidget(QDockWidget):
 
     def _icon(self, name):
         """Load a tool icon from the icons/ directory. Returns None if not found.
+        Prefers .png over .svg if a matching PNG exists (real artwork).
         Bypasses Qt's pixmap/icon file cache by reading SVG bytes directly,
         so icon changes on disk are always picked up on plugin reload."""
         if not name:
             return None
-        path = os.path.join(self.plugin_dir, 'icons', name)
+        icons_dir = os.path.join(self.plugin_dir, 'icons')
+        # Prefer PNG: if name ends in .svg and a matching .png exists, use it
+        if name.lower().endswith('.svg'):
+            png_name = name[:-4] + '.png'
+            png_path = os.path.join(icons_dir, png_name)
+            if os.path.isfile(png_path):
+                name = png_name
+        path = os.path.join(icons_dir, name)
         if not os.path.isfile(path):
             return None
         # SVG: load via QByteArray → QIcon so Qt can't cache-hit by path
