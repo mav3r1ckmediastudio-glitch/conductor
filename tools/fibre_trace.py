@@ -130,7 +130,9 @@ class TraceMarkerItem(QgsMapCanvasItem):
         'CHAMBER': 'chamber',
     }
     
-    def __init__(self, canvas, position, marker_type, plugin_dir, size=18):
+    BACKING_PADDING = 6  # px the backing disc extends beyond the icon on each side (diameter, not radius)
+    
+    def __init__(self, canvas, position, marker_type, plugin_dir, size=22):
         """
         Args:
             canvas: QgsMapCanvas
@@ -156,10 +158,25 @@ class TraceMarkerItem(QgsMapCanvasItem):
         )
         return svg_path if os.path.exists(svg_path) else None
     
+    # Dark backing disc colour — matches the dark basemap so it visually
+    # "punches a hole" through the cyan trace beam/glow sitting underneath,
+    # without needing to clip the line geometry itself.
+    BACKING_COLOUR = QColor(10, 18, 28, 235)  # near-opaque dark navy
+
     def paint(self, painter, option, widget=None):
-        """Render the SVG marker."""
+        """Render a dark backing disc, then the SVG marker on top of it."""
         if not self.svg_path:
             return
+        
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        
+        # Backing disc — slightly larger than the icon itself so the icon
+        # never touches the raw edge of the disc
+        disc_d = self.size + self.BACKING_PADDING
+        half_d = disc_d / 2
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(self.BACKING_COLOUR)
+        painter.drawEllipse(int(-half_d), int(-half_d), int(disc_d), int(disc_d))
         
         try:
             # Render SVG to pixmap
@@ -190,9 +207,12 @@ class TraceMarkerItem(QgsMapCanvasItem):
         """Define bounding rectangle for painting, in the item's local
         coordinates (paint() draws centered at the local origin; setPos()
         in updatePosition() handles translating that origin to the right
-        place on screen)."""
-        half = self.size / 2 + 4  # small padding to avoid clipping
-        return QRectF(-half, -half, self.size + 8, self.size + 8)
+        place on screen). Sized to the backing disc (the largest thing
+        drawn) plus a little extra so it never gets edge-clipped."""
+        disc_d = self.size + self.BACKING_PADDING
+        half = disc_d / 2 + 2
+        side = disc_d + 4
+        return QRectF(-half, -half, side, side)
 
 
 
@@ -605,7 +625,7 @@ class FibreTraceMapTool(QgsMapTool):
             pt = xform.transform(pt)
         
         # Create and add marker
-        marker = TraceMarkerItem(self._canvas, pt, marker_type, self.plugin_dir, size=20)
+        marker = TraceMarkerItem(self._canvas, pt, marker_type, self.plugin_dir, size=24)
         self._canvas.scene().addItem(marker)
         self._markers.append(marker)
 
