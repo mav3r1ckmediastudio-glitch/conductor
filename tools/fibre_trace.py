@@ -37,6 +37,7 @@ from .optical_budget import calculate_link_budget, splitter_loss_for_ratio
 CLR_GLOW_OUTER = QColor(  0, 200, 220, 150)  # cyan, wide, semi-transparent (glow fade)
 CLR_GLOW_CORE  = QColor(255, 255, 255, 255)  # white, thin, fully opaque (hot center)
 CLR_POINT_GLOW = QColor(  0, 200, 220, 200)  # cyan for point markers
+CLR_FEATHER    = QColor(255, 255, 255, 120)  # white feather (soft transition)
 CLR_ENTRY      = CLR_GLOW_CORE
 CLR_JOINT      = CLR_POINT_GLOW   # cyan for point markers
 CLR_CABLE      = CLR_GLOW_CORE
@@ -441,20 +442,28 @@ class FibreTraceMapTool(QgsMapTool):
         canvas_crs = self._canvas.mapSettings().destinationCrs()
         canvas_geom = _to_canvas_crs(geom, self._canvas)
         
-        # Draw glow effect with two overlapping bands:
+        # Draw glow effect with three overlapping bands:
         # 1. Outer glow (wide, cyan, semi-transparent)
         band_glow = QgsRubberBand(self._canvas, QgsWkbTypes.LineGeometry)
         band_glow.setColor(CLR_GLOW_OUTER)
         band_glow.setWidth(width + 6)  # wider for glow spread
-        band_glow.setZValue(999)        # behind core
+        band_glow.setZValue(998)        # back layer
         band_glow.setToGeometry(canvas_geom, canvas_crs)
         self._bands.append(band_glow)
         
-        # 2. Hot core (thin, white, semi-transparent)
+        # 2. Feather layer (medium, white, semi-transparent — soft transition)
+        band_feather = QgsRubberBand(self._canvas, QgsWkbTypes.LineGeometry)
+        band_feather.setColor(CLR_FEATHER)
+        band_feather.setWidth(width + 2)  # slightly wider than core, softer
+        band_feather.setZValue(999)        # middle layer
+        band_feather.setToGeometry(canvas_geom, canvas_crs)
+        self._bands.append(band_feather)
+        
+        # 3. Hot core (very thin, white, fully opaque bright center)
         band_core = QgsRubberBand(self._canvas, QgsWkbTypes.LineGeometry)
         band_core.setColor(CLR_GLOW_CORE)
-        band_core.setWidth(2)  # solid visible core
-        band_core.setZValue(1000)       # on top
+        band_core.setWidth(1)  # thin bright line
+        band_core.setZValue(1000)       # top layer
         band_core.setToGeometry(canvas_geom, canvas_crs)
         self._bands.append(band_core)
 
