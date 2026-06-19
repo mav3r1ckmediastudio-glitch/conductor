@@ -394,42 +394,64 @@ def _build_port_panel(fl, joint_id, split_ratio, joint_type, project):
     if not port_map:
         return  # auto-assign not run yet — don't show empty panel
 
-    # Resolve asset_id → display string
+    # Resolve asset_id -> display string
     is_cbt = (str(joint_type) == "CBT")
+    from qgis.core import NULL as QNULL
 
-    # Build lookup: asset_id → display label
+    def _s(v):
+        return "" if v is None or v == QNULL else str(v).strip()
+
+    # premises uprn -> address (shared)
+    prem_layer = project.get_layer("premises")
+    uprn_to_addr = {}
+    if prem_layer:
+        for pf in prem_layer.getFeatures():
+            addr = " ".join(filter(None, [
+                _s(pf["address_1"]), _s(pf["address_2"]),
+                _s(pf["town"]), _s(pf["postcode"]),
+            ])).strip()
+            uprn_to_addr[str(pf["uprn"])] = addr or str(pf["uprn"])
+
     label_map = {}
     if is_cbt:
-        # asset_id is a drop_duct ddct_id → resolve UPRN → address
+        # asset_id is a drop_duct ddct_id -> resolve UPRN -> address
         dd_layer = project.get_layer("drop_ducts")
-        prem_layer = project.get_layer("premises")
-        uprn_to_addr = {}
-        if prem_layer:
-            from qgis.core import NULL as QNULL
-            for pf in prem_layer.getFeatures():
-                def _s(v):
-                    return "" if v is None or v == QNULL else str(v).strip()
-                addr = " ".join(filter(None, [
-                    _s(pf["address_1"]),
-                    _s(pf["address_2"]),
-                    _s(pf["town"]),
-                    _s(pf["postcode"]),
-                ])).strip()
-                uprn_to_addr[str(pf["uprn"])] = addr or str(pf["uprn"])
         if dd_layer:
             for df in dd_layer.getFeatures():
-                did = str(df["ddct_id"] or "")
-                uprn = str(df["uprn"] or "")
-                addr = uprn_to_addr.get(uprn, uprn) if uprn else "—"
-                label_map[did] = f"{uprn}  {addr}" if uprn else did
+                did = _s(df["ddct_id"])
+                uprn = _s(df["uprn"])
+                addr = uprn_to_addr.get(uprn, uprn) if uprn else "\u2014"
+                if did:
+                    label_map[did] = (uprn + "  " + addr) if uprn else did
     else:
-        # asset_id is a cable_id → show cable + to_node
+        # Non-CBT splitter. Outputs may be:
+        #   - bundles (terminal UG 1:8)        -> resolve UPRN -> address
+        #   - downstream splitter joints (1:4) -> show joint + ratio
+        #   - cables (legacy feeder convention)-> show cable + to_node
+        bdl_layer = project.get_layer("bundles")
+        if bdl_layer:
+            for bf in bdl_layer.getFeatures():
+                bid = _s(bf["bundle_id"])
+                uprn = _s(bf["uprn"])
+                if bid:
+                    addr = uprn_to_addr.get(uprn, uprn) if uprn else "\u2014"
+                    label_map[bid] = (uprn + "  " + addr) if uprn else bid
+        jnt_layer = project.get_layer("joints")
+        if jnt_layer:
+            for jf in jnt_layer.getFeatures():
+                jid = _s(jf["joint_id"])
+                jt = _s(jf["joint_type"])
+                sr = _s(jf["split_ratio"])
+                if jid:
+                    extra = ("  (" + jt + (" " + sr if sr else "") + ")") if jt else ""
+                    label_map.setdefault(jid, jid + extra)
         cable_layer = project.get_layer("cables")
         if cable_layer:
             for cf in cable_layer.getFeatures():
-                cid = str(cf["cable_id"] or "")
-                to_node = str(cf["to_node"] or "")
-                label_map[cid] = f"{cid} → {to_node}"
+                cid = _s(cf["cable_id"])
+                to_node = _s(cf["to_node"])
+                if cid:
+                    label_map.setdefault(cid, cid + " \u2192 " + to_node)
 
     # ── Build UI ──────────────────────────────────────────────────────────
     fl.addWidget(_divider())

@@ -93,226 +93,211 @@ def build_graph():
 
 
 def assign_fibres(log_fn=None):
-    def log(msg):
-        if log_fn: log_fn(msg)
+    # Cascade-aware fibre assignment (v2).
+    # Every splitter consumes exactly ONE input fibre; its outputs map to the
+    # downstream consumers (1:8 splitters for a 1:4; bundles/drops for a 1:8).
+    # Express fibres dark-store at the splitter where they are no longer needed.
+    # CBT feeds are routed via through-splices at the tail-attach joint.
+    # Returns (assignments, joint_updates).
+    def log(m):
+        if log_fn:
+            log_fn(m)
 
-    cables, joints, bundles, cbt_drops, from_node, cabinets = build_graph()
-    if not cabinets:
-        raise RuntimeError("Could not find cabinet — check that a cable exists with from_node_type = POP")
+    def S(v):
+        return None if v is None or v == NULL else str(v)
 
-    log(f"Starting from {len(cabinets)} cabinet(s): " + ", ".join(cabinets))
-    assignments   = []
-    joint_updates = {}
-    counter = [1]
+    cab_layer = get_layer("Cables")
+    jnt_layer = get_layer("Joints")
+    bdl_layer = get_layer("Bundles")
+    dd_layer  = get_layer("drop_ducts")
+    if not cab_layer or not jnt_layer:
+        raise RuntimeError("Cables or Joints layer not found")
 
-    def next_id():
-        aid = counter[0]; counter[0] += 1; return aid
-
-    def make_assign(cable_id, fibre_abs, role, joint_id=None,
-                    bundle_id=None, splice_to_cable=None,
-                    splice_to_fibre=None, splitter_id=None):
-        tube = tube_for_fibre(fibre_abs)
-        fib  = pos_in_tube(fibre_abs)
-        st   = tube_for_fibre(splice_to_fibre) if splice_to_fibre else None
-        assignments.append({
-            "assign_id":       "ASN-" + str(next_id()).zfill(4),
-            "cable_id":        cable_id,
-            "tube_number":     tube,
-            "fibre_number":    fib,
-            "fibre_role":      role,
-            "splitter_id":     splitter_id,
-            "splice_to_cable": splice_to_cable,
-            "splice_to_tube":  st,
-            "splice_to_fibre": splice_to_fibre,
-            "joint_id":        joint_id,
-            "bundle_id":       bundle_id,
-            "colour":          fibre_colour(fib),
+    cables = []
+    for f in cab_layer.getFeatures():
+        cables.append({
+            "id":   S(f["cable_id"]),
+            "from": S(f["from_node"]),
+            "to":   S(f["to_node"]),
+            "type": S(f["cable_type"]),
+            "fc":   int(fld(f, "fibre_count", 48) or 48),
         })
 
-    # BFS traversal: queue items are (node_id, in_cable_id, next_fibre)
-    # Seed with all cabinets so multi-cabinet projects are fully assigned
-    queue   = [(cab, None, 1) for cab in cabinets]
-    visited = set()
+    splitters = {}
+    node_type = {}
+    for f in jnt_layer.getFeatures():
+        jid = S(f["joint_id"])
+        node_type[jid] = S(f["joint_type"])
+        if fld(f, "has_splitter", False) in (True, 1):
+            splitters[jid] = S(f["split_ratio"])
 
-    while queue:
-        node_id, in_cable_id, next_fibre = queue.pop(0)
-        if node_id in visited:
-            continue
-        visited.add(node_id)
+    def feeder_of(n):
+        for c in cables:
+            if c["to"] == n and c["type"] != "CBT_TAIL":
+                return c
+        return None
 
-        outbound = from_node.get(node_id, [])
+    def tail_of(cbt):
+        for c in cables:
+            if c["type"] == "CBT_TAIL" and c["from"] == cbt:
+                return c
+        return None
 
-        if not outbound:
-            # End of line — assign local drops first, then dark storage
-            fibre_cursor = next_fibre
+    def trace_up(node, excl=None):
+        seen = set()
+        path = []
+        while node and node not in seen:
+            seen.add(node)
+            path.append(node)
+            if node in splitters and node != excl:
+                return node, path
+            fc = feeder_of(node)
+            if not fc:
+                return None, path
+            node = fc["from"]
+        return None, path
 
-            # Aerial drops at this CBT
-            local_drops_eol = cbt_drops.get(node_id, [])
-            if local_drops_eol and in_cable_id:
-                for drop in local_drops_eol:
-                    drop_id = str(fld(drop, "ddct_id") or "")
-                    make_assign(in_cable_id, fibre_cursor, "AERIAL_DROP",
-                                joint_id=node_id, bundle_id=drop_id)
-                    log(f"  Aerial drop -> {drop_id} T{tube_for_fibre(fibre_cursor)} "
-                        f"F{pos_in_tube(fibre_cursor)} ({fibre_colour(pos_in_tube(fibre_cursor))})")
-                    fibre_cursor += 1
+    def ug_bundles(j):
+        out = []
+        if bdl_layer:
+            for b in bdl_layer.getFeatures():
+                if S(b["from_joint"]) == j:
+                    out.append((S(b["bundle_id"]), S(b["uprn"])))
+        return sorted(out)
 
-            # Underground bundles at end of line
-            local_bundles_eol = bundles.get(node_id, [])
-            if local_bundles_eol and in_cable_id:
-                for bun in local_bundles_eol:
-                    bun_id = str(fld(bun, "bundle_id") or "")
-                    make_assign(in_cable_id, fibre_cursor, "BUNDLE_DROP",
-                                joint_id=node_id, bundle_id=bun_id)
-                    log(f"  Bundle drop -> {bun_id} T{tube_for_fibre(fibre_cursor)} "
-                        f"F{pos_in_tube(fibre_cursor)} ({fibre_colour(pos_in_tube(fibre_cursor))})")
-                    fibre_cursor += 1
+    def cbt_drops(c):
+        out = []
+        if dd_layer:
+            for d in dd_layer.getFeatures():
+                if S(d["from_chamber"]) == c:
+                    out.append((S(d["ddct_id"]), S(d["uprn"])))
+        return sorted(out)
 
-            # Remaining fibres dark storage
-            if in_cable_id:
-                in_cable = cables[in_cable_id]
-                total_f  = int(fld(in_cable, "fibre_count") or 48)
-                remaining = total_f - fibre_cursor + 1
-                for f in range(fibre_cursor, total_f + 1):
-                    make_assign(in_cable_id, f, "DARK_STORAGE", joint_id=node_id)
-                if remaining > 0:
-                    log(f"  END OF LINE at {node_id} — {remaining} fibres dark storage")
-            continue
-
-        joint        = joints.get(node_id)
-        has_splitter = bool(fld(joint, "has_splitter", False)) if joint else False
-        split_ratio  = fld(joint, "split_ratio")               if joint else None
-        joint_type   = str(fld(joint, "joint_type") or "")     if joint else ""
-
-        local_bundles = bundles.get(node_id, [])
-        local_drops   = cbt_drops.get(node_id, [])
-        n_local       = len(local_bundles) + len(local_drops)
-
-        log(f"Node: {node_id}  type:{joint_type}  splitter:{has_splitter}"
-            + (f"  {split_ratio}" if split_ratio else "")
-            + f"  local_drops:{n_local}  outbound:{len(outbound)}")
-
-        if node_id in joints:
-            in_cable  = cables.get(in_cable_id) if in_cable_id else None
-            total_in  = int(fld(in_cable, "fibre_count") or 48) if in_cable else 0
-            total_out = sum(int(fld(c, "fibre_count") or 48) for c in outbound)
-            joint_updates[node_id] = {
-                "fibre_in":  total_in,
-                "fibre_out": total_out + n_local,
-            }
-
-        fibre_cursor = next_fibre
-        splitter_id  = None
-
-        # ── SPLITTER ─────────────────────────────────────────────────────────
-        if has_splitter and split_ratio and in_cable_id:
-            splitter_id = node_id + "-SP"
-            make_assign(in_cable_id, fibre_cursor, "SPLITTER_INPUT",
-                        joint_id=node_id, splitter_id=splitter_id)
-            log(f"  Splitter {split_ratio} input T{tube_for_fibre(fibre_cursor)} "
-                f"F{pos_in_tube(fibre_cursor)} ({fibre_colour(pos_in_tube(fibre_cursor))})")
-            fibre_cursor += 1
-
-            # Port consumers depend on splitter role:
-            # - CBT (joint_type=CBT): ports serve aerial drops / UG bundles directly
-            # - Feeder splitter (outbound cables): ports serve outbound distribution cables
-            port_consumers = []
-            is_cbt = (joint_type == "CBT")
-
+    def children_of(p):
+        kids = []
+        for sp, r in splitters.items():
+            if r != "1:8":
+                continue
+            is_cbt = node_type.get(sp) == "CBT"
             if is_cbt:
-                # CBT: ports → aerial drops then UG bundles
-                for d in local_drops:
-                    port_consumers.append(("DROP", str(fld(d, "ddct_id") or "")))
-                for b in local_bundles:
-                    port_consumers.append(("BUNDLE", str(b["bundle_id"])))
+                t = tail_of(sp)
+                innode = t["to"] if t else None
             else:
-                # Feeder splitter: ports → outbound cables
-                for out_cable in outbound:
-                    port_consumers.append(("CABLE", str(fld(out_cable, "cable_id") or "")))
+                fc = feeder_of(sp)
+                innode = fc["from"] if fc else None
+            par, _ = trace_up(innode, excl=sp)
+            if par == p:
+                kids.append((len(_), sp, is_cbt))
+        kids.sort(key=lambda x: (x[0], x[1]))
+        return kids
 
-            try:
-                n_outputs = int(split_ratio.split(":")[1])
-            except Exception:
-                n_outputs = 8
+    assignments = []
+    counter = [0]
+    joint_updates = {}
 
-            for port_idx in range(n_outputs):
-                port_label = "PO" + str(port_idx + 1)
-                if port_idx < len(port_consumers):
-                    kind, asset_id = port_consumers[port_idx]
-                    make_assign(in_cable_id, fibre_cursor, "SPLITTER_OUTPUT",
-                                joint_id=node_id, bundle_id=asset_id, splitter_id=splitter_id)
-                    log(f"    {port_label} -> {asset_id} T{tube_for_fibre(fibre_cursor)} "
-                        f"F{pos_in_tube(fibre_cursor)} ({fibre_colour(pos_in_tube(fibre_cursor))})")
-                else:
-                    make_assign(in_cable_id, fibre_cursor, "SPLITTER_OUTPUT_SPARE",
-                                joint_id=node_id, splitter_id=splitter_id)
-                    log(f"    {port_label} -> spare")
-                fibre_cursor += 1
+    def rec(cable, fib, role, joint=None, bundle=None, splitter=None, sc=None, sf=None):
+        counter[0] += 1
+        assignments.append({
+            "assign_id":       "ASN-" + str(counter[0]).zfill(4),
+            "cable_id":        cable,
+            "tube_number":     tube_for_fibre(fib),
+            "fibre_number":    pos_in_tube(fib),
+            "fibre_role":      role,
+            "joint_id":        joint,
+            "bundle_id":       bundle,
+            "splitter_id":     splitter,
+            "splice_to_cable": sc,
+            "splice_to_tube":  (tube_for_fibre(sf) if sf else None),
+            "splice_to_fibre": (pos_in_tube(sf) if sf else None),
+            "colour":          fibre_colour(pos_in_tube(fib)),
+        })
 
-        # ── AERIAL DROPS at intermediate CBT ────────────────────────────────
-        # CBT joints with outbound cables consume fibres for their drops BEFORE splicing onward
-        elif local_drops and in_cable_id and not has_splitter:
-            for drop in local_drops:
-                drop_id = str(fld(drop, "ddct_id") or "")
-                make_assign(in_cable_id, fibre_cursor, "AERIAL_DROP",
-                            joint_id=node_id, bundle_id=drop_id)
-                log(f"  Aerial drop -> {drop_id} T{tube_for_fibre(fibre_cursor)} "
-                    f"F{pos_in_tube(fibre_cursor)} ({fibre_colour(pos_in_tube(fibre_cursor))})")
-                fibre_cursor += 1
+    # FEEDER PROPAGATION: light the path from the cabinet to the first splitter
+    def cable_leaving(node):
+        for c in cables:
+            if c["from"] == node and c["type"] != "CBT_TAIL":
+                return c
+        return None
 
-        # ── UNDERGROUND BUNDLES (non-splitter) ───────────────────────────────
-        elif local_bundles and in_cable_id and not has_splitter:
-            for bun in local_bundles:
-                bun_id = str(fld(bun, "bundle_id") or "")
-                make_assign(in_cable_id, fibre_cursor, "BUNDLE_DROP",
-                            joint_id=node_id, bundle_id=bun_id)
-                log(f"  Bundle drop -> {bun_id} T{tube_for_fibre(fibre_cursor)} "
-                    f"F{pos_in_tube(fibre_cursor)} ({fibre_colour(pos_in_tube(fibre_cursor))})")
-                fibre_cursor += 1
+    for c0 in cables:
+        if c0["type"] == "CBT_TAIL":
+            continue
+        if c0["from"] in node_type:
+            continue  # originates at a joint, not the cabinet
+        cur = c0
+        guard = 0
+        while cur and guard < 50:
+            guard += 1
+            nxt_node = cur["to"]
+            if nxt_node in splitters:
+                break  # first splitter reached; its input cable handled by stage logic
+            nxt = cable_leaving(nxt_node)
+            if not nxt:
+                break
+            for fnum in range(1, cur["fc"] + 1):
+                rec(cur["id"], fnum, "THROUGH_SPLICE", joint=nxt_node, sc=nxt["id"], sf=fnum)
+            cur = nxt
 
-        # ── ONWARD SPLICES ────────────────────────────────────────────────────
-        max_out_fibres = 0
-        for out_cable in outbound:
-            out_id    = str(fld(out_cable, "cable_id", "UNKNOWN"))
-            total_out = int(fld(out_cable, "fibre_count") or 48)
-            if total_out > max_out_fibres:
-                max_out_fibres = total_out
-            slice_start = fibre_cursor
-            log(f"  Splice -> {out_id} ({total_out}F) from F{slice_start}")
+    # STAGE 1: feeder splitters (1:4)
+    for p, ratio in splitters.items():
+        if ratio != "1:4":
+            continue
+        inc = feeder_of(p)
+        if not inc:
+            log("Warning: no feeder for " + str(p) + "; skipping")
+            continue
+        spid = p + "-SP"
+        rec(inc["id"], 1, "SPLITTER_INPUT", joint=p, splitter=spid)
+        kids = children_of(p)
+        joint_updates[p] = {"fibre_in": inc["fc"], "fibre_out": len(kids)}
+        log("Stage-1 " + str(p) + " (" + str(ratio) + ") input " + str(inc["id"]) + " F1 -> " + str(len(kids)) + " ports")
+        cbt_by_attach = {}
+        for idx, (dist, child, is_cbt) in enumerate(kids, 1):
+            rec(spid, idx, "SPLITTER_OUTPUT", joint=p, bundle=child, splitter=spid)
+            log("  PO" + str(idx) + " -> " + str(child))
+            if is_cbt:
+                t = tail_of(child)
+                if t:
+                    cbt_by_attach.setdefault(t["to"], []).append((child, t["id"]))
+        for attach, items in cbt_by_attach.items():
+            carry = feeder_of(attach)
+            if not carry:
+                continue
+            for k, (child, tailid) in enumerate(items, 1):
+                rec(carry["id"], k, "THROUGH_SPLICE", joint=attach, sc=tailid, sf=1)
+                rec(tailid, 1, "THROUGH_SPLICE", joint=attach, sc=carry["id"], sf=k)
+        for fnum in range(2, inc["fc"] + 1):
+            rec(inc["id"], fnum, "DARK_STORAGE", joint=p)
 
-            for f in range(total_out):
-                in_f  = slice_start + f
-                out_f = 1 + f
-                if in_cable_id:
-                    in_cable = cables[in_cable_id]
-                    total_in = int(fld(in_cable, "fibre_count") or 48)
-                    if in_f > total_in:
-                        make_assign(out_id, out_f, "DARK_STORAGE", joint_id=node_id)
-                        continue
-                    make_assign(in_cable_id, in_f, "THROUGH_SPLICE",
-                                joint_id=node_id,
-                                splice_to_cable=out_id, splice_to_fibre=out_f)
-                make_assign(out_id, out_f, "THROUGH_SPLICE",
-                            joint_id=node_id,
-                            splice_to_cable=in_cable_id,
-                            splice_to_fibre=in_f if in_cable_id else None)
+    # STAGE 2: terminal splitters (1:8 and any non-1:4)
+    for sp, ratio in splitters.items():
+        if ratio == "1:4":
+            continue
+        is_cbt = node_type.get(sp) == "CBT"
+        inc = tail_of(sp) if is_cbt else feeder_of(sp)
+        if not inc:
+            log("Warning: no input for " + str(sp) + "; skipping")
+            continue
+        prem = cbt_drops(sp) if is_cbt else ug_bundles(sp)
+        spid = sp + "-SP"
+        try:
+            cap = int(str(ratio).split(":")[1])
+        except Exception:
+            cap = 8
+        rec(inc["id"], 1, "SPLITTER_INPUT", joint=sp, splitter=spid)
+        joint_updates[sp] = {"fibre_in": 1, "fibre_out": len(prem)}
+        log("Stage-2 " + str(sp) + " (" + str(ratio) + ") input " + str(inc["id"]) + " F1 -> " + str(len(prem)) + "/" + str(cap))
+        for i in range(cap):
+            if i < len(prem):
+                asset, uprn = prem[i]
+                rec(spid, i + 1, "SPLITTER_OUTPUT", joint=sp, bundle=asset, splitter=spid)
+            else:
+                rec(spid, i + 1, "SPLITTER_OUTPUT_SPARE", joint=sp, splitter=spid)
+        if not is_cbt:
+            for fnum in range(2, inc["fc"] + 1):
+                rec(inc["id"], fnum, "DARK_STORAGE", joint=sp)
 
-            to_node = fld(out_cable, "to_node")
-            if to_node:
-                queue.append((str(to_node), out_id, 1))
-
-        fibre_cursor += max_out_fibres
-
-        # Mark remaining in-cable fibres as dark storage
-        if in_cable_id:
-            in_cable = cables[in_cable_id]
-            total_in = int(fld(in_cable, "fibre_count") or 48)
-            if fibre_cursor <= total_in:
-                for f in range(fibre_cursor, total_in + 1):
-                    make_assign(in_cable_id, f, "DARK_STORAGE", joint_id=node_id)
-                log(f"  {total_in - fibre_cursor + 1} fibres -> dark storage on {in_cable_id}")
-
-    log(f"Total assignments: {len(assignments)}")
+    log("Total assignments: " + str(len(assignments)))
     return assignments, joint_updates
 
 
