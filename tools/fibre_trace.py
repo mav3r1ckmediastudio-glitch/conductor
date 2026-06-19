@@ -16,7 +16,7 @@ from qgis.PyQt.QtWidgets import (
 from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtGui import QColor, QCursor, QPen
 from qgis.PyQt.QtSvg import QSvgRenderer
-from qgis.PyQt.QtCore import QRect
+from qgis.PyQt.QtCore import QRect, QRectF
 from qgis.PyQt.QtGui import QPixmap
 
 from qgis.core import (
@@ -140,12 +140,13 @@ class TraceMarkerItem(QgsMapCanvasItem):
             size: marker size in pixels
         """
         super().__init__(canvas)
-        self.position = position
+        self.position = position  # QgsPointXY in canvas (map) CRS
         self.size = size
         self.plugin_dir = plugin_dir
         self.marker_type = marker_type
         self.svg_path = self._resolve_marker_svg()
         self.setZValue(1001)  # on top of trace lines
+        self.updatePosition()  # set initial screen position
     
     def _resolve_marker_svg(self):
         """Return path to the SVG file for this marker type."""
@@ -178,14 +179,20 @@ class TraceMarkerItem(QgsMapCanvasItem):
             painter.setBrush(QColor(0, 200, 220, 80))
             painter.drawEllipse(-self.size//2, -self.size//2, self.size, self.size)
     
+    def updatePosition(self):
+        """Convert the stored map-CRS position to canvas pixel coordinates
+        and move the graphics item there. Called once on creation and again
+        automatically by QGIS whenever the canvas pans/zooms."""
+        pt_px = self.toCanvasCoordinates(self.position)
+        self.setPos(pt_px)
+
     def boundingRect(self):
-        """Define bounding rectangle for painting."""
-        from qgis.core import QgsRectangle
-        half = self.size / 2
-        return QgsRectangle(
-            self.position.x() - half, self.position.y() - half,
-            self.position.x() + half, self.position.y() + half
-        )
+        """Define bounding rectangle for painting, in the item's local
+        coordinates (paint() draws centered at the local origin; setPos()
+        in updatePosition() handles translating that origin to the right
+        place on screen)."""
+        half = self.size / 2 + 4  # small padding to avoid clipping
+        return QRectF(-half, -half, self.size + 8, self.size + 8)
 
 
 
