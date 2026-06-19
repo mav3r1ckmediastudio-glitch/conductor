@@ -130,8 +130,6 @@ class TraceMarkerItem(QgsMapCanvasItem):
         'CHAMBER': 'chamber',
     }
     
-    BACKING_PADDING = 6  # px the backing disc extends beyond the icon on each side (diameter, not radius)
-    
     def __init__(self, canvas, position, marker_type, plugin_dir, size=22):
         """
         Args:
@@ -158,25 +156,16 @@ class TraceMarkerItem(QgsMapCanvasItem):
         )
         return svg_path if os.path.exists(svg_path) else None
     
-    # Dark backing disc colour — matches the dark basemap so it visually
-    # "punches a hole" through the cyan trace beam/glow sitting underneath,
-    # without needing to clip the line geometry itself.
-    BACKING_COLOUR = QColor(10, 18, 28, 235)  # near-opaque dark navy
-
     def paint(self, painter, option, widget=None):
-        """Render a dark backing disc, then the SVG marker on top of it."""
+        """Render the SVG marker. The SVGs themselves are filled, closed
+        silhouettes (dark fill + teal outline + teal detail lines), so the
+        icon's own shape masks the trace beam/glow underneath it cleanly —
+        no separate backing disc needed, no gap between "beam stops" and
+        "icon starts"."""
         if not self.svg_path:
             return
         
         painter.setRenderHint(QPainter.Antialiasing, True)
-        
-        # Backing disc — slightly larger than the icon itself so the icon
-        # never touches the raw edge of the disc
-        disc_d = self.size + self.BACKING_PADDING
-        half_d = disc_d / 2
-        painter.setPen(Qt.NoPen)
-        painter.setBrush(self.BACKING_COLOUR)
-        painter.drawEllipse(int(-half_d), int(-half_d), int(disc_d), int(disc_d))
         
         try:
             # Render SVG to pixmap
@@ -191,9 +180,10 @@ class TraceMarkerItem(QgsMapCanvasItem):
             y = -self.size / 2
             painter.drawPixmap(int(x), int(y), pixmap)
         except Exception as e:
-            # Fallback: draw a simple circle if SVG fails
-            painter.setPen(QPen(QColor(0, 200, 220), 1))
-            painter.setBrush(QColor(0, 200, 220, 80))
+            # Fallback: draw a simple filled circle if SVG fails (filled,
+            # not just outlined, so it still masks the beam underneath)
+            painter.setPen(QPen(QColor(0, 200, 220), 1.5))
+            painter.setBrush(QColor(10, 18, 28, 235))
             painter.drawEllipse(-self.size//2, -self.size//2, self.size, self.size)
     
     def updatePosition(self):
@@ -207,11 +197,10 @@ class TraceMarkerItem(QgsMapCanvasItem):
         """Define bounding rectangle for painting, in the item's local
         coordinates (paint() draws centered at the local origin; setPos()
         in updatePosition() handles translating that origin to the right
-        place on screen). Sized to the backing disc (the largest thing
-        drawn) plus a little extra so it never gets edge-clipped."""
-        disc_d = self.size + self.BACKING_PADDING
-        half = disc_d / 2 + 2
-        side = disc_d + 4
+        place on screen). Sized to the icon itself plus a small margin so
+        it never gets edge-clipped."""
+        half = self.size / 2 + 2
+        side = self.size + 4
         return QRectF(-half, -half, side, side)
 
 
