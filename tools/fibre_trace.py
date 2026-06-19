@@ -35,12 +35,13 @@ from .optical_budget import calculate_link_budget, splitter_loss_for_ratio
 # ── Rubber-band colour ───────────────────────────────────────────────────────
 # Glow effect: outer cyan glow + white hot core
 CLR_GLOW_OUTER = QColor(  0, 200, 220,  80)  # cyan, wide, semi-transparent (glow fade)
-CLR_GLOW_CORE  = QColor(255, 255, 255, 255)  # white, thin, fully opaque (hot center)
+CLR_GLOW_CORE  = QColor(255, 255, 255, 220)  # white, thin, semi-opaque (soft hot center)
+CLR_POINT_GLOW = QColor(  0, 200, 220, 200)  # cyan for point markers
 CLR_ENTRY      = CLR_GLOW_CORE
-CLR_JOINT      = CLR_GLOW_CORE
+CLR_JOINT      = CLR_POINT_GLOW   # cyan for point markers
 CLR_CABLE      = CLR_GLOW_CORE
-CLR_CAB        = CLR_GLOW_CORE
-CLR_PREM       = CLR_GLOW_CORE
+CLR_CAB        = CLR_POINT_GLOW   # cyan for cabinet markers
+CLR_PREM       = CLR_POINT_GLOW   # cyan for premises markers
 CLR_BREAK      = QColor(255,  30,  30, 128)  # red only for breaks
 
 SNAP_RADIUS_PX = 18   # pixels for premises snap
@@ -449,10 +450,10 @@ class FibreTraceMapTool(QgsMapTool):
         band_glow.setToGeometry(canvas_geom, canvas_crs)
         self._bands.append(band_glow)
         
-        # 2. Hot core (thin, white, opaque)
+        # 2. Hot core (thin, white, semi-transparent)
         band_core = QgsRubberBand(self._canvas, QgsWkbTypes.LineGeometry)
         band_core.setColor(CLR_GLOW_CORE)
-        band_core.setWidth(width)
+        band_core.setWidth(1)  # very thin hot line (width param ignored for thin core)
         band_core.setZValue(1000)       # on top
         band_core.setToGeometry(canvas_geom, canvas_crs)
         self._bands.append(band_core)
