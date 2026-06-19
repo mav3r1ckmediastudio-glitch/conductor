@@ -189,8 +189,8 @@ class DigitiseCBTTailDialog(QDialog):
         f1.addRow(self._lbl("Length (m)"),   self._ro(f"{self._length_m} m", CALC_STYLE))
 
         self.fibre_count = QComboBox()
-        self.fibre_count.addItems(["2", "4", "6", "12"])
-        self.fibre_count.setCurrentText("4")
+        self.fibre_count.addItems(["1"])
+        self.fibre_count.setCurrentText("1")
         self.fibre_count.setStyleSheet(INPUT_STYLE)
         f1.addRow(self._lbl("Fibre Count *"), self.fibre_count)
 
