@@ -14,12 +14,17 @@ from qgis.PyQt.QtWidgets import (
     QFrame, QTextEdit, QSizePolicy
 )
 from qgis.PyQt.QtCore import Qt
-from qgis.PyQt.QtGui import QColor, QCursor
+from qgis.PyQt.QtGui import QColor, QCursor, QPen
+from qgis.PyQt.QtSvg import QSvgRenderer
+from qgis.PyQt.QtCore import QRect
+from qgis.PyQt.QtGui import QPixmap
 
 from qgis.core import (
     QgsProject, QgsFeatureRequest, QgsRectangle, QgsWkbTypes,
     QgsCoordinateTransform, QgsCoordinateReferenceSystem, NULL
 )
+from qgis.PyQt.QtGui import QPainter
+from qgis.PyQt.QtCore import Qt
 from qgis.gui import QgsMapTool, QgsRubberBand, QgsMapCanvasItem
 from qgis.core import QgsGeometry
 
@@ -156,21 +161,21 @@ class TraceMarkerItem(QgsMapCanvasItem):
             return
         
         try:
-            from qgis.core import QgsSvgCache
-            # Get the SVG and render it
-            image = QgsSvgCache.instance().svgAsImage(
-                self.svg_path, self.size, QColor(0, 200, 220), 
-                QColor(0, 200, 220), 1.0, 1.0
-            )
+            # Render SVG to pixmap
+            renderer = QSvgRenderer(self.svg_path)
+            pixmap = QPixmap(self.size, self.size)
+            pixmap.fill(Qt.transparent)
+            
+            renderer.render(QPainter(pixmap))
             
             # Draw centered at position
-            rect = image.rect()
-            x = -rect.width() / 2
-            y = -rect.height() / 2
-            painter.drawImage(int(x), int(y), image)
+            x = -self.size / 2
+            y = -self.size / 2
+            painter.drawPixmap(int(x), int(y), pixmap)
         except Exception as e:
             # Fallback: draw a simple circle if SVG fails
             painter.setPen(QPen(QColor(0, 200, 220), 1))
+            painter.setBrush(QColor(0, 200, 220, 80))
             painter.drawEllipse(-self.size//2, -self.size//2, self.size, self.size)
     
     def boundingRect(self):
