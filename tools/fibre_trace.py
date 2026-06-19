@@ -33,13 +33,15 @@ from .validate_routes import (
 from .optical_budget import calculate_link_budget, splitter_loss_for_ratio
 
 # ── Rubber-band colour ───────────────────────────────────────────────────────
-YELLOW      = QColor(255, 230,   0, 128)   # single highlight colour for all hops
-CLR_ENTRY   = YELLOW
-CLR_JOINT   = YELLOW
-CLR_CABLE   = YELLOW
-CLR_CAB     = YELLOW
-CLR_PREM    = YELLOW
-CLR_BREAK   = QColor(255,  30,  30, 128)   # red only for breaks
+# Glow effect: outer cyan glow + white hot core
+CLR_GLOW_OUTER = QColor(  0, 200, 220,  80)  # cyan, wide, semi-transparent (glow fade)
+CLR_GLOW_CORE  = QColor(255, 255, 255, 255)  # white, thin, fully opaque (hot center)
+CLR_ENTRY      = CLR_GLOW_CORE
+CLR_JOINT      = CLR_GLOW_CORE
+CLR_CABLE      = CLR_GLOW_CORE
+CLR_CAB        = CLR_GLOW_CORE
+CLR_PREM       = CLR_GLOW_CORE
+CLR_BREAK      = QColor(255,  30,  30, 128)  # red only for breaks
 
 SNAP_RADIUS_PX = 18   # pixels for premises snap
 
@@ -125,8 +127,8 @@ class FibreTracePanel(QDialog):
         legend = QHBoxLayout()
         legend.setSpacing(12)
         dot = QLabel("●")
-        dot.setStyleSheet("color:#FFE600; font-size:14px;")
-        lbl = QLabel("Highlighted route")
+        dot.setStyleSheet("color:#00C8DC; font-size:14px;")  # Cyan glow colour
+        lbl = QLabel("Highlighted route (cyan glow with white core)")
         lbl.setStyleSheet("font-size:10px; color:#8B9AAB;")
         legend.addWidget(dot)
         legend.addWidget(lbl)
@@ -436,12 +438,24 @@ class FibreTraceMapTool(QgsMapTool):
         if geom is None or geom.isEmpty():
             return
         canvas_crs = self._canvas.mapSettings().destinationCrs()
-        band = QgsRubberBand(self._canvas, QgsWkbTypes.LineGeometry)
-        band.setColor(colour)
-        band.setWidth(width)
-        band.setZValue(1000)
-        band.setToGeometry(_to_canvas_crs(geom, self._canvas), canvas_crs)
-        self._bands.append(band)
+        canvas_geom = _to_canvas_crs(geom, self._canvas)
+        
+        # Draw glow effect with two overlapping bands:
+        # 1. Outer glow (wide, cyan, semi-transparent)
+        band_glow = QgsRubberBand(self._canvas, QgsWkbTypes.LineGeometry)
+        band_glow.setColor(CLR_GLOW_OUTER)
+        band_glow.setWidth(width + 6)  # wider for glow spread
+        band_glow.setZValue(999)        # behind core
+        band_glow.setToGeometry(canvas_geom, canvas_crs)
+        self._bands.append(band_glow)
+        
+        # 2. Hot core (thin, white, opaque)
+        band_core = QgsRubberBand(self._canvas, QgsWkbTypes.LineGeometry)
+        band_core.setColor(CLR_GLOW_CORE)
+        band_core.setWidth(width)
+        band_core.setZValue(1000)       # on top
+        band_core.setToGeometry(canvas_geom, canvas_crs)
+        self._bands.append(band_core)
 
     def _add_point_band(self, geom, colour, size=12):
         if geom is None or geom.isEmpty():
@@ -602,11 +616,11 @@ class FibreTraceMapTool(QgsMapTool):
         # Entry asset (bundle or drop duct)
         b_geom = _geom_for_bundle(bundle_layer, uprn)
         if b_geom:
-            self._add_line_band(b_geom, CLR_ENTRY, width=5)
+            self._add_line_band(b_geom, CLR_ENTRY, width=3)
         else:
             d_geom = _geom_for_ddct(ddct_layer, uprn)
             if d_geom:
-                self._add_line_band(d_geom, CLR_ENTRY, width=5)
+                self._add_line_band(d_geom, CLR_ENTRY, width=3)
 
         # Walk the path — joints and cables alternate
         for hop in path:
@@ -618,7 +632,7 @@ class FibreTraceMapTool(QgsMapTool):
             elif "CBL-" in hop_str or "TAIL-" in hop_str:
                 # Any cable segment — feeder, aerial span, or CBT tail
                 geom = _geom_for_cable(cable_layer, hop_str)
-                self._add_line_band(geom, CLR_CABLE, width=5)
+                self._add_line_band(geom, CLR_CABLE, width=3)
             elif "POL-" in hop_str:
                 # Pole node — no geometry in joints layer, skip point band
                 # (the aerial span cable bands either side cover it visually)
