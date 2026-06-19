@@ -7,6 +7,8 @@ Rubber-band colours distinguish asset types. A docked info panel shows the
 hop-by-hop breakdown and any break reason.
 """
 
+import os
+
 from qgis.PyQt.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFrame, QTextEdit, QSizePolicy
@@ -18,7 +20,8 @@ from qgis.core import (
     QgsProject, QgsFeatureRequest, QgsRectangle, QgsWkbTypes,
     QgsCoordinateTransform, QgsCoordinateReferenceSystem, NULL
 )
-from qgis.gui import QgsMapTool, QgsRubberBand
+from qgis.gui import QgsMapTool, QgsRubberBand, QgsMapCanvasItem
+from qgis.core import QgsGeometry
 
 from ..conductor_utils import (
     get_layer, fld, val, NAVY, TEAL, ORANGE, LIGHT, WHITE, MID,
@@ -103,6 +106,83 @@ def _to_canvas_crs(geom, canvas):
 
 
 # ── Info panel dialog ─────────────────────────────────────────────────────────
+
+
+
+# ── Custom map canvas item for SVG trace markers ──────────────────────────────
+
+class TraceMarkerItem(QgsMapCanvasItem):
+    """Renders a custom SVG marker at a canvas position."""
+    
+    MARKER_TYPES = {
+        'JNT': 'joint',
+        'CBT': 'cbt',
+        'POL': 'pole',
+        'CAB': 'cabinet',
+        'POP': 'cabinet',
+        'PREM': 'premises',
+        'SPLITTER': 'splitter',
+        'CHAMBER': 'chamber',
+    }
+    
+    def __init__(self, canvas, position, marker_type, plugin_dir, size=18):
+        """
+        Args:
+            canvas: QgsMapCanvas
+            position: QgsPointXY in canvas CRS
+            marker_type: string key from MARKER_TYPES (e.g., 'JNT', 'CBT')
+            plugin_dir: path to conductor_v2 plugin directory
+            size: marker size in pixels
+        """
+        super().__init__(canvas)
+        self.position = position
+        self.size = size
+        self.plugin_dir = plugin_dir
+        self.marker_type = marker_type
+        self.svg_path = self._resolve_marker_svg()
+        self.setZValue(1001)  # on top of trace lines
+    
+    def _resolve_marker_svg(self):
+        """Return path to the SVG file for this marker type."""
+        marker_name = self.MARKER_TYPES.get(self.marker_type, 'joint')
+        svg_path = os.path.join(
+            self.plugin_dir, 'icons', 'trace_markers', f'{marker_name}.svg'
+        )
+        return svg_path if os.path.exists(svg_path) else None
+    
+    def paint(self, painter, option, widget=None):
+        """Render the SVG marker."""
+        if not self.svg_path:
+            return
+        
+        try:
+            from qgis.core import QgsSvgCache
+            # Get the SVG and render it
+            image = QgsSvgCache.instance().svgAsImage(
+                self.svg_path, self.size, QColor(0, 200, 220), 
+                QColor(0, 200, 220), 1.0, 1.0
+            )
+            
+            # Draw centered at position
+            rect = image.rect()
+            x = -rect.width() / 2
+            y = -rect.height() / 2
+            painter.drawImage(int(x), int(y), image)
+        except Exception as e:
+            # Fallback: draw a simple circle if SVG fails
+            painter.setPen(QPen(QColor(0, 200, 220), 1))
+            painter.drawEllipse(-self.size//2, -self.size//2, self.size, self.size)
+    
+    def boundingRect(self):
+        """Define bounding rectangle for painting."""
+        from qgis.core import QgsRectangle
+        half = self.size / 2
+        return QgsRectangle(
+            self.position.x() - half, self.position.y() - half,
+            self.position.x() + half, self.position.y() + half
+        )
+
+
 
 class FibreTracePanel(QDialog):
     """Floating panel showing trace result. Stays on top while tool is active."""
@@ -420,8 +500,10 @@ class FibreTraceMapTool(QgsMapTool):
         self._canvas  = canvas
         self._project = project
         self._iface   = iface
-        self._bands   = []   # list of active QgsRubberBand objects
+        self._bands   = []     # list of active QgsRubberBand objects
+        self._markers = []     # list of active TraceMarkerItem objects
         self._panel   = None
+        self.plugin_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # conductor_v2 root
 
         self.setCursor(QCursor(Qt.CrossCursor))
 
@@ -435,6 +517,14 @@ class FibreTraceMapTool(QgsMapTool):
             except Exception:
                 pass
         self._bands = []
+        
+        # Clear marker items
+        for marker in self._markers:
+            try:
+                self._canvas.scene().removeItem(marker)
+            except Exception:
+                pass
+        self._markers = []
 
     def _add_line_band(self, geom, colour, width=3):
         if geom is None or geom.isEmpty():
@@ -480,6 +570,32 @@ class FibreTraceMapTool(QgsMapTool):
         self._bands.append(band)
 
     # ── Premises snap ─────────────────────────────────────────────────────────
+
+    def _add_marker(self, geom, marker_type):
+        """Render an SVG marker at the given geometry point."""
+        if geom is None or geom.isEmpty():
+            return
+        
+        # Get center point
+        if geom.type() == QgsWkbTypes.PointGeometry:
+            pt = geom.asPoint()
+        elif geom.type() == QgsWkbTypes.LineGeometry:
+            # Use centroid for line geometries
+            pt = geom.centroid().asPoint()
+        else:
+            return
+        
+        # Transform to canvas CRS
+        src_crs = QgsCoordinateReferenceSystem("EPSG:27700")
+        dst_crs = self._canvas.mapSettings().destinationCrs()
+        if src_crs != dst_crs:
+            xform = QgsCoordinateTransform(src_crs, dst_crs, QgsProject.instance())
+            pt = xform.transform(pt)
+        
+        # Create and add marker
+        marker = TraceMarkerItem(self._canvas, pt, marker_type, self.plugin_dir, size=20)
+        self._canvas.scene().addItem(marker)
+        self._markers.append(marker)
 
     def _snap_to_premises(self, canvas_pos):
         """Return (feature, distance_px) of nearest premises within snap radius."""
@@ -600,8 +716,8 @@ class FibreTraceMapTool(QgsMapTool):
         uprn    = best_feat["uprn"]
         area_id = best_feat["area_id"] if "area_id" in fields else ""
 
-        # Highlight premises
-        self._add_point_band(best_feat.geometry(), CLR_PREM, size=17)
+        # Highlight premises with marker
+        self._add_marker(best_feat.geometry(), 'PREM')
 
         # Build indexes and trace
         bundle_idx     = _build_index(bundle_layer, "uprn")   if bundle_layer else {}
@@ -635,23 +751,29 @@ class FibreTraceMapTool(QgsMapTool):
         # Walk the path — joints and cables alternate
         for hop in path:
             hop_str = str(hop)
-            if "JNT-" in hop_str or "CBT-" in hop_str:
-                # Underground joint or CBT (pole-mounted splitter box)
+            if "JNT-" in hop_str:
+                # Underground joint
                 geom = _geom_for_joint(joint_layer, hop_str)
-                self._add_point_band(geom, CLR_JOINT, size=15)
+                self._add_marker(geom, 'JNT')
+                self._add_line_band(geom, CLR_CABLE, width=3)  # keep glow for visibility
+            elif "CBT-" in hop_str:
+                # CBT (pole-mounted splitter box)
+                geom = _geom_for_joint(joint_layer, hop_str)
+                self._add_marker(geom, 'CBT')
             elif "CBL-" in hop_str or "TAIL-" in hop_str:
                 # Any cable segment — feeder, aerial span, or CBT tail
                 geom = _geom_for_cable(cable_layer, hop_str)
                 self._add_line_band(geom, CLR_CABLE, width=3)
             elif "POL-" in hop_str:
-                # Pole node — no geometry in joints layer, skip point band
-                # (the aerial span cable bands either side cover it visually)
-                pass
+                # Pole node — render pole marker
+                geom = _geom_for_feature_id(joint_layer, ("joint_id", hop_str))
+                if geom:
+                    self._add_marker(geom, 'POL')
             elif "CAB-" in hop_str or "POP-" in hop_str:
                 # Cabinet — find in exchange_pops or chambers
                 pop_layer = get_layer("exchange_pops", self._project)
                 cab_geom  = _geom_for_feature_id(pop_layer, ("pop_id", hop_str)) if pop_layer else None
-                self._add_point_band(cab_geom, CLR_CAB, size=19)
+                self._add_marker(cab_geom, 'CAB')
 
         self._canvas.refresh()
 
