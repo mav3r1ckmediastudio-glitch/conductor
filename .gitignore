@@ -5,3 +5,4 @@ __pycache__/
 *.gpkg-wal
 .idea/
 *.bak
+_backups/
