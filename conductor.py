@@ -134,9 +134,13 @@ class Conductor:
 
         if self.dockwidget.isVisible():
             self.dockwidget.hide()
+            if self._val_dock:    self._val_dock.hide()
+            if self._routes_dock: self._routes_dock.hide()
             self._toggle_action.setChecked(False)
         else:
             self.dockwidget.show()
+            if self._val_dock:    self._val_dock.show()
+            if self._routes_dock: self._routes_dock.show()
             self._toggle_action.setChecked(True)
 
     def _create_dockwidget(self):

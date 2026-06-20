@@ -1985,6 +1985,15 @@ class ConductorDockWidget(QDockWidget):
 
     def closeEvent(self, event):
         self._close_all_dialogs()
+        # Close the secondary docks (validation + routes) alongside the main
+        # panel so the X button matches the toolbar toggle. Guarded because on
+        # plugin unload these may already have been removed.
+        for _dock in (getattr(self, "_val_dock", None), getattr(self, "_routes_dock", None)):
+            if _dock:
+                try:
+                    _dock.hide()
+                except Exception:
+                    pass
         # Disconnect the canvas signal so a dead dock instance can never be
         # called back into after this dock is closed/unloaded (use-after-free
         # in mapToolSet was crashing QGIS on tool activation after reloads).
