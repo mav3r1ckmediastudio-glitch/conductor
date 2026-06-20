@@ -1081,47 +1081,14 @@ def run_validation_headless(project):
                     "asset_id": str(uprn),
                 })
 
-        # ── Splitter integrity scan ───────────────────────────────────────────
+        # ── Splitter topology drift scan ──────────────────────────────────────
         try:
-            if joint_layer and bundle_layer:
-                chamber_to_joint = {}
-                for feat in joint_layer.getFeatures():
-                    cid = str(feat["chamber_id"] or "")
-                    jid = str(feat["joint_id"]   or "")
-                    if cid and jid:
-                        chamber_to_joint[cid] = jid
-
-                downstream_counts = {}
-                for feat in bundle_layer.getFeatures():
-                    jid = str(feat["from_joint"] or "")
-                    if jid:
-                        downstream_counts[jid] = downstream_counts.get(jid, 0) + 1
-
-                if ddct_layer:
-                    for feat in ddct_layer.getFeatures():
-                        fc = str(feat["from_chamber"] or "")
-                        if not fc:
-                            continue
-                        if fc in downstream_counts or fc in chamber_to_joint.values():
-                            downstream_counts[fc] = downstream_counts.get(fc, 0) + 1
-                        else:
-                            resolved = chamber_to_joint.get(fc, "")
-                            if resolved:
-                                downstream_counts[resolved] = downstream_counts.get(resolved, 0) + 1
-
-                for feat in joint_layer.getFeatures():
-                    jid   = str(feat["joint_id"] or "")
-                    count = downstream_counts.get(jid, 0)
-                    if count > 1:
-                        from qgis.core import NULL
-                        has_sp = feat["has_splitter"] if "has_splitter" in feat.fields().names() else None
-                        if not has_sp or has_sp == NULL:
-                            counts["warnings"] += 1
-                            issues.append({
-                                "severity": "warning",
-                                "message":  f"Joint {jid} has {count} downstream paths but no splitter",
-                                "asset_id": jid,
-                            })
+            from .splitter_topology import splitter_drift_issues
+            _ck = {"warning": "warnings", "error": "errors",
+                   "critical": "critical", "info": "info"}
+            for it in splitter_drift_issues(joint_layer, cable_layer, bundle_layer, ddct_layer):
+                counts[_ck.get(it["severity"], "warnings")] += 1
+                issues.append(it)
         except Exception:
             pass
 
