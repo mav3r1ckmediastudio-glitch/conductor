@@ -92,6 +92,43 @@ def build_graph():
     return cables, joints, bundles, cbt_drops, from_node, cabinets
 
 
+FROZEN_STATES = {"INSTALLED", "LIVE"}
+
+
+def sticky_allocate(consumers, cap):
+    """Stable, freeze-aware port allocation.
+
+    consumers: list of dicts with keys asset, sort_key, port (int|None), status.
+    Returns (occupied {port:asset}, port_of {asset:port}, flags [str]).
+    Stored ports are honoured (sticky); INSTALLED/LIVE are frozen; the rest fill
+    the lowest free ports deterministically by sort_key.
+    """
+    occupied = {}
+    port_of = {}
+    flags = []
+    stored = [c for c in consumers if c["port"] and 1 <= c["port"] <= cap]
+    fresh = [c for c in consumers if not (c["port"] and 1 <= c["port"] <= cap)]
+    for c in sorted(stored, key=lambda x: (x["status"] not in FROZEN_STATES, x["port"], x["sort_key"])):
+        p = c["port"]
+        if p in occupied:
+            flags.append("COLLISION port " + str(p) + ": " + str(occupied[p]) + " vs " + str(c["asset"]))
+        else:
+            occupied[p] = c["asset"]
+            port_of[c["asset"]] = p
+    free = [p for p in range(1, cap + 1) if p not in occupied]
+    for c in sorted(fresh, key=lambda x: x["sort_key"]):
+        if free:
+            p = free.pop(0)
+            occupied[p] = c["asset"]
+            port_of[c["asset"]] = p
+        else:
+            flags.append("OVERCAP: " + str(c["asset"]) + " (no free port within cap " + str(cap) + ")")
+    for c in consumers:
+        if c["status"] in FROZEN_STATES and c["asset"] not in port_of:
+            flags.append("FROZEN_UNPLACED: " + str(c["asset"]) + " (status=" + str(c["status"]) + ")")
+    return occupied, port_of, flags
+
+
 def assign_fibres(log_fn=None):
     # Cascade-aware fibre assignment (v2).
     # Every splitter consumes exactly ONE input fibre; its outputs map to the
@@ -125,9 +162,16 @@ def assign_fibres(log_fn=None):
 
     splitters = {}
     node_type = {}
+    joint_status = {}
+    joint_fport = {}
+    _jflds = [fld_.name() for fld_ in jnt_layer.fields()]
     for f in jnt_layer.getFeatures():
         jid = S(f["joint_id"])
         node_type[jid] = S(f["joint_type"])
+        joint_status[jid] = (S(f["status"]) or "PROPOSED")
+        if "feeder_port" in _jflds:
+            _fp = f["feeder_port"]
+            joint_fport[jid] = (int(_fp) if _fp not in (None, NULL) else None)
         if fld(f, "has_splitter", False) in (True, 1):
             splitters[jid] = S(f["split_ratio"])
 
@@ -194,6 +238,7 @@ def assign_fibres(log_fn=None):
     assignments = []
     counter = [0]
     joint_updates = {}
+    port_updates = {}
 
     def rec(cable, fib, role, joint=None, bundle=None, splitter=None, sc=None, sf=None):
         counter[0] += 1
@@ -249,12 +294,27 @@ def assign_fibres(log_fn=None):
         spid = p + "-SP"
         rec(inc["id"], 1, "SPLITTER_INPUT", joint=p, splitter=spid)
         kids = children_of(p)
-        joint_updates[p] = {"fibre_in": inc["fc"], "fibre_out": len(kids)}
-        log("Stage-1 " + str(p) + " (" + str(ratio) + ") input " + str(inc["id"]) + " F1 -> " + str(len(kids)) + " ports")
+        try:
+            fcap = int(str(ratio).split(":")[1])
+        except Exception:
+            fcap = len(kids)
+        fcons = [{"asset": child, "sort_key": (dist, child),
+                  "port": joint_fport.get(child),
+                  "status": joint_status.get(child, "PROPOSED")}
+                 for (dist, child, is_cbt) in kids]
+        f_occ, f_pof, f_flags = sticky_allocate(fcons, fcap)
+        for fl in f_flags:
+            log("  ! " + str(p) + " " + fl)
+        joint_updates.setdefault(p, {}).update({"fibre_in": inc["fc"], "fibre_out": len(f_pof)})
+        log("Stage-1 " + str(p) + " (" + str(ratio) + ") input " + str(inc["id"]) + " F1 -> " + str(len(f_pof)) + " ports")
+        for pt in range(1, fcap + 1):
+            if pt in f_occ:
+                child = f_occ[pt]
+                rec(spid, pt, "SPLITTER_OUTPUT", joint=p, bundle=child, splitter=spid)
+                log("  PO" + str(pt) + " -> " + str(child))
+                joint_updates.setdefault(child, {})["feeder_port"] = pt
         cbt_by_attach = {}
-        for idx, (dist, child, is_cbt) in enumerate(kids, 1):
-            rec(spid, idx, "SPLITTER_OUTPUT", joint=p, bundle=child, splitter=spid)
-            log("  PO" + str(idx) + " -> " + str(child))
+        for (dist, child, is_cbt) in kids:
             if is_cbt:
                 t = tail_of(child)
                 if t:
@@ -270,6 +330,29 @@ def assign_fibres(log_fn=None):
             rec(inc["id"], fnum, "DARK_STORAGE", joint=p)
 
     # STAGE 2: terminal splitters (1:8 and any non-1:4)
+    def _terminal_consumers(splitter_id, is_cbt):
+        layer = dd_layer if is_cbt else bdl_layer
+        keyf  = "from_chamber" if is_cbt else "from_joint"
+        idf   = "ddct_id" if is_cbt else "bundle_id"
+        lname = "Drop Ducts" if is_cbt else "Bundles"
+        rows = []
+        if layer:
+            has_port = "splitter_port" in [fld.name() for fld in layer.fields()]
+            for f in layer.getFeatures():
+                if S(f[keyf]) != splitter_id:
+                    continue
+                if is_cbt and S(f["drop_type"]) != "PIA_AERIAL_DROP":
+                    continue
+                pv = f["splitter_port"] if has_port else None
+                rows.append({
+                    "asset":    S(f[idf]),
+                    "sort_key": (S(f[idf]) or ""),
+                    "port":     (int(pv) if pv not in (None, NULL) else None),
+                    "status":   (S(f["status"]) or "PROPOSED"),
+                    "layer":    lname,
+                })
+        return rows
+
     for sp, ratio in splitters.items():
         if ratio == "1:4":
             continue
@@ -278,27 +361,33 @@ def assign_fibres(log_fn=None):
         if not inc:
             log("Warning: no input for " + str(sp) + "; skipping")
             continue
-        prem = cbt_drops(sp) if is_cbt else ug_bundles(sp)
+        cons = _terminal_consumers(sp, is_cbt)
         spid = sp + "-SP"
         try:
             cap = int(str(ratio).split(":")[1])
         except Exception:
             cap = 8
+        occupied, port_of, flags = sticky_allocate(cons, cap)
+        for fl in flags:
+            log("  ! " + str(sp) + " " + fl)
         rec(inc["id"], 1, "SPLITTER_INPUT", joint=sp, splitter=spid)
-        joint_updates[sp] = {"fibre_in": 1, "fibre_out": len(prem)}
-        log("Stage-2 " + str(sp) + " (" + str(ratio) + ") input " + str(inc["id"]) + " F1 -> " + str(len(prem)) + "/" + str(cap))
-        for i in range(cap):
-            if i < len(prem):
-                asset, uprn = prem[i]
-                rec(spid, i + 1, "SPLITTER_OUTPUT", joint=sp, bundle=asset, splitter=spid)
+        joint_updates.setdefault(sp, {}).update({"fibre_in": 1, "fibre_out": len(port_of)})
+        log("Stage-2 " + str(sp) + " (" + str(ratio) + ") input " + str(inc["id"]) + " F1 -> " + str(len(port_of)) + "/" + str(cap))
+        for p in range(1, cap + 1):
+            if p in occupied:
+                asset = occupied[p]
+                rec(spid, p, "SPLITTER_OUTPUT", joint=sp, bundle=asset, splitter=spid)
+                lname = next((c["layer"] for c in cons if c["asset"] == asset), None)
+                if lname:
+                    port_updates[(lname, asset)] = p
             else:
-                rec(spid, i + 1, "SPLITTER_OUTPUT_SPARE", joint=sp, splitter=spid)
+                rec(spid, p, "SPLITTER_OUTPUT_SPARE", joint=sp, splitter=spid)
         if not is_cbt:
             for fnum in range(2, inc["fc"] + 1):
                 rec(inc["id"], fnum, "DARK_STORAGE", joint=sp)
 
     log("Total assignments: " + str(len(assignments)))
-    return assignments, joint_updates
+    return assignments, joint_updates, port_updates
 
 
 def write_joint_attributes(joint_updates, log_fn=None):
@@ -330,6 +419,42 @@ def write_joint_attributes(joint_updates, log_fn=None):
     except Exception as e:
         layer.rollBack()
         raise RuntimeError(f"write_joint_attributes failed: {e}") from e
+
+
+def write_consumer_ports(port_updates, log_fn=None):
+    def log(msg):
+        if log_fn: log_fn(msg)
+    if not port_updates:
+        log("No splitter ports to persist")
+        return
+    by_layer = {}
+    for (lyr_name, asset), port in port_updates.items():
+        by_layer.setdefault(lyr_name, {})[asset] = port
+    for lyr_name, mapping in by_layer.items():
+        layer = get_layer(lyr_name)
+        if not layer:
+            log("Warning: " + lyr_name + " not found; skipping port persistence")
+            continue
+        idcol = "bundle_id" if lyr_name == "Bundles" else "ddct_id"
+        fields = {f.name(): i for i, f in enumerate(layer.fields())}
+        if "splitter_port" not in fields:
+            log("Warning: " + lyr_name + " has no splitter_port field; run schema migration")
+            continue
+        idx = fields["splitter_port"]
+        layer.startEditing()
+        updated = 0
+        try:
+            for feat in layer.getFeatures():
+                a = feat[idcol]
+                a = None if a is None or a == NULL else str(a)
+                if a in mapping:
+                    layer.changeAttributeValue(feat.id(), idx, mapping[a])
+                    updated += 1
+            layer.commitChanges()
+            log("Persisted " + str(updated) + " splitter ports to " + lyr_name)
+        except Exception as e:
+            layer.rollBack()
+            raise RuntimeError("write_consumer_ports failed for " + lyr_name + ": " + str(e)) from e
 
 
 def write_assignments(assignments, log_fn=None):
@@ -379,7 +504,7 @@ def write_assignments(assignments, log_fn=None):
 
 class AssignWorker(QThread):
     log      = pyqtSignal(str)
-    finished = pyqtSignal(list, dict, str)
+    finished = pyqtSignal(list, dict, dict, str)
 
     def __init__(self):
         super().__init__()
@@ -389,10 +514,10 @@ class AssignWorker(QThread):
         try:
             if self._project_ref:
                 _PROJECT_REF[0] = self._project_ref
-            assignments, joint_updates = assign_fibres(log_fn=lambda m: self.log.emit(m))
-            self.finished.emit(assignments, joint_updates, "")
+            assignments, joint_updates, port_updates = assign_fibres(log_fn=lambda m: self.log.emit(m))
+            self.finished.emit(assignments, joint_updates, port_updates, "")
         except Exception:
-            self.finished.emit([], {}, traceback.format_exc())
+            self.finished.emit([], {}, {}, traceback.format_exc())
 
 
 class FibreAssignDialog(QDialog):
@@ -476,7 +601,7 @@ class FibreAssignDialog(QDialog):
         self._worker.finished.connect(self._on_finished)
         self._worker.start()
 
-    def _on_finished(self, assignments, joint_updates, error):
+    def _on_finished(self, assignments, joint_updates, port_updates, error):
         self._progress.setVisible(False)
         self._btn_run.setEnabled(True)
         if error:
@@ -485,6 +610,7 @@ class FibreAssignDialog(QDialog):
         try:
             count = write_assignments(assignments, log_fn=self._log.append)
             write_joint_attributes(joint_updates, log_fn=self._log.append)
+            write_consumer_ports(port_updates, log_fn=self._log.append)
             self._log.append(f"Done - {count} fibre assignments written.")
         except Exception:
             self._log.append("Write error: " + traceback.format_exc())

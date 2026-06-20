@@ -309,9 +309,41 @@ class ConductorProject:
 
 
 
+def ensure_port_schema(gpkg_path):
+    """Idempotently add sticky-port columns to an existing project GeoPackage.
+
+    splitter_port (Int) on bundles + drop_ducts, feeder_port (Int) on joints.
+    Safe to call on every project open — adds only what is missing and is a
+    no-op once present. New projects already get these from the template.
+    Returns a list of (table, field) actually added.
+    """
+    from qgis.core import QgsVectorLayer, QgsField
+    from qgis.PyQt.QtCore import QVariant
+    wanted = {
+        "bundles":    [("splitter_port", QVariant.Int)],
+        "drop_ducts": [("splitter_port", QVariant.Int)],
+        "joints":     [("feeder_port",   QVariant.Int)],
+    }
+    added = []
+    for table, want_fields in wanted.items():
+        lyr = QgsVectorLayer(f"{gpkg_path}|layername={table}", table, "ogr")
+        if not lyr.isValid():
+            continue
+        have = [f.name() for f in lyr.fields()]
+        missing = [QgsField(n, t) for (n, t) in want_fields if n not in have]
+        if not missing:
+            continue
+        if lyr.dataProvider().addAttributes(missing):
+            lyr.updateFields()
+            added.extend((table, f.name()) for f in missing)
+    return added
+
+
 def load_existing_project(gpkg_path):
     if not os.path.exists(gpkg_path):
         raise FileNotFoundError(f"GeoPackage not found: {gpkg_path}")
+
+    ensure_port_schema(gpkg_path)
 
     project_name = os.path.splitext(os.path.basename(gpkg_path))[0]
     country_code = ""

@@ -206,6 +206,7 @@ LAYER_SCHEMA = [
         _f("closure_type",   V.String,  40),
         _f("fibre_in",       V.Int,      0),
         _f("fibre_out",      V.Int,      0),
+        _f("feeder_port",    V.Int,      0),
         _f("installed_date", V.String,  10),
         _f("status",         V.String,  20),
         _f("photo_ref",      V.String, 200),
@@ -227,6 +228,7 @@ LAYER_SCHEMA = [
         _f("notes",         V.String, 500),
         _f("drop_type",     V.String,  30),
         _f("from_pole",     V.String,  30),
+        _f("splitter_port", V.Int,      0),
     ]),
 
     ("bundles", "LineString", [
@@ -243,6 +245,7 @@ LAYER_SCHEMA = [
         _f("wayleave_req",   V.Bool,     0),
         _f("wayleave_id",    V.String,  30),
         _f("notes",          V.String, 500),
+        _f("splitter_port", V.Int,      0),
     ]),
 
     ("surveys", "Point", [
