@@ -1,0 +1,23 @@
+name: schema-contract
+
+# Guards the "silently dropped field" bug class: a map tool writing a dict or
+# feature key that has no matching column in LAYER_SCHEMA. Pure static analysis
+# (stdlib ast) - no QGIS required.
+#
+# To BLOCK merges on failure, enable branch protection and mark
+# "schema-contract / contract-test" as a required status check.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  contract-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run schema contract test
+        run: python tests/test_schema_contract.py
