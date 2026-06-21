@@ -111,6 +111,8 @@ LAYER_SCHEMA = [
         _f("pole_type",           V.String,  20),
         _f("attachment_height_m", V.Double,   0),
         _f("surface_type",        V.String,  20),  # PIA UG chambers: FOOTWAY/VERGE/CARRIAGEWAY/PRIVATE
+        _f("chamber_size",        V.String,  10),  # SMALL/LARGE - drives BoM chamber cost (place_chamber.py)
+        _f("pia_chamber_type",    V.String,  20),  # specific PIA box type: FW1-14, CW1-3, MH (place_pia_chamber.py)
     ]),
 
     ("poles", "Point", [

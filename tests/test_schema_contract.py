@@ -97,10 +97,42 @@ def _keys_from_attrs_assignment(tree):
     return None
 
 
+def _slice_str(slice_node):
+    """Extract a string constant from a subscript slice (py3.8 wraps in Index)."""
+    node = slice_node
+    if node.__class__.__name__ == "Index":  # Python 3.8 compatibility
+        node = node.value
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    return None
+
+
+def _keys_from_feature_writes(tree, var="feat"):
+    """Find `feat["field"] = ...` subscript writes and return the field keys.
+
+    For tools that build a feature field-by-field in a write loop
+    (e.g. fibre_assign.py) instead of via a single dict literal. Only
+    assignment *targets* on `var` with a string-literal key are collected,
+    so `feat["x"]` reads and variable-keyed writes are ignored.
+    """
+    keys = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for tgt in node.targets:
+                if isinstance(tgt, ast.Subscript) \
+                        and isinstance(tgt.value, ast.Name) \
+                        and tgt.value.id == var:
+                    k = _slice_str(tgt.slice)
+                    if k is not None:
+                        keys.append(k)
+    return keys
+
+
 # ── 3. Tool file -> target layer mapping ───────────────────────────────────
 # Add an entry here for every map tool that writes a feature to a layer.
-# extractor: "get_attributes" (dialog.get_attributes() pattern) or
-#            "attrs_var"      (local `attrs = {...}` in _save/_finish)
+# extractor: "get_attributes" (dialog.get_attributes() pattern),
+#            "attrs_var"      (local `attrs = {...}` in _save/_finish), or
+#            "feat_writes"    (feat["field"] = ... loop, e.g. fibre_assign.py)
 
 TARGETS = [
     ("place_pop.py",            "exchange_pops", "get_attributes"),
@@ -116,6 +148,7 @@ TARGETS = [
     ("digitise_drop.py",        "drop_ducts",    "attrs_var"),
     ("digitise_pia_ug_drop.py", "drop_ducts",    "attrs_var"),
     ("digitise_bundle.py",      "bundles",       "attrs_var"),
+    ("fibre_assign.py",         "fibre_assignments", "feat_writes"),
 ]
 
 _SCHEMA = _load_schema()
@@ -125,8 +158,14 @@ def _check(filename, layer, extractor):
     path = os.path.join(TOOLS_DIR, filename)
     tree = ast.parse(open(path, encoding="utf-8").read())
 
-    keys = (_keys_from_get_attributes(tree) if extractor == "get_attributes"
-            else _keys_from_attrs_assignment(tree))
+    if extractor == "get_attributes":
+        keys = _keys_from_get_attributes(tree)
+    elif extractor == "attrs_var":
+        keys = _keys_from_attrs_assignment(tree)
+    elif extractor == "feat_writes":
+        keys = _keys_from_feature_writes(tree)
+    else:
+        keys = None
 
     assert keys, f"{filename}: could not locate attribute dict via {extractor!r}"
     assert layer in _SCHEMA, f"{filename}: unknown layer {layer!r} in LAYER_SCHEMA"
@@ -171,4 +210,6 @@ def run():
 
 
 if __name__ == "__main__":
-    run()
+    import sys
+    _passed, _failed = run()
+    sys.exit(1 if _failed else 0)

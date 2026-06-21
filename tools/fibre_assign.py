@@ -9,9 +9,6 @@ from qgis.core import QgsProject, QgsFeature, NULL
 import traceback
 from ..conductor_utils import get_layer, fld, val, LayerEditContext
 
-IEC_COLOURS = ['Blue','Orange','Green','Brown','Slate','White','Red','Black','Yellow','Violet','Rose','Aqua']
-
-def fibre_colour(fib): return IEC_COLOURS[(fib - 1) % 12]
 def tube_for_fibre(n, fpt=12): return ((n - 1) // fpt) + 1
 def pos_in_tube(n, fpt=12):    return ((n - 1) % fpt) + 1
 
@@ -254,7 +251,6 @@ def assign_fibres(log_fn=None):
             "splice_to_cable": sc,
             "splice_to_tube":  (tube_for_fibre(sf) if sf else None),
             "splice_to_fibre": (pos_in_tube(sf) if sf else None),
-            "colour":          fibre_colour(pos_in_tube(fib)),
         })
 
     # FEEDER PROPAGATION: light the path from the cabinet to the first splitter
@@ -491,7 +487,9 @@ def write_assignments(assignments, log_fn=None):
             feat["splice_to_cable"] = a["splice_to_cable"] or NULL
             feat["splice_to_tube"]  = a["splice_to_tube"]  or NULL
             feat["splice_to_fibre"] = a["splice_to_fibre"] or NULL
-            feat["notes"]           = a["colour"]
+            # notes left for user free-text; fibre colour is IEC-derived from
+            # fibre_number on demand (see splice_plan/route_splice_export),
+            # not persisted here.
             layer.addFeature(feat)
             added += 1
         layer.commitChanges()

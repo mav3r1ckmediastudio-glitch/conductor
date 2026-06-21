@@ -10,11 +10,17 @@ Most tests need the QGIS Python (qgis.core), so run them in the QGIS
 environment rather than a bare interpreter.
 """
 
+import importlib
 import os
 
-from conductor import conductor_utils as cu
-from conductor.tools import digitise_duct as dd
-from conductor.tools import place_chamber as pc
+# Resolve the top-level package name from the folder this plugin is checked
+# out / deployed into, so the test works whether that folder is "conductor_v2"
+# (deployed), "conductor" (repo / CI checkout), or anything else.
+_PKG = os.path.basename(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+cu = importlib.import_module("%s.conductor_utils" % _PKG)
+dd = importlib.import_module("%s.tools.digitise_duct" % _PKG)
+pc = importlib.import_module("%s.tools.place_chamber" % _PKG)
 
 
 # -- IEC 60794 fibre colour tables --
