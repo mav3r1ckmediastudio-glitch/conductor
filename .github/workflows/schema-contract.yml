@@ -1,11 +1,15 @@
-name: schema-contract
+name: contract-tests
 
-# Guards the "silently dropped field" bug class: a map tool writing a dict or
-# feature key that has no matching column in LAYER_SCHEMA. Pure static analysis
-# (stdlib ast) - no QGIS required.
+# Two pure-static-analysis gates (stdlib ast, NO QGIS required), so they run on
+# a bare Ubuntu runner:
+#   1. schema contract  - a map tool must not write a dict/feature key with no
+#      matching column in LAYER_SCHEMA (the "silently dropped field" bug class).
+#   2. integrity contract - the FK integrity validator's assumptions (layers,
+#      fields, typed-node targets) must stay in sync with LAYER_SCHEMA, so the
+#      validator can't silently rot into reporting "clean" while missing orphans.
 #
-# To BLOCK merges on failure, enable branch protection and mark
-# "schema-contract / contract-test" as a required status check.
+# To BLOCK merges on failure: enable branch protection and mark the
+# "contract-test" status check as required.
 
 on:
   push:
@@ -21,3 +25,5 @@ jobs:
           python-version: "3.12"
       - name: Run schema contract test
         run: python tests/test_schema_contract.py
+      - name: Run integrity-validator contract test
+        run: python tests/test_integrity_contract.py

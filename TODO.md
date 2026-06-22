@@ -180,6 +180,16 @@ works, just non-sticky) and logs a hint.
 ---
 
 ## 💡 IDEAS / FUTURE
+
+> **Decision (22 Jun 2026): lifecycle scope deferred.** The README/about text
+> claims a full survey → wayleave → build → customer lifecycle, but those four
+> layers are styled placeholders with no tools writing to them. This is a known
+> scope-vs-reality gap. **It is intentionally parked** until the core design &
+> fibre-planning engine is robustly tested and validated for release. Until
+> then, the honest framing is: Conductor is a design & fibre-planning tool, not
+> yet a lifecycle tool. Either trim the claim or build the loop — but only after
+> release-readiness, not before.
+
 - [ ] PostGIS backend option (multi-user concurrent access)
 - [ ] QField integration for field survey capture
 - [ ] Auto-generate fibre assignments from cable + joint data
