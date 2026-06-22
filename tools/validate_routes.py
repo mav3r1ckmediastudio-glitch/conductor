@@ -498,57 +498,23 @@ class ValidateWorker(QThread):
             self.finished.emit(results, {"error": traceback.format_exc()})
             return
 
-        # ── Splitter integrity scan ───────────────────────────────────────
-        # Find joints that have >1 downstream bundle/drop but has_splitter=False/NULL
-        # from_chamber on drop_ducts holds either a chamber_id (UG drop) or
-        # a joint_id directly (CBT aerial drop) — handle both cases.
-        splitter_warnings = []
+        # ── Splitter topology drift scan ──────────────────────────────────
+        # Use the canonical splitter_drift_issues() — the same function the
+        # validation dock and headless runner use — so the dialog reports
+        # identical results. The previous inline stub only flagged the crude
+        # ">1 downstream connection but has_splitter unset" case; it could not
+        # detect oversubscription, ratio mismatch, or stale declarations.
+        # Routing to the shared function gives full parity across all three
+        # entry points.
+        splitter_drift = []
         try:
-            if joint_layer and bundle_layer:
-                # Build chamber_id -> joint_id map
-                chamber_to_joint = {}
-                for feat in joint_layer.getFeatures():
-                    cid = str(feat["chamber_id"] or "")
-                    jid = str(feat["joint_id"]   or "")
-                    if cid and jid:
-                        chamber_to_joint[cid] = jid
-
-                # Build downstream count per joint_id
-                downstream_counts = {}
-                for feat in bundle_layer.getFeatures():
-                    jid = str(feat["from_joint"] or "")
-                    if jid:
-                        downstream_counts[jid] = downstream_counts.get(jid, 0) + 1
-
-                if ddct_layer:
-                    for feat in ddct_layer.getFeatures():
-                        fc = str(feat["from_chamber"] or "")
-                        if not fc:
-                            continue
-                        # Direct joint_id match (CBT aerial drop)
-                        if fc in downstream_counts or fc in chamber_to_joint.values():
-                            downstream_counts[fc] = downstream_counts.get(fc, 0) + 1
-                        else:
-                            # Resolve chamber_id to joint_id
-                            resolved = chamber_to_joint.get(fc, "")
-                            if resolved:
-                                downstream_counts[resolved] = downstream_counts.get(resolved, 0) + 1
-
-                for feat in joint_layer.getFeatures():
-                    jid = str(feat["joint_id"] or "")
-                    count = downstream_counts.get(jid, 0)
-                    if count > 1:
-                        has_sp = feat["has_splitter"] if "has_splitter" in feat.fields().names() else None
-                        if not has_sp or has_sp == NULL:
-                            splitter_warnings.append({
-                                "joint_id": jid,
-                                "downstream": count,
-                                "chamber_id": str(feat["chamber_id"] or ""),
-                            })
+            from .splitter_topology import splitter_drift_issues
+            splitter_drift = splitter_drift_issues(
+                joint_layer, cable_layer, bundle_layer, ddct_layer)
         except Exception:
             pass
 
-        summary["splitter_warnings"] = splitter_warnings
+        summary["splitter_drift"] = splitter_drift
         self.finished.emit(results, summary)
 
 
@@ -843,18 +809,27 @@ class ValidateRoutesDialog(QDialog):
             self._btn_export.setEnabled(True)
         self._table.sortItems(0)
 
-        # Surface splitter integrity warnings
-        splitter_warnings = summary.get("splitter_warnings", [])
-        if splitter_warnings:
-            lines = ["⚠  Splitter integrity warnings", ""]
-            lines.append(f"{len(splitter_warnings)} joint(s) have multiple downstream connections but no splitter declared:")
+        # Surface splitter topology drift (same results as the validation dock)
+        splitter_drift = summary.get("splitter_drift", [])
+        if splitter_drift:
+            n_err  = sum(1 for it in splitter_drift if it.get("severity") == "error")
+            n_warn = len(splitter_drift) - n_err
+            lines = ["⚠  Splitter topology drift", ""]
+            bits = []
+            if n_err:  bits.append(f"{n_err} error(s)")
+            if n_warn: bits.append(f"{n_warn} warning(s)")
+            lines.append(f"{len(splitter_drift)} issue(s) — " + ", ".join(bits) + ":")
             lines.append("")
-            for w in splitter_warnings:
-                lines.append(f"  • {w['joint_id']}  (chamber: {w['chamber_id']},  {w['downstream']} downstream connections)")
+            for it in splitter_drift:
+                sev = (it.get("severity") or "warning").upper()
+                aid = it.get("asset_id") or "?"
+                msg = it.get("message") or ""
+                lines.append(f"  • [{sev}] {aid}: {msg}")
             lines.append("")
-            lines.append("If any of these joints distribute signal via a passive splitter,")
-            lines.append("edit the joint and tick 'This joint contains a passive optical splitter'.")
-            lines.append("Optical budget calculations will be wrong until this is corrected.")
+            lines.append("Declared splitter topology (has_splitter / split_ratio) disagrees with")
+            lines.append("the topology derived from the network. Edit the affected joints so the")
+            lines.append("declared splitters match the cascade, or optical budget figures will")
+            lines.append("be wrong.")
             self._detail.setPlainText("\n".join(lines))
 
     def _on_row_selected(self):
