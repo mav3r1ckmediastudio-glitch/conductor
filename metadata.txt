@@ -2,19 +2,35 @@
 name=Conductor v2
 qgisMinimumVersion=3.22
 description=Conductor FTTP Design Plugin — v2 UI rebuild
-version=1.0.2
+version=2.0.0
 author=Mav3r1ck Media Studio
 email=conductor@mav3r1ckmedia.studio
-about=Conductor is a full-lifecycle FTTP network design plugin for QGIS. It covers planning, passive infrastructure, fibre assignment, survey, wayleave, build progress, and customer connection — all stored in a portable GeoPackage. Built around UK operator conventions including the Gigaloch HLD labelling specification.
-tracker=https://github.com/mav3r1ck/conductor-qgis/issues
-repository=https://github.com/mav3r1ck/conductor-qgis
-homepage=https://github.com/mav3r1ck/conductor-qgis
+about=Conductor is an FTTP network design and fibre-planning plugin for QGIS. It covers build-area planning, passive infrastructure (ducts, chambers, poles, PIA/aerial), fibre assignment with a cascade-aware splitter engine, optical-budget and route validation, and engineer-ready outputs (BoM, splice plan, single-line diagram) — all stored in a portable GeoPackage. Built around UK operator conventions including the Gigaloch HLD labelling specification. Survey, wayleave, build-progress and customer-connection lifecycle layers are planned future scope, not yet implemented.
+tracker=https://github.com/mav3r1ckmediastudio-glitch/conductor/issues
+repository=https://github.com/mav3r1ckmediastudio-glitch/conductor
+homepage=https://github.com/mav3r1ckmediastudio-glitch/conductor
 category=Vector
 icon=icons/conductor.png
 experimental=True
 deprecated=False
 hasProcessingProvider=False
 changelog=
+    2.0.0 - v2 UI rebuild + trust/integrity overhaul. Phase 0 (restore trust):
+            added chamber_size and pia_chamber_type to the chambers schema with
+            migration, fixing silent dropped-field loss and the BoM costing every
+            chamber as SMALL; stood up GitHub Actions CI running two pure-static
+            contract gates (schema-contract 14/14 + integrity-contract) on every
+            push. Phase 1: FK/network integrity validator wired into the
+            validation dock ("Network Integrity"), verified clean on CH33.
+            Phase 2 (functional fixes): hardened the SLD aerial-drop classifier;
+            CBT tail now a hard 350m stop (true length still stored for BoM);
+            Validate Routes dialog uses the canonical splitter_drift_issues() for
+            parity with the dock; fibre_assign BFS auto-derives undeclared
+            splitter topology without overwriting manual values; deterministic
+            carry-fibre order at shared CBT attach joints; reliable Edit Joint
+            dialog auto-size. Docs reconciled: single-source version, corrected
+            repo URLs, lifecycle layers marked planned/out-of-scope. Verified
+            against CH3/TARVIN (TARVIN VILLAGE 002, CH33.gpkg).
     1.0.1 - PIA schema-integrity fixes: PIA UG Duct now writes from_node/to_node
             (+types) and duct_type=PIA_SUBDUCT so connectivity and edits
             round-trip correctly; PIA UG Chamber surface_type added to

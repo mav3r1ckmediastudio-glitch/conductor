@@ -6,7 +6,23 @@ Conductor stores an entire FTTP network design — from cabinet to customer — 
 
 ## Status
 
-**v1.1.0** — Active development. Core civil, fibre, and PIA/aerial design tools are complete and verified against a 20-premises test project (SCOT-222). See [`TODO.md`](TODO.md) for the full feature list and roadmap.
+**v2.0.0** — Active development (experimental). The civil, fibre, PIA/aerial design, validation, and reporting tools are complete and verified against the CH3 / TARVIN test project (TARVIN VILLAGE 002, `CH33.gpkg`, area `ENG-CH3`). A two-gate CI contract suite (schema + network integrity) runs on every push. See [`TODO.md`](TODO.md) for the full feature list and roadmap.
+
+### Scope — what Conductor does today
+
+Conductor is a **design and fibre-planning** tool: build-area planning, passive infrastructure (ducts, chambers, poles, PIA and aerial), a cascade-aware fibre-assignment engine, optical-budget and route validation, network/FK integrity checking, and engineer-ready outputs (Bill of Materials, splice plan, single-line diagram).
+
+### Planned — not yet implemented
+
+The following **lifecycle** capabilities are deliberately out of scope for now and will be revisited only once there is a robust, release-ready V1 of the core design engine. The relevant layers exist in the schema and appear in the layer tree marked **(planned)**, but no tools populate them yet:
+
+- **Survey** — field survey capture
+- **Wayleave** — wayleave tracking and consent management
+- **Build progress** — build task tracking
+- **Customer connection** — customer records and connection status
+- Field round-trip (QField / mobile) and a persisted as-built / digital-twin layer
+
+Conductor today is a strong design & fibre-planning tool; it is not yet a survey/wayleave/build/customer lifecycle tool, and the documentation no longer claims otherwise.
 
 ## Requirements
 

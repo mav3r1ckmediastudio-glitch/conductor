@@ -1,5 +1,5 @@
 # Conductor — Development To-Do List
-*Last updated: 20 June 2026 (v2 — fibre-assignment stability session)*
+*Last updated: 22 June 2026 (v2.0.0 — docs reconciliation + Phase 2 functional fixes)*
 
 ---
 
@@ -27,7 +27,7 @@
 - [x] Fibre Trace (premises → joint → cable → joint → cabinet) — fibre_trace.py
 - [x] Fibre Count Calculator (Calix cabinet calculator logic) — fibre_count.py
 - [x] Validate Fibre Routes — validate_routes.py
-- [ ] Validate Relationships (FK checker across all layers) — confirm whether validate_routes.py already covers this, or if it's route-geometry-only and a separate FK checker is still needed
+- [x] Validate Relationships (FK checker across all layers) — answered: validate_routes.py is route/optical-focused, so a separate checker was built. `tools/validate_integrity.py` (Phase 1) validates every cross-layer reference; wired into the validation dock as "Network Integrity". Verified clean on CH33 (1,978 refs, 0 orphans).
 
 ---
 
@@ -65,22 +65,22 @@
 - [x] Cookie-cutter clip — premises outside build area polygon automatically deleted when build area is drawn.
 - [x] Splitter integrity warning — edit-time and validation-time check for joints with >1 downstream connection but no splitter declared.
 - [x] 1:4 × 1:8 splitter chain enforcement — route validator checks every ROUTED premises has exactly a 1:8 (distribution) and 1:4 (spine) splitter in correct order.
-- [x] CBT tail 500m warning — non-blocking warning if tail exceeds 500m.
+- [x] CBT tail 350m hard stop — blocking limit at 350m (rated drop reach of the pole-mounted CBT); true measured length still stored so per-metre BoM costing is accurate; 50m-rounded figure shown for reference (commit db4c345, was a non-blocking 500m warning).
 - [x] Sticky, freeze-aware fibre port allocation — Auto-Assign Fibres persists splitter ports (`splitter_port` on bundles/drop_ducts, `feeder_port` on joints) so re-running no longer reshuffles existing customers when premises/cables change. INSTALLED/LIVE assignments are frozen; new consumers fill the lowest free ports. Shared `sticky_allocate()` serves both terminal (Stage 2) and feeder (Stage 1) allocation. Verified on CH33 (234 records; first run reproduces the prior assignment exactly).
 - [x] Splitter topology drift report (validate-only) — `tools/splitter_topology.py` derives splitter presence + role (feeder/terminal) from network structure and flags drift vs declared `has_splitter`/`split_ratio` (stale ticks, missing ticks, oversubscription, feeder-ratio mismatch) as issue rows in the validation dock. Declared fields stay the source of truth; supersedes the cruder downstream-paths stub in `run_validation_headless`.
 - [x] **Network/FK integrity validator** (Phase 1) — `tools/validate_integrity.py` checks every cross-layer reference resolves to a real feature (typed `from_node`/`to_node`, `from_chamber`, `bundle_id`, `splitter_id`/`cable_id` splitter pseudo-ids, pole refs). Understands the model's legitimate overloads: `from_chamber`→chamber|CBT-joint, `bundle_id`→bundle|ddct|joint, `-SP`→splitter set, and poles stored as `PIA_POLE` chambers. Runs headless (`run_integrity_check_headless()`), wired into the validation dock as a "Network Integrity" row that runs on every refresh; broken links open a detail popup with zoom-to-feature. Negative-tested + regression test `tests/test_integrity_validator.py` (2/2). Verified clean on CH33 (1,978 refs, 0 orphans).
-- [ ] Splitter drift parity — the Validate Routes *dialog* still runs the old downstream-paths stub; point it at `splitter_drift_issues()` to match the validation dock.
-- [ ] Through-splice carry-fibre ordering at a shared CBT attach joint is still sort-positional — the last non-sticky spot in fibre_assign Stage 1.
-- [ ] Splitter topology derive-and-write — optionally promote the validate-only drift report to write `has_splitter`/`split_ratio`/`cascade_level`/`cascade_type` back to joints, keeping all downstream tools (BoM, SLD, splice plan, styling) consistent. Needs `cascade_level`/`cascade_type` handling.
+- [x] Splitter drift parity — Validate Routes *dialog* now calls the canonical `splitter_drift_issues()`, so dialog, dock and headless runner report identical drift; dead `splitter_warnings` stub removed (commit a21a29c).
+- [x] Through-splice carry-fibre ordering at a shared CBT attach joint — now deterministic, keyed to the CBT child id rather than append order; stable run-to-run (commit 82788aa, verified on CH33 shared joint ENG-CH3-JNT-005).
+- [~] Splitter topology auto-derive — fibre_assign now BFS-auto-derives undeclared splitters at assignment time so the engine is never blind to a missing `has_splitter`/`split_ratio` (commit 799bcf1; manual declarations are never overwritten — drift stays the validator's job). Still optional/future: *writing* derived `has_splitter`/`split_ratio`/`cascade_level`/`cascade_type` back to the joints layer for downstream tool consistency.
 - [ ] Optical schematic view (QGraphicsView fibre topology diagram)
 - [ ] Fibre slack tracking per chamber/joint
-- [ ] Refactor tools into manager classes (LayerManager, IDManager, SnappingManager)
+- [ ] Refactor tools into manager classes (LayerManager, IDManager, SnappingManager) — *deliberately deferred*: solo dev knows the 2,011-line file, the bulk is write-once UI, there's no test coverage to make the refactor safe, and the CI contract gates already neutralise the dropped-field bug class that was the original reason to refactor. Revisit only if it actively blocks a change.
 - [ ] Plugin Reloader compatibility (dev workflow)
 - [ ] Broader unit tests for ID generation and topology rules
 
 ### Bug fixes (v1.0.2 session — 18 June 2026)
 - [x] PyQt/SIP GC bug — map tools created as local variables were garbage-collected immediately after _run_map_tool() returned, leaving a dead tool with no cursor. Fixed: self._active_map_tool = tool holds strong reference.
-- [x] Edit Joint dialog auto-sizing — three competing resize attempts fired before Qt laid out the scroll area. Fixed: single deferred resize via showEvent + QTimer.singleShot(0).
+- [x] Edit Joint dialog auto-sizing — the showEvent + QTimer.singleShot(0) attempt proved unreliable (Qt dispatches the class-level showEvent virtual, so the instance override often never fired). Reworked (commit 4f1f167): QTimer.singleShot(0, ...) scheduled before exec_(), sizing to the scroll frame's real sizeHint, capped at 900px. Verified live on CH33.
 - [x] Ctrl+Z not firing — keyPressEvent on dockwidget intercepted by QGIS. Fixed: QShortcut with Qt.ApplicationShortcut context.
 - [x] LAYER_ID_FIELDS → ID_FIELDS in select_delete.py undo push.
 - [x] from_chamber resolution in splitter integrity check — CBT aerial drops store joint_id directly in from_chamber; UG drops store chamber_id. Both cases now handled correctly.
@@ -100,7 +100,7 @@
 ## 📐 DATA MODEL
 - [x] v0.4 data model (ducts + fibre_cables as separate layers, shotgun/PIA/drop_duct_type, DUCT-NNN IDs) — done v0.3.0
 - [x] surface_type added to chambers schema (v1.0.1) — migration applied to SCOT-222.gpkg
-- [ ] fibre_assignments layer population tool — confirm whether fibre_assign.py already populates this layer, or if a separate population step is still needed
+- [x] fibre_assignments layer population — confirmed: fibre_assign.py clears and rewrites the fibre_assignments layer on each Auto-Assign run (234 records on CH33). No separate population step needed. Now also covered by the schema/integrity contract gates.
 - [ ] QField compatibility review (field survey workflow)
 
 ---
@@ -181,14 +181,16 @@ works, just non-sticky) and logs a hint.
 
 ## 💡 IDEAS / FUTURE
 
-> **Decision (22 Jun 2026): lifecycle scope deferred.** The README/about text
-> claims a full survey → wayleave → build → customer lifecycle, but those four
-> layers are styled placeholders with no tools writing to them. This is a known
-> scope-vs-reality gap. **It is intentionally parked** until the core design &
-> fibre-planning engine is robustly tested and validated for release. Until
-> then, the honest framing is: Conductor is a design & fibre-planning tool, not
-> yet a lifecycle tool. Either trim the claim or build the loop — but only after
-> release-readiness, not before.
+> **Decision (22 Jun 2026, settled): lifecycle scope deferred — claim trimmed.**
+> The survey → wayleave → build → customer lifecycle layers are styled
+> placeholders with no tools writing to them. This is **intentionally out of
+> scope** until there is a robust, release-ready V1 of the core design &
+> fibre-planning engine. As of v2.0.0 the docs have been reconciled to match:
+> the README/about text no longer claim lifecycle coverage, and the three
+> lifecycle groups in the layer tree are labelled **(planned)**. The schema
+> scaffolding is retained (no migration cost to re-activate later). This is a
+> closed decision — not an open "trim or build" question. Revisit only after
+> the core engine is release-ready.
 
 - [ ] PostGIS backend option (multi-user concurrent access)
 - [ ] QField integration for field survey capture

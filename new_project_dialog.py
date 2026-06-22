@@ -349,9 +349,9 @@ LAYER_GROUPS = {
     "Fibre Network":          ["joints", "bundles", "cables", "fibre_assignments"],
     "Civil Last Mile":        ["drop_ducts"],
     "Passive Infrastructure": ["chambers", "poles", "ducts"],
-    "Survey & Wayleave":      ["surveys", "wayleaves"],
-    "Build & Progress":       ["build_tasks"],
-    "Customers":              ["customers"],
+    "Survey & Wayleave (planned)": ["surveys", "wayleaves"],
+    "Build & Progress (planned)":  ["build_tasks"],
+    "Customers (planned)":         ["customers"],
 }
 
 
