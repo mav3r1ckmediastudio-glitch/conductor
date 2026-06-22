@@ -1214,7 +1214,7 @@ premises.uprn
     <div class="callout info">Active equipment costs (Calix shelves, GPON cards/optics, batteries, etc.) are <strong>not</strong> in the BoM — see the <strong>Cabinet Cost Calculator</strong> for those, which combines them with this BoM's civils/cable total.</div>
 
     <h2>Unit costs</h2>
-    <p>Costs are pre-loaded from Gigaloch's 2022 price sheet. Key values:</p>
+    <p>Costs are pre-loaded from Gigaloch's current material price sheet. Key values:</p>
     <table>
       <tr><th>Item</th><th>Unit</th><th>Cost</th></tr>
       <tr><td>Shotgun duct</td><td>/m</td><td>£1.05</td></tr>
@@ -1226,7 +1226,7 @@ premises.uprn
       <tr><td>Splitter 1:8</td><td>each</td><td>£61.75</td></tr>
       <tr><td>Splitter 1:4</td><td>each</td><td>£149.81</td></tr>
     </table>
-    <div class="callout warning"><strong>Prices from 2022.</strong> Update unit costs in <code>tools/bom.py</code> → <code>DEFAULT_COSTS</code> dict to reflect current supplier pricing.</div>
+    <div class="callout info"><strong>Unit costs are maintained in <code>tools/bom.py</code> → <code>DEFAULT_COSTS</code></strong> as the single source of pricing. Edit that dict when supplier prices change; the figures shown are the current Gigaloch rates.</div>
 
     <h2>Excel export</h2>
     <p>Click <strong>↓ Export Excel</strong> to save a <code>.xls</code> file with one sheet per tab, colour-coded headers matching the dialog, proper currency formatting, and alternating row stripes.</p>

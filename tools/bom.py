@@ -39,7 +39,8 @@ from ..conductor_utils import get_layer, fld, val, LayerEditContext, NAVY, TEAL,
 
 
 # ── Default unit costs (£) ────────────────────────────────────────────────────
-# Sourced from Gigaloch material costs sheet (2022 — update as needed)
+# Sourced from Gigaloch's current material costs sheet. Maintained here as the
+# single source of unit pricing; edit DEFAULT_COSTS when supplier prices change.
 DEFAULT_COSTS = {
     # ── Fibre cable — per metre by core count ─────────────────────────────
     "cable_12f_m":          0.47,
