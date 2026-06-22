@@ -8,7 +8,7 @@ from qgis.PyQt.QtWidgets import (
 )
 from qgis.PyQt.QtCore import Qt
 from qgis.core import QgsProject, NULL
-from ..conductor_utils import get_layer, fld, val, LayerEditContext
+from ..conductor_utils import get_layer, fld, val, LayerEditContext, log
 from ..conductor_utils import safe_write_text
 from .validate_routes import _build_index, _build_cable_node_index
 from .optical_budget import calculate_link_budget, load_optical
@@ -108,14 +108,22 @@ def build_network(project=None):
             uprn    = str(val(feat['uprn']) or '')
             ddct_id = str(val(feat['ddct_id']) or '')
             length  = round(float(val(feat['length_m']) or 0), 1)
-            # Treat as aerial drop if: drop_type says so, from_pole is set,
-            # or the from_chamber joint_id contains 'CBT' (pole-mounted box).
-            # Fall back: any drop_duct not already captured as a UG bundle.
-            is_aerial = (
-                'AERIAL' in dt.upper()
-                or bool(pole and pole != NULL)
-                or 'CBT' in fc_str.upper()
-            )
+            # Classify aerial drops. Primary signals are explicit and
+            # reliable: drop_type tagged AERIAL, or from_pole populated.
+            # The from_chamber name-match ('CBT') is a last-resort fallback
+            # for legacy data that predates those fields — it is fragile
+            # (depends on the joint-id naming convention), so when it is the
+            # *only* signal we log a warning rather than trust it silently.
+            primary_aerial  = ('AERIAL' in dt.upper()) or bool(pole and pole != NULL)
+            fallback_aerial = 'CBT' in fc_str.upper()
+            is_aerial = primary_aerial or fallback_aerial
+            if is_aerial and not primary_aerial and fallback_aerial:
+                log(
+                    "SLD: drop %s on %s classified aerial only by from_chamber "
+                    "name-match (no drop_type/from_pole). Verify field "
+                    "population." % (ddct_id or '?', fc_str),
+                    "warning",
+                )
             if is_aerial:
                 aerial_drops.setdefault(fc_str, []).append({
                     'ddct_id': ddct_id,
