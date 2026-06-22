@@ -335,7 +335,14 @@ def assign_fibres(log_fn=None):
                 t = tail_of(child)
                 if t:
                     cbt_by_attach.setdefault(t["to"], []).append((child, t["id"]))
-        for attach, items in cbt_by_attach.items():
+        # When several CBT tails attach at one joint they share the carry cable;
+        # each tail takes one carry fibre. Assign carry-fibre numbers by a
+        # stable intrinsic key (the CBT child id) rather than by the order the
+        # tails happened to be appended above. Sorting the iteration of attach
+        # joints too keeps the whole pass reproducible run-to-run, so the
+        # splice plan does not churn when unrelated data is edited.
+        for attach in sorted(cbt_by_attach):
+            items = sorted(cbt_by_attach[attach], key=lambda ci: (ci[0], ci[1]))
             carry = feeder_of(attach)
             if not carry:
                 continue
