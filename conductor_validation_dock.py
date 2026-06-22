@@ -130,7 +130,9 @@ class ConductorValidationDock(QDockWidget):
         refresh_btn.clicked.connect(self._on_refresh)
         hl.addWidget(refresh_btn)
 
+        self._health_active = False
         health_btn = QToolButton()
+        self._health_btn = health_btn
         health_btn.setText("✔ Health")
         health_btn.setToolTip("Design Health — would this network work if built? "
                               "Run before exporting a BoM or HLD pack.")
@@ -722,6 +724,9 @@ class ConductorValidationDock(QDockWidget):
           score_pct (int or None),
           issues (list of dicts: {severity, message, asset_id})
         """
+        # Normal route-validation view — undo any Health-mode pill relabel.
+        if hasattr(self, "_badge_warnings_val"):
+            self._badge_warnings_val.setText("Warnings")
         self._badge_critical.setText(str(results.get("critical", 0)))
         self._badge_errors.setText(str(results.get("errors", 0)))
         self._badge_warnings.setText(str(results.get("warnings", 0)))
@@ -903,9 +908,19 @@ class ConductorValidationDock(QDockWidget):
         return row
 
     def _on_design_health(self):
-        """Run the Design Health readiness check and show the verdict banner.
-        Answers: would this network work if built? Stricter than the route
-        validator — optical-fail and partial routes block here."""
+        """Toggle the Design Health readiness view.
+        First click: run the "would this network work if built?" check and show
+        the verdict (banner + Health-tier pills + reason rows). Second click:
+        clear it and return to the normal route-validation view."""
+        # ── Toggle off ───────────────────────────────────────────────────────
+        if getattr(self, "_health_active", False):
+            self._health_active = False
+            self._health_banner.setVisible(False)
+            self._set_health_btn_active(False)
+            # Restore the normal validation view.
+            self._on_refresh()
+            return
+
         if not getattr(self, "_project", None):
             self._health_banner.setText("Open a project first.")
             self._health_banner.setStyleSheet(
@@ -923,6 +938,9 @@ class ConductorValidationDock(QDockWidget):
                 f"color:{RED}; border-radius:4px;")
             self._health_banner.setVisible(True)
             return
+
+        self._health_active = True
+        self._set_health_btn_active(True)
 
         verdict = res["verdict"]
         if verdict == GO:
@@ -943,27 +961,97 @@ class ConductorValidationDock(QDockWidget):
             f"border-left:3px solid {colour}; border-radius:4px;")
         self._health_banner.setVisible(True)
 
-        # List the blocking + caution issues in the issues area (errors first).
+        # ── Repaint the count pills to Design Health's own tiers ─────────────
+        # The pills normally show the route validator's counts; while Health is
+        # active they show Health's "would it work if built" tiers, so the
+        # banner's "N caution(s)" lines up with a visible pill. The Warnings
+        # pill is relabelled "Caution" to match the verdict vocabulary.
+        self._badge_critical.setText("0")
+        self._badge_errors.setText(str(res.get("error_count", 0)))
+        self._badge_warnings.setText(str(res.get("warning_count", 0)))
+        self._badge_info.setText(str(res.get("info_count", 0)))
+        if hasattr(self, "_badge_warnings_val"):
+            self._badge_warnings_val.setText("Caution")
+        # Score badge: show the verdict word instead of a percentage.
+        self._pct_lbl.setText(verdict)
+        self._pct_lbl.setStyleSheet(
+            f"color:{colour}; font-size:10px; font-weight:bold;")
+
+        # ── Reason rows (full, wrapped — these ARE the explanation) ──────────
         while self._issues_layout.count():
             item = self._issues_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
         order = {"error": 0, "warning": 1, "info": 2}
-        tier_colour = {"error": RED, "warning": ORANGE, "info": MID}
-        shown = [it for it in res["issues"]]
-        shown.sort(key=lambda x: order.get(x["tier"], 3))
-        for it in shown[:60]:
-            label = "%s — %s" % (it["category"], it["message"])
-            row = self._issue_row(it["tier"], label, it.get("asset_id", ""),
-                                  tier_colour.get(it["tier"], MID))
-            self._issues_layout.addWidget(row)
-        if len(shown) > 60:
-            from qgis.PyQt.QtWidgets import QLabel as _QL
-            more = _QL("+ %d more" % (len(shown) - 60))
+        tier_colour = {"error": RED, "warning": ORANGE, "info": TEAL}
+        tier_label  = {"error": "BLOCKS", "warning": "CAUTION", "info": "NOTE"}
+        shown = sorted(res["issues"], key=lambda x: order.get(x["tier"], 3))
+        if not shown:
+            ok = QLabel("No issues — the network as drawn would work if built.")
+            ok.setWordWrap(True)
+            ok.setStyleSheet(f"color:{GREEN}; font-size:11px; padding:8px;")
+            self._issues_layout.addWidget(ok)
+        for it in shown[:80]:
+            self._issues_layout.addWidget(
+                self._health_reason_row(
+                    tier_label.get(it["tier"], "NOTE"),
+                    it.get("category", ""),
+                    it.get("message", ""),
+                    tier_colour.get(it["tier"], MID)))
+        if len(shown) > 80:
+            more = QLabel("+ %d more" % (len(shown) - 80))
             more.setStyleSheet(f"color:{MID}; font-size:10px; padding:4px;")
             self._issues_layout.addWidget(more)
         from datetime import datetime
         self._updated_lbl.setText("Health %s" % datetime.now().strftime("%H:%M"))
+
+    def _set_health_btn_active(self, active):
+        """Visually mark the Health button as toggled on/off."""
+        btn = getattr(self, "_health_btn", None)
+        if btn is None:
+            return
+        if active:
+            btn.setText("✔ Health ×")
+            btn.setStyleSheet(f"""
+                QToolButton {{ background:{TEAL}; color:{NAVY}; border:1px solid {TEAL};
+                               border-radius:3px; font-size:10px; font-weight:700;
+                               padding:0 8px; letter-spacing:.5px; }}
+                QToolButton:hover {{ background:{WHITE}; }}
+            """)
+        else:
+            btn.setText("✔ Health")
+            btn.setStyleSheet(f"""
+                QToolButton {{ background:{LIGHT}; color:{WHITE}; border:1px solid {MID};
+                               border-radius:3px; font-size:10px; font-weight:700;
+                               padding:0 8px; letter-spacing:.5px; }}
+                QToolButton:hover {{ border-color:{TEAL}; color:{TEAL}; }}
+            """)
+
+    def _health_reason_row(self, tag, category, message, colour):
+        """A self-explaining, word-wrapped reason row for a Design Health issue.
+        No zoom button (these are often whole-design notes, not single assets);
+        the full text is shown wrapped so the caution explains itself."""
+        row = QWidget()
+        row.setMinimumWidth(0)
+        row.setStyleSheet(
+            f"background:{LIGHT}; border-left:3px solid {colour}; "
+            f"border-radius:3px; margin-bottom:2px;")
+        rl = QVBoxLayout(row)
+        rl.setContentsMargins(8, 5, 8, 6)
+        rl.setSpacing(2)
+        head = QLabel("%s · %s" % (tag, category))
+        head.setStyleSheet(
+            f"color:{colour}; font-size:9px; font-weight:700; "
+            f"letter-spacing:.5px; border:none; background:transparent;")
+        rl.addWidget(head)
+        body = QLabel(message)
+        body.setWordWrap(True)
+        body.setMinimumWidth(0)
+        body.setStyleSheet(
+            f"color:{WHITE}; font-size:11px; border:none; background:transparent;")
+        body.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        rl.addWidget(body)
+        return row
 
     def _on_refresh(self):
         """Attempt to run validation if a project is open."""
