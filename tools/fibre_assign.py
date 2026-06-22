@@ -172,6 +172,26 @@ def assign_fibres(log_fn=None):
         if fld(f, "has_splitter", False) in (True, 1):
             splitters[jid] = S(f["split_ratio"])
 
+    # ── BFS auto-derive of splitter topology ──────────────────────────────
+    # The cascade above trusts manually-set has_splitter/split_ratio. Where a
+    # joint or CBT genuinely terminates/feeds a split but the fields were not
+    # set, the engine would otherwise be blind to it. Derive the topology from
+    # the network (same engine the validator uses) and fill in any splitter the
+    # designer has not explicitly declared. Manually-declared splitters are
+    # left untouched — divergence between declared and derived is surfaced by
+    # the Network Integrity validator, not silently overwritten here.
+    try:
+        from .splitter_topology import derive_splitter_topology
+        derived, _roles, _terms, _feeders = derive_splitter_topology(
+            jnt_layer, cab_layer, bdl_layer, dd_layer)
+        for jid_d, ratio_d in derived.items():
+            if jid_d not in splitters:
+                splitters[jid_d] = ratio_d
+                log("Auto-derived splitter %s = %s (has_splitter not set)"
+                    % (jid_d, ratio_d))
+    except Exception as _e:
+        log("Splitter auto-derive skipped: %s" % _e)
+
     def feeder_of(n):
         for c in cables:
             if c["to"] == n and c["type"] != "CBT_TAIL":
