@@ -372,23 +372,30 @@ class DigitiseCBTTailMapTool(QgsMapTool):
         tail_id  = _next_tail_id(cable_layer, self._project.area_id)
         length_m = round(line_length_m(self._points), 1)
 
-        # Warn if tail exceeds 500m — not a hard stop but designer should be aware
-        if length_m > 500:
+        # Hard stop if tail exceeds 350m. This is a buildability limit, not a
+        # preference: the pole-mounted CBT (Corning OptiSheath 12-port 350m
+        # drop) is rated for a drop reach of 350m, so a longer tail cannot be
+        # built with the specified hardware. The designer must shorten the run
+        # (reposition the CBT or the underground joint) before saving. The
+        # 50m-rounded figure is shown for reference only; the true measured
+        # length is what gets stored, so per-metre costing stays accurate.
+        CBT_TAIL_MAX_M = 350
+        if length_m > CBT_TAIL_MAX_M:
             rounded = round(length_m / 50) * 50
-            reply = QMessageBox.warning(
+            QMessageBox.critical(
                 None,
-                "CBT Tail — Length Warning",
+                "CBT Tail — Length Exceeded",
                 f"This CBT tail is {length_m:.0f}m (~{rounded:.0f}m rounded to nearest 50m), "
-                f"which exceeds the recommended maximum of 500m.\n\n"
-                f"Check your design — a tail this long may indicate the CBT position "
-                f"or underground joint location needs reviewing.\n\n"
-                f"Do you want to save it anyway?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No
+                f"which exceeds the {CBT_TAIL_MAX_M}m maximum drop reach of the "
+                f"pole-mounted CBT.\n\n"
+                f"A tail this long cannot be built with the specified CBT hardware. "
+                f"Reposition the CBT or the underground joint to shorten the run, "
+                f"then re-digitise.\n\n"
+                f"This route has not been saved.",
+                QMessageBox.Ok
             )
-            if reply == QMessageBox.No:
-                self._reset()
-                return
+            self._reset()
+            return
 
         dlg = DigitiseCBTTailDialog(
             tail_id      = tail_id,
