@@ -129,7 +129,29 @@ class ConductorValidationDock(QDockWidget):
         """)
         refresh_btn.clicked.connect(self._on_refresh)
         hl.addWidget(refresh_btn)
+
+        health_btn = QToolButton()
+        health_btn.setText("✔ Health")
+        health_btn.setToolTip("Design Health — would this network work if built? "
+                              "Run before exporting a BoM or HLD pack.")
+        health_btn.setCursor(Qt.PointingHandCursor)
+        health_btn.setFixedHeight(24)
+        health_btn.setStyleSheet(f"""
+            QToolButton {{ background:{LIGHT}; color:{WHITE}; border:1px solid {MID};
+                           border-radius:3px; font-size:10px; font-weight:700;
+                           padding:0 8px; letter-spacing:.5px; }}
+            QToolButton:hover {{ border-color:{TEAL}; color:{TEAL}; }}
+        """)
+        health_btn.clicked.connect(self._on_design_health)
+        hl.addWidget(health_btn)
         root.addWidget(hdr)
+
+        # Design Health verdict banner (hidden until first run)
+        self._health_banner = QLabel("")
+        self._health_banner.setWordWrap(True)
+        self._health_banner.setVisible(False)
+        self._health_banner.setStyleSheet("font-size:11px; padding:8px 12px;")
+        root.addWidget(self._health_banner)
 
         # ── Count badges ────────────────────────────────────────────────────
         badge_area = QWidget()
@@ -879,6 +901,69 @@ class ConductorValidationDock(QDockWidget):
         """)
         rl.addWidget(zoom_btn, 0)
         return row
+
+    def _on_design_health(self):
+        """Run the Design Health readiness check and show the verdict banner.
+        Answers: would this network work if built? Stricter than the route
+        validator — optical-fail and partial routes block here."""
+        if not getattr(self, "_project", None):
+            self._health_banner.setText("Open a project first.")
+            self._health_banner.setStyleSheet(
+                f"font-size:11px; padding:8px 12px; background:{LIGHT}; "
+                f"color:{MID}; border-radius:4px;")
+            self._health_banner.setVisible(True)
+            return
+        try:
+            from .tools.design_health import design_health, GO, CAUTION, NOGO
+            res = design_health(self._project)
+        except Exception as e:
+            self._health_banner.setText("Design Health could not run: %s" % e)
+            self._health_banner.setStyleSheet(
+                f"font-size:11px; padding:8px 12px; background:{LIGHT}; "
+                f"color:{RED}; border-radius:4px;")
+            self._health_banner.setVisible(True)
+            return
+
+        verdict = res["verdict"]
+        if verdict == GO:
+            colour, glyph = GREEN, "✔"
+        elif verdict == CAUTION:
+            colour, glyph = ORANGE, "⚠"
+        else:
+            colour, glyph = RED, "✕"
+
+        cov = ""
+        if res.get("total"):
+            cov = "  ·  %d/%d premises routed" % (res["routed"], res["total"])
+        self._health_banner.setText(
+            "%s  %s%s\n%s" % (glyph, verdict, cov, res["headline"]))
+        self._health_banner.setStyleSheet(
+            f"font-size:11px; font-weight:600; padding:8px 12px; "
+            f"background:{LIGHT}; color:{colour}; "
+            f"border-left:3px solid {colour}; border-radius:4px;")
+        self._health_banner.setVisible(True)
+
+        # List the blocking + caution issues in the issues area (errors first).
+        while self._issues_layout.count():
+            item = self._issues_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        order = {"error": 0, "warning": 1, "info": 2}
+        tier_colour = {"error": RED, "warning": ORANGE, "info": MID}
+        shown = [it for it in res["issues"]]
+        shown.sort(key=lambda x: order.get(x["tier"], 3))
+        for it in shown[:60]:
+            label = "%s — %s" % (it["category"], it["message"])
+            row = self._issue_row(it["tier"], label, it.get("asset_id", ""),
+                                  tier_colour.get(it["tier"], MID))
+            self._issues_layout.addWidget(row)
+        if len(shown) > 60:
+            from qgis.PyQt.QtWidgets import QLabel as _QL
+            more = _QL("+ %d more" % (len(shown) - 60))
+            more.setStyleSheet(f"color:{MID}; font-size:10px; padding:4px;")
+            self._issues_layout.addWidget(more)
+        from datetime import datetime
+        self._updated_lbl.setText("Health %s" % datetime.now().strftime("%H:%M"))
 
     def _on_refresh(self):
         """Attempt to run validation if a project is open."""
