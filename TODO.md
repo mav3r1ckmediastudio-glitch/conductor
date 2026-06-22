@@ -1,5 +1,5 @@
 # Conductor — Development To-Do List
-*Last updated: 18 June 2026 (v1.0.2 session)*
+*Last updated: 20 June 2026 (v2 — fibre-assignment stability session)*
 
 ---
 
@@ -66,6 +66,12 @@
 - [x] Splitter integrity warning — edit-time and validation-time check for joints with >1 downstream connection but no splitter declared.
 - [x] 1:4 × 1:8 splitter chain enforcement — route validator checks every ROUTED premises has exactly a 1:8 (distribution) and 1:4 (spine) splitter in correct order.
 - [x] CBT tail 500m warning — non-blocking warning if tail exceeds 500m.
+- [x] Sticky, freeze-aware fibre port allocation — Auto-Assign Fibres persists splitter ports (`splitter_port` on bundles/drop_ducts, `feeder_port` on joints) so re-running no longer reshuffles existing customers when premises/cables change. INSTALLED/LIVE assignments are frozen; new consumers fill the lowest free ports. Shared `sticky_allocate()` serves both terminal (Stage 2) and feeder (Stage 1) allocation. Verified on CH33 (234 records; first run reproduces the prior assignment exactly).
+- [x] Splitter topology drift report (validate-only) — `tools/splitter_topology.py` derives splitter presence + role (feeder/terminal) from network structure and flags drift vs declared `has_splitter`/`split_ratio` (stale ticks, missing ticks, oversubscription, feeder-ratio mismatch) as issue rows in the validation dock. Declared fields stay the source of truth; supersedes the cruder downstream-paths stub in `run_validation_headless`.
+- [x] **Network/FK integrity validator** (Phase 1) — `tools/validate_integrity.py` checks every cross-layer reference resolves to a real feature (typed `from_node`/`to_node`, `from_chamber`, `bundle_id`, `splitter_id`/`cable_id` splitter pseudo-ids, pole refs). Understands the model's legitimate overloads: `from_chamber`→chamber|CBT-joint, `bundle_id`→bundle|ddct|joint, `-SP`→splitter set, and poles stored as `PIA_POLE` chambers. Runs headless (`run_integrity_check_headless()`), wired into the validation dock as a "Network Integrity" row that runs on every refresh; broken links open a detail popup with zoom-to-feature. Negative-tested + regression test `tests/test_integrity_validator.py` (2/2). Verified clean on CH33 (1,978 refs, 0 orphans).
+- [ ] Splitter drift parity — the Validate Routes *dialog* still runs the old downstream-paths stub; point it at `splitter_drift_issues()` to match the validation dock.
+- [ ] Through-splice carry-fibre ordering at a shared CBT attach joint is still sort-positional — the last non-sticky spot in fibre_assign Stage 1.
+- [ ] Splitter topology derive-and-write — optionally promote the validate-only drift report to write `has_splitter`/`split_ratio`/`cascade_level`/`cascade_type` back to joints, keeping all downstream tools (BoM, SLD, splice plan, styling) consistent. Needs `cascade_level`/`cascade_type` handling.
 - [ ] Optical schematic view (QGraphicsView fibre topology diagram)
 - [ ] Fibre slack tracking per chamber/joint
 - [ ] Refactor tools into manager classes (LayerManager, IDManager, SnappingManager)
@@ -84,6 +90,10 @@
 - [x] validate_routes.py — `trace_premises()` didn't resolve PIA_AERIAL_DROP drop ducts (from_pole set, from_chamber empty); now finds the CBT joint mounted on that pole. Fixes "no drop_duct" PARTIAL errors for premises connected via aerial drops from CBTs.
 - [x] place_pop.py `EditPOPMapTool.canvasReleaseEvent` — `point.buffer(radius)` called on a `QgsPointXY` (no such method); now wraps in `QgsGeometry.fromPointXY(...)` first.
 - [x] place_pop.py `EditPOPMapTool.canvasReleaseEvent` — click point wasn't transformed from canvas CRS (commonly EPSG:3857) to the layer's EPSG:27700 before filtering, so "Edit Cabinet/POP" could never find a cabinet. Now transforms first, same pattern as edit_assets.py's `_find_feature`.
+
+### Bug fixes (v2 session — 20 June 2026)
+- [x] Auto-Assign Fibres reshuffled existing customer ports when premises were added or removed (sort-positional allocation). Fixed via sticky port allocation (see Architecture).
+- [x] Conductor toolbar toggle and the main dock's X button left the Validation and Routes docks orphaned on screen. Fixed: `_toggle_dockwidget` and `ConductorDockWidget.closeEvent` now hide/show all three docks together.
 
 ---
 
@@ -141,6 +151,31 @@ ALTER TABLE ducts ADD COLUMN sleeve_length_m REAL;
 ```
 
 **Status: applied to SCOT-222.gpkg.**
+
+---
+
+## 🛠️ MIGRATION — v2 (auto-applied on project open)
+
+v2 adds sticky-port columns: `splitter_port` (INTEGER) on `bundles` and
+`drop_ducts`, and `feeder_port` (INTEGER) on `joints`. These let Auto-Assign
+Fibres remember which port each premises / child splitter sits on, so
+re-running never reshuffles existing customers.
+
+New projects get the columns from the template. For **existing** GeoPackages,
+`ensure_port_schema()` (project_manager.py) adds any missing columns
+automatically when the project is opened — no manual SQL required. Equivalent
+statements if ever needed:
+
+```sql
+ALTER TABLE bundles    ADD COLUMN splitter_port INTEGER;
+ALTER TABLE drop_ducts ADD COLUMN splitter_port INTEGER;
+ALTER TABLE joints     ADD COLUMN feeder_port   INTEGER;
+```
+
+Until the columns exist the new code degrades gracefully (assignment still
+works, just non-sticky) and logs a hint.
+
+**Status: applied to CH33.gpkg; auto-applies on open for all other projects.**
 
 ---
 

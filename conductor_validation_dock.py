@@ -414,6 +414,73 @@ class ConductorValidationDock(QDockWidget):
             canvas.setExtent(bbox)
             canvas.refresh()
 
+    # ── Network Integrity detail popup ───────────────────────────────────────────
+    LAYER_DISPLAY = {
+        "joints": "Joints", "cables": "Cables", "ducts": "Ducts",
+        "drop_ducts": "Drop Ducts", "bundles": "Bundles", "chambers": "Chambers",
+        "fibre_assignments": "Fibre Assignments", "premises": "Premises",
+        "exchange_pops": "Exchanges & POPs", "poles": "Poles",
+        "build_tasks": "Build Tasks", "customers": "Customers",
+    }
+
+    def _show_integrity_detail(self, integ):
+        from qgis.PyQt.QtWidgets import (
+            QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
+            QScrollArea, QWidget, QFrame
+        )
+        from .conductor_utils import get_layer
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Network Integrity — broken links")
+        dlg.setMinimumSize(560, 420)
+        dlg.setStyleSheet(_QSS)
+        lay = QVBoxLayout(dlg); lay.setContentsMargins(16, 16, 16, 16); lay.setSpacing(10)
+
+        issues = integ.get("issues", [])
+        errors = [i for i in issues if i.get("severity") == "ERROR"]
+        head = QLabel(f"{len(errors)} broken reference{'s' if len(errors) != 1 else ''} "
+                      f"— a link points at an asset that does not exist.")
+        head.setWordWrap(True)
+        head.setStyleSheet(f"color:{WHITE}; font-size:12px;")
+        lay.addWidget(head)
+
+        scroll = QScrollArea(); scroll.setWidgetResizable(True); scroll.setFrameShape(QFrame.NoFrame)
+        body = QWidget(); bl = QVBoxLayout(body); bl.setContentsMargins(0, 0, 0, 0); bl.setSpacing(6)
+
+        for it in errors:
+            lname = it.get("layer", ""); fid = it.get("fid"); field = it.get("field", "")
+            value = it.get("value", ""); detail = it.get("detail", "")
+            disp = self.LAYER_DISPLAY.get(lname, lname)
+            card = QWidget()
+            card.setStyleSheet(f"background:{LIGHT}; border-left:3px solid {RED}; border-radius:3px;")
+            cl = QHBoxLayout(card); cl.setContentsMargins(10, 8, 10, 8); cl.setSpacing(10)
+            txt = QLabel(f"<b>{disp}</b> · <span style='color:{GREY}'>{field}</span> → "
+                         f"<span style='color:{RED}'>{value}</span><br>"
+                         f"<span style='color:{GREY}; font-size:10px'>{detail}</span>")
+            txt.setStyleSheet(f"color:{WHITE}; font-size:11px;")
+            txt.setWordWrap(True)
+            cl.addWidget(txt, 1)
+            zbtn = QPushButton("⊙ Zoom")
+            zbtn.setCursor(Qt.PointingHandCursor); zbtn.setFixedWidth(70)
+            def _mkzoom(ln=lname, fd=fid):
+                def _go():
+                    lyr = get_layer(ln, getattr(self, "_project", None))
+                    if not lyr or fd is None:
+                        return
+                    feat = lyr.getFeature(fd)
+                    if feat is not None:
+                        self._zoom_to_asset(feat, ln)
+                return _go
+            zbtn.clicked.connect(_mkzoom())
+            cl.addWidget(zbtn, 0)
+            bl.addWidget(card)
+
+        bl.addStretch(1)
+        scroll.setWidget(body); lay.addWidget(scroll, 1)
+
+        close = QPushButton("Close"); close.clicked.connect(dlg.accept)
+        lay.addWidget(close, 0)
+        dlg.exec_()
+
     # ── Route Inspector pane ─────────────────────────────────────────────────────
 
     def _build_route_pane(self):
@@ -704,6 +771,35 @@ class ConductorValidationDock(QDockWidget):
             sr_layout.addWidget(_stat(total, "Total", WHITE), 1)
         self._issues_layout.addWidget(summary_row)
 
+        # ── Network Integrity row (FK/reference check) ───────────────────────
+        integ = results.get("integrity")
+        ni_row = QWidget(); ni_row.setMinimumWidth(0)
+        ni_l = QHBoxLayout(ni_row); ni_l.setContentsMargins(8, 6, 8, 6); ni_l.setSpacing(8)
+        name_lbl = QLabel("Network Integrity")
+        name_lbl.setStyleSheet(f"color:{WHITE}; font-size:11px; border:none; background:transparent;")
+        ni_l.addWidget(name_lbl, 1)
+        status_lbl = QLabel(); status_lbl.setStyleSheet("border:none; background:transparent;")
+        if integ is None:
+            ni_row.setStyleSheet(f"background:{LIGHT}; border-left:3px solid {GREY}; border-radius:3px; margin-bottom:4px;")
+            status_lbl.setText("–")
+            status_lbl.setStyleSheet(f"color:{GREY}; font-size:11px; border:none; background:transparent;")
+        elif integ.get("error_count", 0) == 0:
+            ni_row.setStyleSheet(f"background:{LIGHT}; border-left:3px solid {GREEN}; border-radius:3px; margin-bottom:4px;")
+            status_lbl.setText(f"{integ.get('checked', 0):,} checked  ✓")
+            status_lbl.setStyleSheet(f"color:{GREEN}; font-size:11px; font-weight:bold; border:none; background:transparent;")
+        else:
+            n = integ["error_count"]
+            ni_row.setStyleSheet(f"background:#1d1213; border-left:3px solid {RED}; border-radius:3px; margin-bottom:4px;")
+            status_lbl.setText(f"{n} broken link{'s' if n != 1 else ''}  ›")
+            status_lbl.setStyleSheet(f"color:{RED}; font-size:11px; font-weight:bold; border:none; background:transparent;")
+            ni_row.setCursor(Qt.PointingHandCursor)
+            ni_row.setToolTip("Click to see broken links")
+            def _open_integ(ev, data=integ):
+                self._show_integrity_detail(data)
+            ni_row.mousePressEvent = _open_integ
+        ni_l.addWidget(status_lbl, 0)
+        self._issues_layout.addWidget(ni_row)
+
         # ── Separate out unserved info items from real issues ────────────────
         unserved_issues = [i for i in issues if i.get("severity") == "info"
                            and "Unserved" in i.get("message", "")]
@@ -791,6 +887,12 @@ class ConductorValidationDock(QDockWidget):
         try:
             from .tools.validate_routes import run_validation_headless
             results = run_validation_headless(self._project)
+            # Network integrity (FK/reference) check — runs with every refresh.
+            try:
+                from .tools.validate_integrity import run_integrity_check_headless
+                results["integrity"] = run_integrity_check_headless()
+            except Exception:
+                results["integrity"] = None  # unavailable -> row shows a dash
             self.push_validation_results(results)
         except Exception:
             # Validation module may not support headless mode yet — show stub
