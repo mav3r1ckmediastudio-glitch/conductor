@@ -171,6 +171,7 @@ def _scrolled_form(root_layout, build_fn, min_height=None):
         scroll.setMinimumHeight(min_height)
     scroll.setWidget(fw)
     root_layout.addWidget(scroll)
+    return fw
 
 
 def _save_attrs(layer, feat, attrs):
@@ -579,7 +580,7 @@ def _edit_joint_dialog(feat, project=None):
         widgets['notes'].setText(_fv(feat,"notes"))
         fl.addWidget(widgets['notes'])
 
-    _scrolled_form(root, build)
+    _form_frame = _scrolled_form(root, build)
 
     br = QHBoxLayout(); br.setContentsMargins(20,12,20,16); br.addStretch()
     cancel = QPushButton("Cancel"); cancel.setStyleSheet(BTN_SECONDARY)
@@ -588,29 +589,34 @@ def _edit_joint_dialog(feat, project=None):
     save.clicked.connect(dlg.accept); br.addWidget(save)
     root.addLayout(br)
 
-    # Defer resize until after dialog is shown and Qt has laid out the scroll area
+    # Resize the dialog to fit the form's actual laid-out content once Qt has
+    # performed layout. The port panel (when present) is built into the scroll
+    # frame at construction time, so the frame's sizeHint reflects its true
+    # height — size to that rather than a hand-tuned per-port heuristic that
+    # could clip or overshoot. Capped so very large splitters fall back to
+    # scrolling instead of producing an off-screen dialog.
+    #
+    # Scheduling via QTimer.singleShot(0, ...) before exec_() is the reliable
+    # path under a modal dialog: the callback runs as soon as the modal event
+    # loop starts, after the dialog has been shown and laid out. Overriding
+    # showEvent on the instance is unreliable — Qt dispatches the class-level
+    # C++ virtual, so an instance attribute is often never called.
     def _auto_size():
         has_sp = widgets.get('has_splitter')
-        if has_sp and has_sp.isChecked():
-            try:
-                ratio = widgets['split_ratio'].currentText()
-                n_ports = int(ratio.split(':')[1]) if ':' in ratio else 8
-            except Exception:
-                n_ports = 8
-            half = (n_ports + 1) // 2
-            target_h = min(420 + half * 62, 900)
-            dlg.setMinimumWidth(660)
-            if dlg.height() < target_h:
-                dlg.resize(660, target_h)
-        else:
-            dlg.setMinimumWidth(560)
+        wide = bool(has_sp and has_sp.isChecked())
+        dlg.setMinimumWidth(660 if wide else 560)
+        try:
+            content_h = _form_frame.sizeHint().height()
+        except Exception:
+            content_h = 0
+        # header (44) + subtitle (24) + button row + margins
+        chrome_h = 44 + 24 + 56 + 28
+        target_h = min(content_h + chrome_h, 900)
+        if dlg.height() < target_h:
+            dlg.resize(max(dlg.width(), 660 if wide else 560), target_h)
 
-    _orig_show = dlg.showEvent
-    def _patched_show(event):
-        _orig_show(event)
-        from qgis.PyQt.QtCore import QTimer
-        QTimer.singleShot(0, _auto_size)
-    dlg.showEvent = _patched_show
+    from qgis.PyQt.QtCore import QTimer
+    QTimer.singleShot(0, _auto_size)
 
     def get_attrs():
         ratio = widgets['split_ratio'].currentText()
